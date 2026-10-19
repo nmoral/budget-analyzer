@@ -1,0 +1,10 @@
+{
+  "fields": [
+    { "name": "key", "type": "string", "constraints": { "required": true } },
+    { "name": "value", "type": "number", "constraints": { "required": true } },
+    { "name": "unit", "type": "string", "constraints": { "required": true } },
+    { "name": "start_date", "type": "date", "constraints": { "required": true } },
+    { "name": "end_date", "type": "date" },
+    { "name": "source", "type": "string", "constraints": { "required": true } }
+  ]
+}

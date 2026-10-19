@@ -1,0 +1,9 @@
+{
+  "fields": [
+    { "name": "grille", "type": "string", "constraints": { "required": true } },
+    { "name": "rank", "type": "integer", "constraints": { "required": true } },
+    { "name": "gross_index", "type": "integer", "constraints": { "required": true } },
+    { "name": "increased_index", "type": "integer", "constraints": { "required": true } },
+    { "name": "duration_months", "type": "integer" }
+  ]
+}

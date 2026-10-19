@@ -1,0 +1,11 @@
+{
+  "fields": [
+    { "name": "program", "type": "string", "constraints": { "required": true } },
+    { "name": "employment_category", "type": "string", "constraints": { "required": true } },
+    { "name": "average_loaded_cost", "type": "number", "constraints": { "required": true } },
+    { "name": "year", "type": "year", "constraints": { "required": true } },
+    { "name": "document", "type": "string", "constraints": { "required": true } },
+    { "name": "page", "type": "integer", "constraints": { "required": true } },
+    { "name": "url", "type": "string", "constraints": { "required": true } }
+  ]
+}
