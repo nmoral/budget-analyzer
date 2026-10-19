@@ -1,3 +1,4 @@
+import os
 import shutil
 from pathlib import Path
 
@@ -5,7 +6,7 @@ import pytest
 
 from ingest import IngestionError, ingest
 
-REAL_DATA = Path(__file__).resolve().parents[2] / "data"
+REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
 
 VALID_ROWS = [
     {
@@ -34,6 +35,13 @@ def test_ingest_writes_valid_csv(data_dir: Path) -> None:
     assert out.exists()
 
 
+def test_ingest_uses_lf_line_endings(data_dir: Path) -> None:
+    out = ingest(rows=VALID_ROWS, schema_name="parametre_date", name="point_indice")
+    content = out.read_bytes()
+    assert b"\r\n" not in content
+    assert content.endswith(b"\n")
+
+
 def test_ingest_is_idempotent(data_dir: Path) -> None:
     out = ingest(rows=VALID_ROWS, schema_name="parametre_date", name="point_indice")
     first = out.read_bytes()
@@ -43,6 +51,8 @@ def test_ingest_is_idempotent(data_dir: Path) -> None:
 
 def test_ingest_rejects_invalid_rows_without_writing(data_dir: Path) -> None:
     bad_rows = [{**VALID_ROWS[0], "value": "not-a-number"}]
-    with pytest.raises(IngestionError, match="parametre_date"):
+    with pytest.raises(IngestionError) as exc:
         ingest(rows=bad_rows, schema_name="parametre_date", name="point_indice")
+    assert "parametre_date" in str(exc.value)
+    assert "type-error" in str(exc.value)
     assert not (data_dir / "data" / "point_indice.csv").exists()
