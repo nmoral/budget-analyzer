@@ -1,0 +1,42 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  symfony:
+    build: ./symfony
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?serverVersion=16&charset=utf8"
+    ports:
+      - "${WEB_PORT}:8000"
+    volumes:
+      - ./symfony:/app
+      - ./data:/data:ro
+    # Serveur applicatif câblé en #09 ; conteneur maintenu vivant d'ici là.
+    command: ["sleep", "infinity"]
+
+  python:
+    build: ./python
+    volumes:
+      - ./python:/app
+      - ./data:/data
+    # Scripts d'ingestion câblés en V0 (#01+) ; conteneur maintenu vivant d'ici là.
+    command: ["sleep", "infinity"]
+
+volumes:
+  db-data:

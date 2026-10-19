@@ -1,0 +1,19 @@
+.env
+.env.local
+
+# Symfony
+/symfony/vendor/
+/symfony/var/
+/symfony/.phpunit.cache/
+
+# Python
+__pycache__/
+/python/.venv/
+.mutmut-cache
+.ruff_cache/
+.mypy_cache/
+
+# Données brutes volumineuses (archivées, non suivies par défaut)
+/data/raw/*
+!/data/raw/.gitkeep
+/python/mutants/
