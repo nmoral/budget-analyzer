@@ -1,0 +1,12 @@
+{
+  "rows": [
+    {
+      "key": "point_indice",
+      "value": "59.0734",
+      "unit": "EUR_PER_YEAR",
+      "start_date": "2023-07-01",
+      "end_date": "",
+      "source": "decret-2023-519"
+    }
+  ]
+}
