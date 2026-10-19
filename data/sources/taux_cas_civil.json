@@ -1,0 +1,20 @@
+{
+  "rows": [
+    {
+      "key": "taux_cas_civil",
+      "value": "78.28",
+      "unit": "PCT_TIB",
+      "start_date": "2025-01-01",
+      "end_date": "2025-12-31",
+      "source": "retraites-etat-2026"
+    },
+    {
+      "key": "taux_cas_civil",
+      "value": "82.28",
+      "unit": "PCT_TIB",
+      "start_date": "2026-01-01",
+      "end_date": "",
+      "source": "retraites-etat-2026"
+    }
+  ]
+}

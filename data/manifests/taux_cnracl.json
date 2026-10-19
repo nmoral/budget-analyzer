@@ -1,0 +1,9 @@
+{
+  "raw": "taux_cnracl.json",
+  "retrieved_at": "2026-10-19",
+  "script": "sources.taux_cnracl",
+  "script_version": "1",
+  "sha256": "632ba375683691ed4fd85c161e7c92bd24bad7636d1a0d967f5f65838692cb0d",
+  "source": "Décret n° 2025-86 du 30 janvier 2025",
+  "url": "https://blog.landot-avocats.net/2025/01/31/augmentation-du-taux-de-cotisation-employeurs-a-la-cnracl/"
+}

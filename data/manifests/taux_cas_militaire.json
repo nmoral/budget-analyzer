@@ -1,0 +1,9 @@
+{
+  "raw": "taux_cas_militaire.json",
+  "retrieved_at": "2026-10-19",
+  "script": "sources.taux_cas_militaire",
+  "script_version": "1",
+  "sha256": "a7cb6de59d79fe1e67c93fc570f58cb16d0ca3ebc0f9ad4e6cd74d8ead864591",
+  "source": "Assemblée nationale — rapport CAS Pensions (RAPPANR5L17B1996)",
+  "url": "https://www.assemblee-nationale.fr/dyn/opendata/RAPPANR5L17B1996-tIII-a37.html"
+}

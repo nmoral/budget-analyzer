@@ -1,0 +1,3 @@
+key,value,unit,start_date,end_date,source
+taux_cas_civil,78.28,PCT_TIB,2025-01-01,2025-12-31,retraites-etat-2026
+taux_cas_civil,82.28,PCT_TIB,2026-01-01,,retraites-etat-2026
