@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -20,7 +21,14 @@ VALID_ROWS = [
     }
 ]
 
-MANIFEST_FIELDS = {"source", "url", "retrieved_at", "sha256", "script", "script_version"}
+MANIFEST_FIELDS = {
+    "source",
+    "url",
+    "retrieved_at",
+    "sha256",
+    "script",
+    "script_version",
+}
 
 
 @pytest.fixture
@@ -80,6 +88,12 @@ def test_ingest_writes_complete_manifest(data_dir: Path) -> None:
     _ingest(data_dir)
     manifest = json.loads((data_dir / "manifests" / "point_indice.json").read_text())
     assert MANIFEST_FIELDS <= manifest.keys()
+    assert manifest["source"] == "DGFiP"
+    assert manifest["url"] == "https://example.gouv.fr/point"
+    assert manifest["retrieved_at"] == "2026-10-19"
+    assert manifest["script"] == "ingest_point_indice"
+    assert manifest["script_version"] == "1"
+    assert manifest["sha256"] == hashlib.sha256(b"raw source bytes").hexdigest()
     assert verify_manifest("point_indice") is True
 
 
