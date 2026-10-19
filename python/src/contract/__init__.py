@@ -8,9 +8,10 @@ from pathlib import Path
 
 from frictionless import Report, Resource, Schema
 
-_DATA_DIR = Path(
-    os.environ.get("BUDGET_DATA_DIR", Path(__file__).resolve().parents[3] / "data")
-)
+
+def data_dir() -> Path:
+    default = Path(__file__).resolve().parents[3] / "data"
+    return Path(os.environ.get("BUDGET_DATA_DIR", str(default)))
 
 
 def validate_csv(csv_path: Path, schema_name: str) -> Report:
@@ -26,5 +27,10 @@ def contract_version() -> str:
     return _read("contract_version.txt").strip()
 
 
+def schema_fields(schema_name: str) -> list[str]:
+    descriptor = json.loads(_read(f"schemas/{schema_name}.json"))
+    return [str(field["name"]) for field in descriptor["fields"]]
+
+
 def _read(relative: str) -> str:
-    return (_DATA_DIR / relative).read_text(encoding="utf-8")
+    return (data_dir() / relative).read_text(encoding="utf-8")
