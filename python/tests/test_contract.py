@@ -37,4 +37,6 @@ def test_each_schema_validates_its_valid_fixture(schema: str) -> None:
 def test_contract_version_is_semver() -> None:
     version = contract_version()
     assert isinstance(version, str)
-    assert version.count(".") == 2
+    parts = version.split(".")
+    assert len(parts) == 3
+    assert all(part.isdigit() for part in parts)
