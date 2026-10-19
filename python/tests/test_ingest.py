@@ -102,3 +102,11 @@ def test_verify_detects_tampered_raw(data_dir: Path) -> None:
     archived = next((data_dir / "raw").iterdir())
     archived.write_bytes(b"tampered")
     assert verify_manifest("point_indice") is False
+
+
+def test_failure_leaves_no_residue(data_dir: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        _ingest(data_dir, raw_path=data_dir / "absent.raw")
+    assert list((data_dir / "data").iterdir()) == []
+    assert list((data_dir / "raw").iterdir()) == []
+    assert list((data_dir / "manifests").iterdir()) == []
