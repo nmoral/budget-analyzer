@@ -1,10 +1,11 @@
+import json
 import os
 import shutil
 from pathlib import Path
 
 import pytest
 
-from ingest import IngestionError, ingest
+from ingest import IngestionError, ingest, verify_manifest
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
 
@@ -19,6 +20,8 @@ VALID_ROWS = [
     }
 ]
 
+MANIFEST_FIELDS = {"source", "url", "retrieved_at", "sha256", "script", "script_version"}
+
 
 @pytest.fixture
 def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -29,30 +32,59 @@ def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
+def _ingest(data_dir: Path, **overrides: object) -> Path:
+    raw = data_dir / "source.raw"
+    raw.write_bytes(b"raw source bytes")
+    kwargs: dict[str, object] = {
+        "rows": VALID_ROWS,
+        "schema_name": "parametre_date",
+        "name": "point_indice",
+        "raw_path": raw,
+        "source": "DGFiP",
+        "url": "https://example.gouv.fr/point",
+        "retrieved_at": "2026-10-19",
+        "script": "ingest_point_indice",
+        "script_version": "1",
+    }
+    kwargs.update(overrides)
+    return ingest(**kwargs)  # type: ignore[arg-type]
+
+
 def test_ingest_writes_valid_csv(data_dir: Path) -> None:
-    out = ingest(rows=VALID_ROWS, schema_name="parametre_date", name="point_indice")
+    out = _ingest(data_dir)
     assert out == data_dir / "data" / "point_indice.csv"
     assert out.exists()
 
 
 def test_ingest_uses_lf_line_endings(data_dir: Path) -> None:
-    out = ingest(rows=VALID_ROWS, schema_name="parametre_date", name="point_indice")
-    content = out.read_bytes()
+    content = _ingest(data_dir).read_bytes()
     assert b"\r\n" not in content
     assert content.endswith(b"\n")
 
 
 def test_ingest_is_idempotent(data_dir: Path) -> None:
-    out = ingest(rows=VALID_ROWS, schema_name="parametre_date", name="point_indice")
-    first = out.read_bytes()
-    ingest(rows=VALID_ROWS, schema_name="parametre_date", name="point_indice")
-    assert out.read_bytes() == first
+    first = _ingest(data_dir).read_bytes()
+    assert _ingest(data_dir).read_bytes() == first
 
 
 def test_ingest_rejects_invalid_rows_without_writing(data_dir: Path) -> None:
     bad_rows = [{**VALID_ROWS[0], "value": "not-a-number"}]
     with pytest.raises(IngestionError) as exc:
-        ingest(rows=bad_rows, schema_name="parametre_date", name="point_indice")
+        _ingest(data_dir, rows=bad_rows)
     assert "parametre_date" in str(exc.value)
     assert "type-error" in str(exc.value)
     assert not (data_dir / "data" / "point_indice.csv").exists()
+
+
+def test_ingest_writes_complete_manifest(data_dir: Path) -> None:
+    _ingest(data_dir)
+    manifest = json.loads((data_dir / "manifests" / "point_indice.json").read_text())
+    assert MANIFEST_FIELDS <= manifest.keys()
+    assert verify_manifest("point_indice") is True
+
+
+def test_verify_detects_tampered_raw(data_dir: Path) -> None:
+    _ingest(data_dir)
+    archived = next((data_dir / "raw").iterdir())
+    archived.write_bytes(b"tampered")
+    assert verify_manifest("point_indice") is False
