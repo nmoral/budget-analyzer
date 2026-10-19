@@ -30,7 +30,11 @@ qa-python:
 	done
 
 qa-symfony:
-	@echo "TODO: chaîne qualité PHP (phpunit, infection, phpstan, php-cs-fixer, deptrac) — voir issue #00"
+	@if [ -d symfony/vendor ]; then \
+		echo "qa-symfony: chaîne qualité PHP (phpstan, php-cs-fixer, phpunit) — à activer avec #9"; \
+	else \
+		echo "qa-symfony: SKIP — symfony/vendor absent (brique PHP non encore livrée, cf. #9)"; \
+	fi
 
 import:
 	@echo "TODO: commande d'import Symfony d'un commit du dépôt de données — voir issue #11"

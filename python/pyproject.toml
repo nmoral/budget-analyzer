@@ -12,6 +12,7 @@ dev = [
     "mypy>=1.11",
     "mutmut>=3",
     "pytest-cov>=7.1.0",
+    "pre-commit>=4.7.0",
 ]
 
 [tool.uv]
@@ -27,6 +28,9 @@ strict = true
 [tool.ruff]
 target-version = "py313"
 extend-exclude = ["mutants"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
 
 [tool.coverage.run]
 branch = true
