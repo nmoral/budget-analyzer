@@ -1,0 +1,4 @@
+key,value,unit,start_date,end_date,source
+taux_cnracl,37.65,PCT_TIB,2026-01-01,2026-12-31,decret-2025-86
+taux_cnracl,40.65,PCT_TIB,2027-01-01,2027-12-31,decret-2025-86
+taux_cnracl,43.65,PCT_TIB,2028-01-01,,decret-2025-86

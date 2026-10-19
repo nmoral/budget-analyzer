@@ -1,0 +1,12 @@
+{
+  "rows": [
+    {
+      "key": "taux_cas_militaire",
+      "value": "126.07",
+      "unit": "PCT_TIB",
+      "start_date": "2025-01-01",
+      "end_date": "",
+      "source": "an-rapport-cas-pensions"
+    }
+  ]
+}

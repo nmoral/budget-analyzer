@@ -1,0 +1,9 @@
+{
+  "raw": "taux_cas_civil.json",
+  "retrieved_at": "2026-10-19",
+  "script": "sources.taux_cas_civil",
+  "script_version": "1",
+  "sha256": "f9030ab005a5721021687853ea04d05ae16de458e856e7f477fceacdb9ae1664",
+  "source": "Retraites de l'État — taux de cotisation 2026",
+  "url": "https://retraitesdeletat.gouv.fr/professionnels/le-versement-des-cotisations/les-entites-privees-associations-entreprises-gip-etc"
+}

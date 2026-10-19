@@ -1,0 +1,28 @@
+{
+  "rows": [
+    {
+      "key": "taux_cnracl",
+      "value": "37.65",
+      "unit": "PCT_TIB",
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31",
+      "source": "decret-2025-86"
+    },
+    {
+      "key": "taux_cnracl",
+      "value": "40.65",
+      "unit": "PCT_TIB",
+      "start_date": "2027-01-01",
+      "end_date": "2027-12-31",
+      "source": "decret-2025-86"
+    },
+    {
+      "key": "taux_cnracl",
+      "value": "43.65",
+      "unit": "PCT_TIB",
+      "start_date": "2028-01-01",
+      "end_date": "",
+      "source": "decret-2025-86"
+    }
+  ]
+}
