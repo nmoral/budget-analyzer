@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 from pathlib import Path
@@ -33,6 +34,14 @@ def test_point_indice_csv_holds_current_value(data_dir: Path) -> None:
 def test_point_indice_manifest_is_verifiable(data_dir: Path) -> None:
     run()
     assert verify_manifest("point_indice") is True
+    manifest = json.loads((data_dir / "manifests" / "point_indice.json").read_text())
+    assert manifest["source"] == "Décret n° 2023-519 du 28 juin 2023"
+    assert manifest["url"] == (
+        "https://www.legifrance.gouv.fr/eli/decret/2023/6/28/2023-519/jo/texte"
+    )
+    assert manifest["retrieved_at"] == "2026-10-19"
+    assert manifest["script"] == "sources.point_indice"
+    assert manifest["script_version"] == "1"
 
 
 def test_point_indice_is_idempotent(data_dir: Path) -> None:
