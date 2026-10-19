@@ -158,7 +158,7 @@ Toute valeur réglementaire est datée : elle porte une date de début d'effet, 
 | Échelon | grille, rang, indice brut, indice majoré, durée en mois | Progression de carrière |
 | Taux de primes | corps, valeur, année d'observation, source | Primes en V1 |
 | Régime de retraite | code (`CAS_CIVIL`, `CAS_MILITAIRE`, `CNRACL`, `IRCANTEC`), paramètres liés | Règle enfichable (EX-1) |
-| Financeur | code (`ETAT_P140`, `ONDAM`…), libellé, budget de référence | Rattachement budgétaire |
+| Financeur | code (`ETAT_P140`, `ONDAM`…), libellé, budget de référence, codes dans les nomenclatures officielles (mission / programme / action pour l'État, sous-objectif de l'ONDAM, fonction COFOG) pour préparer la V3 | Rattachement budgétaire |
 | Profil | corps, grade et échelon d'entrée, régime de retraite, régime indemnitaire, financeur, statut (titulaire ou contractuel), calendrier de référence (civil ou scolaire) | Unité de simulation |
 | Scénario | titre, provenance, montant annoncé optionnel, version des paramètres | Simulation ou programme (EX-2) |
 | Ligne de scénario | scénario, profil, volume, date de recrutement, étalement sur N années | Contenu d'un scénario |
@@ -242,7 +242,8 @@ Une simulation produit une fiche de résultat lisible par un non-spécialiste, d
 2. **V1 — Simulateur deux profils** : moteur, trois horizons, quatre vues de coût, fiche de résultat, calibrage contre les coûts moyens du PAP du programme 140.
 3. **V1.x — Extension des profils** : forces de l'ordre, militaires, enseignement supérieur, ajoutés selon EX-1 ; c'est la preuve que l'architecture tient.
 4. **V2 — Programmes des candidats** : saisie sourcée des programmes, écart entre coût annoncé et coût calculé, comparaison côte à côte.
-5. **Plus tard** : primes règle par règle, contractuels, départs et attrition dans les cohortes, coûts indirects optionnels.
+5. **V3 — Vue budgétaire complète** : mise en regard des coûts avec l'ensemble des dépenses et des recettes publiques, sur les trois sphères (État, Sécurité sociale, collectivités), jamais sur le seul budget de l'État. Sources prévues : lois de finances détaillées par mission et programme, tome I de l'Évaluation des voies et moyens pour les recettes de l'État, LFSS, comptes nationaux de l'Insee par fonction (COFOG). Pour chiffrer les mesures de financement d'un programme (« financé par la suppression de telle niche »), s'appuyer sur OpenFisca plutôt que recoder la fiscalité.
+6. **Plus tard** : primes règle par règle, contractuels, départs et attrition dans les cohortes, coûts indirects optionnels.
 
 ### Décisions prises
 
