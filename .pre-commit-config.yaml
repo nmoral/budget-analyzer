@@ -1,0 +1,29 @@
+# Hooks locaux : une seule source d'outils (le venv uv de python/), alignés sur le Makefile.
+# Lancer : uv run --project python pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: bash -c 'cd python && uv run ruff check .'
+        language: system
+        pass_filenames: false
+        files: ^python/.*\.py$
+      - id: ruff-format
+        name: ruff format
+        entry: bash -c 'cd python && uv run ruff format --check .'
+        language: system
+        pass_filenames: false
+        files: ^python/.*\.py$
+      - id: mypy
+        name: mypy strict
+        entry: bash -c 'cd python && uv run mypy src'
+        language: system
+        pass_filenames: false
+        files: ^python/src/.*\.py$
+      - id: pytest
+        name: pytest (tests rapides)
+        entry: bash -c 'cd python && uv run pytest'
+        language: system
+        pass_filenames: false
+        files: ^python/.*\.py$

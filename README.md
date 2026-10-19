@@ -24,15 +24,45 @@ make down                # arrête et détruit conteneurs + volumes du worktree
 
 ## Qualité — ceinture et bretelles
 
-Rien ne se merge sans que toute la chaîne soit verte (`make qa`) :
+Rien ne se merge sans que toute la chaîne soit verte (`make qa`). Les garde-fous :
 
 - tests unitaires (PHPUnit / pytest), écrits en premier (TDD) ;
-- mutation : MSI ≥ 85 %, MSI couvert ≥ 90 % (Infection / mutmut) ;
+- mutation : MSI ≥ 85 % (Infection / mutmut) ;
 - analyse statique au max (PHPStan level max / mypy strict) ;
 - frontières d'architecture (Deptrac) : domaine sans Doctrine ni infra ;
-- style (PHP-CS-Fixer PSR-12 / ruff) ;
-- couverture ≥ 90 % global, 100 % sur le cœur métier ;
-- validation des données (schémas Frictionless + contrôles de cohérence).
+- style (PHP-CS-Fixer PSR-12 / ruff, imports triés) ;
+- couverture ≥ 90 % global, 100 % sur le cœur métier (`src/ingest`, `src/sources`, `src/contract`) ;
+- validation des schémas de données (Frictionless).
+
+État actuel : la chaîne **Python est bloquante** ; la brique **PHP a sa config posée
+mais non bloquante** (`make qa-symfony` skip tant que `symfony/vendor` est absent),
+à durcir quand le squelette Symfony arrivera. Le tableau des seuils réellement
+appliqués fait référence dans [`CLAUDE.md`](CLAUDE.md).
+
+### Comment vérifier
+
+```sh
+make qa          # entrée unique : qa-python puis qa-symfony
+make qa-python   # chaîne Python complète et bloquante
+make qa-symfony  # skip explicite tant que symfony/vendor est absent
+```
+
+`make qa-python` enchaîne, dans l'ordre et en échouant au premier garde-fou KO :
+ruff (lint + tri des imports), ruff format, mypy strict, pytest + couverture
+(≥ 90 % global, 100 % sur le cœur), mutation mutmut (porte MSI ≥ 85 %) et
+`frictionless validate` sur les schémas. Toutes les commandes Python tournent via
+`uv` depuis `python/`.
+
+En local, installer les hooks pour rejouer ruff, ruff format, mypy et pytest avant
+chaque commit :
+
+```sh
+uv run --project python pre-commit install
+uv run --project python pre-commit run --all-files   # lancer à la demande
+```
+
+La CI GitHub Actions (`.github/workflows/qa.yml`) rejoue exactement `make qa` sur
+chaque push vers `main` et chaque PR : même source unique que le local (le `Makefile`).
 
 ## Isolation worktree
 

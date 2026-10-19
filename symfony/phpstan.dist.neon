@@ -1,0 +1,8 @@
+# Config PHPStan posée, non bloquante (brique PHP non encore livrée — cf. #9/#12).
+# Sera câblée dans `make qa-symfony` quand symfony/vendor et du code PHP existeront.
+parameters:
+    level: max
+    paths:
+        - src
+        - tests
+    tmpDir: var/cache/phpstan
