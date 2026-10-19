@@ -7,7 +7,7 @@ import pytest
 
 from contract import validate_csv
 from ingest import verify_manifest
-from sources.point_indice import run
+from sources.point_indice import main, run
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
 
@@ -47,3 +47,11 @@ def test_point_indice_manifest_is_verifiable(data_dir: Path) -> None:
 def test_point_indice_is_idempotent(data_dir: Path) -> None:
     first = run().read_bytes()
     assert run().read_bytes() == first
+
+
+def test_main_prints_written_csv_path(
+    data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    main()
+    printed = capsys.readouterr().out.strip()
+    assert printed == str(data_dir / "data" / "point_indice.csv")

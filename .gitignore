@@ -12,6 +12,9 @@ __pycache__/
 .mutmut-cache
 .ruff_cache/
 .mypy_cache/
+.pytest_cache/
+.coverage
+/python/.coverage
 
 # Données brutes volumineuses (archivées, non suivies par défaut)
 /data/raw/*
