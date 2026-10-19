@@ -29,37 +29,37 @@ def ingest(
     script_version: str,
 ) -> Path:
     columns = schema_fields(schema_name)
+    raw_bytes = raw_path.read_bytes()
     content = _to_csv(rows, columns)
 
     root = data_dir()
     final = root / "data" / f"{name}.csv"
     tmp = root / "data" / f".{name}.tmp.csv"
-    tmp.write_bytes(content)
-
-    report = validate_csv(tmp, schema_name)
-    if not report.valid:
-        tmp.unlink()
-        raise IngestionError(
-            f"Invalid CSV for schema '{schema_name}': {report.flatten(['type'])}"
-        )
-
-    raw_bytes = raw_path.read_bytes()
     archived = f"{name}{raw_path.suffix}"
-    (root / "raw" / archived).write_bytes(raw_bytes)
-    _write_manifest(
-        root / "manifests" / f"{name}.json",
-        {
-            "source": source,
-            "url": url,
-            "retrieved_at": retrieved_at,
-            "sha256": hashlib.sha256(raw_bytes).hexdigest(),
-            "script": script,
-            "script_version": script_version,
-            "raw": archived,
-        },
-    )
 
-    os.replace(tmp, final)
+    try:
+        tmp.write_bytes(content)
+        report = validate_csv(tmp, schema_name)
+        if not report.valid:
+            raise IngestionError(
+                f"Invalid CSV for schema '{schema_name}': {report.flatten(['type'])}"
+            )
+        (root / "raw" / archived).write_bytes(raw_bytes)
+        _write_manifest(
+            root / "manifests" / f"{name}.json",
+            {
+                "source": source,
+                "url": url,
+                "retrieved_at": retrieved_at,
+                "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                "script": script,
+                "script_version": script_version,
+                "raw": archived,
+            },
+        )
+        os.replace(tmp, final)
+    finally:
+        tmp.unlink(missing_ok=True)
     return final
 
 
