@@ -55,7 +55,7 @@ s'appelle `qa` ; c'est le check à exiger en protection de branche (voir plus ba
 | Typage | mypy | `strict = true` | oui | `python/pyproject.toml` |
 | Couverture globale | coverage | ≥ 90 % | oui | `Makefile` (`--fail-under=90`) |
 | Couverture cœur | coverage | 100 % sur `src/ingest`, `src/sources`, `src/contract` | oui | `Makefile` (`--fail-under=100`) |
-| Mutation | mutmut + `scripts/check_msi.py` | MSI ≥ 85 % | oui | `Makefile` / `python/pyproject.toml` |
+| Mutation | mutmut + `scripts/check_msi.py` | MSI ≥ 85 % | oui | seuil dans `python/scripts/check_msi.py` (`THRESHOLD`), cibles dans `python/pyproject.toml` (`[tool.mutmut]`) |
 | Données | frictionless validate | schémas `data/schemas/*.json` valides | oui | `Makefile` (`--type schema`) |
 
 Le MSI (Mutation Score Indicator) est calculé comme le badge mutmut :
