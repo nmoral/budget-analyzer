@@ -25,6 +25,24 @@ def _data_lines(csv_path: Path) -> list[str]:
     return csv_path.read_text("utf-8").splitlines()[1:]
 
 
+def _catalogue_sections(markdown: str) -> dict[str, str]:
+    """Decoupe le catalogue en sections par corps (en-tete `## <CODE> ...`)."""
+    sections: dict[str, str] = {}
+    code: str | None = None
+    buffer: list[str] = []
+    for line in markdown.splitlines():
+        if line.startswith("## "):
+            if code is not None:
+                sections[code] = "\n".join(buffer)
+            code = line[3:].split()[0]
+            buffer = [line]
+        elif code is not None:
+            buffer.append(line)
+    if code is not None:
+        sections[code] = "\n".join(buffer)
+    return sections
+
+
 # --- C1.1 : PE nominal (observation directe) -------------------------------
 def test_taux_primes_pe_row(data_dir: Path) -> None:
     from sources.taux_primes import run
@@ -106,14 +124,18 @@ def test_catalogue_primes_is_coherent_with_csv(data_dir: Path) -> None:
 
     out = run()
     catalogue = (REAL_DATA / "catalogue_primes.md").read_text("utf-8")
+    sections = _catalogue_sections(catalogue)
     lines = _data_lines(out)
+    body_codes = {line.split(",")[0] for line in lines}
+    # une entree par corps, ni manquante ni en trop
+    assert set(sections) == body_codes
     for line in lines:
         body_code, _value, _year, source, fallback = line.split(",")
-        assert body_code in catalogue
-        assert source in catalogue
+        section = sections[body_code].lower()
+        # la source de CE corps est documentee dans SA section
+        assert source in section
+        # le statut repli propre a CE corps (echoue si on inverse oui/non)
         repli = "oui" if fallback == "true" else "non"
-        # chaque corps documente son statut repli (oui/non)
-        assert repli in catalogue.lower()
-    # repli documente dans les deux sens
-    assert "oui" in catalogue.lower()
-    assert "non" in catalogue.lower()
+        assert f"**repli** : {repli}" in section
+        # la raison du choix est tracee dans la section (C4.1)
+        assert "raison du choix" in section
