@@ -1,6 +1,6 @@
 # Issue #9 — Squelette de l'application Symfony (`symfony/`)
 
-**Étape : analyse**
+**Étape : prête**
 **Branche de dev prévue : `ccr-9239aabd-epmpye`**
 
 ## Résumé de l'issue
@@ -97,3 +97,7 @@ Infection/Deptrac bloquants (#12) · API JSON (#19) · front/Twig (#20) · infra
 - [x] chaque critère a une vérification (test validé ou commande observable)
 - [x] hors-périmètre écrit
 - [x] issue GitHub à jour
+
+## Journal (suite)
+
+- 2026-10-21 — Confirmation utilisateur : issue #9 **prête**. Fin de la phase d'analyse.
