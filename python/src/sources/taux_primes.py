@@ -13,7 +13,10 @@ SOURCE = (
     "(PE, part des primes des enseignants, donnees 2023) ; Insee Premiere n 2067 "
     "(ISG, repli sur la part des primes categorie A FPH, donnees 2023)"
 )
-URL = "https://www.insee.fr/fr/statistiques"
+URL = (
+    "https://www.fonction-publique.gouv.fr/toutes-les-publications/"
+    "rapport-annuel-sur-letat-de-la-fonction-publique-edition-2025"
+)
 RETRIEVED_AT = "2026-10-21"
 SCRIPT_VERSION = "1"
 
