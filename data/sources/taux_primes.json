@@ -1,0 +1,18 @@
+{
+  "rows": [
+    {
+      "body_code": "PE",
+      "value": "0.21",
+      "observation_year": "2023",
+      "source": "dgafp-ra-2025",
+      "fallback": "false"
+    },
+    {
+      "body_code": "ISG",
+      "value": "0.33",
+      "observation_year": "2023",
+      "source": "insee-ip-2067",
+      "fallback": "true"
+    }
+  ]
+}
