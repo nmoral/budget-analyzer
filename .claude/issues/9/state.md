@@ -65,9 +65,35 @@ Infection/Deptrac bloquants (#12) · API JSON (#19) · front/Twig (#20) · infra
 
 ## Tests proposés (statut de validation)
 
-- T1 — (en cours de proposition)
+- **T1 — validé** (fonctionnel, PHPUnit `WebTestCase`) : `HealthControllerTest::testHealthEndpointReturns200`.
+  `GET /health` en env `test`, sans DB → HTTP 200 + corps JSON `{"status":"ok"}`. Couvre AC2 ;
+  rend la suite PHPUnit non vide (AC5). Nécessite une route/contrôleur `/health` minimal.
+- **T2 — validé** (vérif CLI, non CI) : `docker compose run --rm symfony php bin/console dbal:run-sql "SELECT 1 AS ok"` → `1` (exit 0) ;
+  `… "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'"` → `0`. Couvre AC3.
+- **T3 — validé** (contrôle d'archi, intégré à `qa-symfony` en attendant Deptrac #12) :
+  `composer.json` mappe `App\Domain\`→`src/Domain/`, `App\Infrastructure\`→`src/Infrastructure/` (dossiers versionnés via `.gitkeep`) ;
+  `grep -rniE 'Doctrine|Entity' src/Domain/` → aucune occurrence. Couvre AC4.
 
 ## Journal
 
 - 2026-10-21 — Création du state, lecture issue #9 + existant.
 - 2026-10-21 — Décisions 1→8 validées (« ok à tout »). Critères AC1→AC6 et hors-périmètre posés. Passage aux tests.
+- 2026-10-21 — T1, T2, T3 validés un par un.
+- 2026-10-21 — Corps de l'issue #9 mis à jour sur GitHub (objectif, décisions, AC, tests, hors-périmètre).
+
+## Correspondance critères ↔ vérification
+
+- AC1 → commande de build (`test -f vendor/autoload.php`), observable.
+- AC2 → **T1** (PHPUnit fonctionnel) + `curl /health`.
+- AC3 → **T2** (vérif CLI `dbal:run-sql`).
+- AC4 → **T3** (garde-fou grep dans `qa-symfony`).
+- AC5 → chaîne `make qa-symfony` verte (agrège PHP-CS-Fixer, PHPStan, PHPUnit=T1, grep=T3), observable.
+- AC6 → job CI `qa` vert (observable).
+
+## Check-list « prête »
+
+- [x] aucune question ouverte
+- [x] chaque critère vérifiable
+- [x] chaque critère a une vérification (test validé ou commande observable)
+- [x] hors-périmètre écrit
+- [x] issue GitHub à jour
