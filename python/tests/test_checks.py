@@ -364,3 +364,143 @@ def test_echelon_checked_even_after_a_non_echelon_file(data_root: Path) -> None:
     code, report = run(data_root)
     assert code == 1
     assert "echelon_pe.csv:3 [indices] grille PE_cn_2024 rang 2 : gross_index" in report
+
+
+# --- C2 : non-chevauchement des périodes d'effet d'une même clé ------------
+
+GRILLE_HEADER = "body_code,grade,version,start_date,end_date,source"
+
+
+def test_adjacent_periods_do_not_overlap(data_root: Path) -> None:  # C2.1
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,78.28,PCT_TIB,2025-01-01,2025-12-31,retraites-etat-2026",
+        "taux_cas_civil,82.28,PCT_TIB,2026-01-01,,retraites-etat-2026",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_overlapping_periods_same_key_reported(data_root: Path) -> None:  # C2.2
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,78.28,PCT_TIB,2025-01-01,2025-12-31,retraites-etat-2026",
+        "taux_cas_civil,82.28,PCT_TIB,2025-06-01,,retraites-etat-2026",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "taux_cas_civil.csv:3 [periodes] clé taux_cas_civil : périodes "
+        "2025-01-01→2025-12-31 et 2025-06-01→∞ se chevauchent\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_overlapping_grille_versions_reported(data_root: Path) -> None:  # C2.3
+    _write(
+        data_root,
+        "grille_pe",
+        GRILLE_HEADER,
+        "PE,classe_normale,2024,2024-01-01,2024-12-31,decret-2017-789",
+        "PE,classe_normale,2025,2024-06-01,,decret-2017-789",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "grille_pe.csv:3 [periodes] clé PE/classe_normale : périodes "
+        "2024-01-01→2024-12-31 et 2024-06-01→∞ se chevauchent\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_same_day_boundary_is_one_day_overlap(data_root: Path) -> None:
+    # Fin le jour J et début le même jour J : un jour commun => chevauchement.
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,78.28,PCT_TIB,2025-01-01,2025-12-31,src",
+        "taux_cas_civil,82.28,PCT_TIB,2025-12-31,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "2025-01-01→2025-12-31 et 2025-12-31→∞ se chevauchent" in report
+
+
+def test_open_ended_earlier_period_overlaps_later(data_root: Path) -> None:
+    # Période ouverte (end_date vide) couvrant une période ultérieure bornée.
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,78.28,PCT_TIB,2025-01-01,,src",
+        "taux_cas_civil,82.28,PCT_TIB,2026-01-01,2026-12-31,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "2025-01-01→∞ et 2026-01-01→2026-12-31 se chevauchent" in report
+
+
+def test_periods_grouped_by_key(data_root: Path) -> None:
+    # Deux clés distinctes aux dates recouvrantes : pas de chevauchement
+    # inter-clés (le contrôle groupe par key).
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "key_a,1,PCT_TIB,2025-01-01,2025-12-31,src",
+        "key_b,2,PCT_TIB,2025-06-01,2026-12-31,src",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_grille_periods_grouped_by_body_and_grade(data_root: Path) -> None:
+    # Grades différents du même corps : pas de chevauchement inter-grades.
+    _write(
+        data_root,
+        "grille_pe",
+        GRILLE_HEADER,
+        "PE,classe_normale,2024,2024-01-01,2024-12-31,src",
+        "PE,hors_classe,2024,2024-06-01,2025-12-31,src",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_all_period_overlaps_reported(data_root: Path) -> None:
+    _write(
+        data_root,
+        "taux_cnracl",
+        PARAMETRE_HEADER,
+        "taux_cnracl,1,PCT_TIB,2025-01-01,2025-12-31,src",
+        "taux_cnracl,2,PCT_TIB,2025-06-01,2026-12-31,src",
+        "taux_cnracl,3,PCT_TIB,2026-06-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "2025-01-01→2025-12-31 et 2025-06-01→2026-12-31 se chevauchent" in report
+    assert "2025-06-01→2026-12-31 et 2026-06-01→∞ se chevauchent" in report
+    assert "Récapitulatif : 2 anomalie(s) détectée(s)." in report
+
+
+def test_period_ending_on_another_start_day_overlaps(data_root: Path) -> None:
+    # Une période d'un seul jour (J→J) partageant le jour de début d'une autre
+    # période : un jour commun => chevauchement (bornes incluses).
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,78.28,PCT_TIB,2025-01-01,2025-12-31,src",
+        "taux_cas_civil,82.28,PCT_TIB,2025-01-01,2025-01-01,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "2025-01-01→2025-12-31 et 2025-01-01→2025-01-01 se chevauchent" in report

@@ -16,7 +16,8 @@ import csv
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from itertools import pairwise
+from datetime import date
+from itertools import combinations, pairwise
 from pathlib import Path
 
 from contract import data_dir
@@ -127,10 +128,83 @@ def _echelon_index_violations(loaded: LoadedFile) -> list[Violation]:
     return violations
 
 
-# Registre des invariants appliqués. C2/C3 s'y ajouteront aux jalons J3-J4.
+@dataclass(frozen=True)
+class _Period:
+    """Une période d'effet ``[start ; end]`` bornes incluses (``end`` ∞ si ouverte)."""
+
+    line: int
+    start: date
+    end: date
+    start_raw: str
+    end_raw: str
+
+    def render(self) -> str:
+        return f"{self.start_raw}→{self.end_raw or '∞'}"
+
+
+def _parametre_key(row: dict[str, str]) -> str:
+    return row["key"]
+
+
+def _grille_key(row: dict[str, str]) -> str:
+    return f"{row['body_code']}/{row['grade']}"
+
+
+def check_periods_no_overlap(files: Sequence[LoadedFile]) -> list[Violation]:
+    """C2 — les périodes d'effet d'une même clé ne se chevauchent pas.
+
+    ``parametre_date`` est groupé par ``key``, ``grille`` par ``body_code`` +
+    ``grade``. Bornes incluses, ``end_date`` vide = période ouverte ; l'adjacence
+    (fin le jour J, début le jour J+1) est autorisée.
+    """
+    violations: list[Violation] = []
+    for loaded in files:
+        if loaded.schema == "parametre_date":
+            violations.extend(_period_violations(loaded, _parametre_key))
+        elif loaded.schema == "grille":
+            violations.extend(_period_violations(loaded, _grille_key))
+    return violations
+
+
+def _period_violations(
+    loaded: LoadedFile, key_of: Callable[[dict[str, str]], str]
+) -> list[Violation]:
+    groups: dict[str, list[_Period]] = {}
+    for line, row in loaded.rows:
+        end_raw = row["end_date"]
+        period = _Period(
+            line=line,
+            start=date.fromisoformat(row["start_date"]),
+            end=date.fromisoformat(end_raw) if end_raw.strip() else date.max,
+            start_raw=row["start_date"],
+            end_raw=end_raw,
+        )
+        groups.setdefault(key_of(row), []).append(period)
+
+    violations: list[Violation] = []
+    for label, periods in groups.items():
+        ordered = sorted(periods, key=lambda period: (period.start, period.line))
+        for first, second in combinations(ordered, 2):
+            if first.start <= second.end and second.start <= first.end:
+                violations.append(
+                    Violation(
+                        invariant="periodes",
+                        file=loaded.filename,
+                        line=second.line,
+                        message=(
+                            f"clé {label} : périodes "
+                            f"{first.render()} et {second.render()} se chevauchent"
+                        ),
+                    )
+                )
+    return violations
+
+
+# Registre des invariants appliqués. C3 s'y ajoutera au jalon J4.
 INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
     check_indices_strictly_increasing,
+    check_periods_no_overlap,
 )
 
 
