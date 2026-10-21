@@ -14,6 +14,7 @@ NO_ANOMALY = "Contrôles de cohérence : aucune anomalie."
 
 PARAMETRE_HEADER = "key,value,unit,start_date,end_date,source"
 TAUX_PRIMES_HEADER = "body_code,value,observation_year,source,fallback"
+ECHELON_HEADER = "grille,rank,gross_index,increased_index,duration_months"
 
 
 @pytest.fixture
@@ -234,3 +235,132 @@ def test_cli_entrypoint_exit_one_on_blank_source(
         runpy.run_module("checks", run_name="__main__")
     assert exc.value.code == 1
     assert "taux_cas_civil.csv" in capsys.readouterr().out
+
+
+# --- C1 : indices strictement croissants par rang (schéma echelon) ---------
+
+
+def test_echelon_strictly_increasing_passes(data_root: Path) -> None:  # C1.1
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,1,444,395,12",
+        "PE_cn_2024,2,513,446,12",
+        "PE_cn_2024,3,523,453,24",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_increased_index_equal_is_reported(data_root: Path) -> None:  # C1.2
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,1,100,50,12",
+        "PE_cn_2024,2,110,50,12",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "echelon_pe.csv:3 [indices] grille PE_cn_2024 rang 2 : "
+        "increased_index non strictement croissant (50 <= 50)\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_gross_index_decrease_is_reported(data_root: Path) -> None:  # C1.3
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,1,100,50,12",
+        "PE_cn_2024,2,90,60,12",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "echelon_pe.csv:3 [indices] grille PE_cn_2024 rang 2 : "
+        "gross_index non strictement croissant (90 <= 100)\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_echelon_rows_ordered_by_rank_not_file_order(data_root: Path) -> None:
+    # Lignes en désordre dans le fichier mais croissantes par rang : aucune
+    # violation (le contrôle ordonne par rang, pas par position dans le CSV).
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,3,523,453,24",
+        "PE_cn_2024,1,444,395,12",
+        "PE_cn_2024,2,513,446,12",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_each_grille_checked_independently(data_root: Path) -> None:
+    # Deux grilles dans un même fichier : seule la fautive est rapportée.
+    _write(
+        data_root,
+        "echelon_isg",
+        ECHELON_HEADER,
+        "ISG_g1_2024,1,444,395,12",
+        "ISG_g1_2024,2,484,424,18",
+        "ISG_g2_2024,1,500,450,12",
+        "ISG_g2_2024,2,480,470,12",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "echelon_isg.csv:5 [indices] grille ISG_g2_2024 rang 2 : "
+        "gross_index non strictement croissant (480 <= 500)\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_all_echelon_violations_reported(data_root: Path) -> None:
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,1,100,50,12",
+        "PE_cn_2024,2,100,60,12",
+        "PE_cn_2024,3,110,60,12",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "PE_cn_2024 rang 2 : gross_index non strictement croissant (100 <= 100)" in (
+        report
+    )
+    assert (
+        "PE_cn_2024 rang 3 : increased_index non strictement croissant (60 <= 60)"
+        in report
+    )
+    assert "Récapitulatif : 2 anomalie(s) détectée(s)." in report
+
+
+def test_echelon_checked_even_after_a_non_echelon_file(data_root: Path) -> None:
+    # Un fichier non-echelon précède l'echelon fautif dans l'ordre de parcours :
+    # le contrôle doit poursuivre jusqu'à l'echelon, pas s'arrêter avant.
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,78.28,PCT_TIB,2025-01-01,2025-12-31,retraites-etat-2026",
+    )
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,1,100,50,12",
+        "PE_cn_2024,2,90,60,12",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "echelon_pe.csv:3 [indices] grille PE_cn_2024 rang 2 : gross_index" in report

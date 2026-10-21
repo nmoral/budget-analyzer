@@ -16,6 +16,7 @@ import csv
 import json
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from itertools import pairwise
 from pathlib import Path
 
 from contract import data_dir
@@ -85,8 +86,52 @@ def check_source_not_blank(files: Sequence[LoadedFile]) -> list[Violation]:
     return violations
 
 
-# Registre des invariants appliqués. C1/C2/C3 s'y ajouteront aux jalons J2-J4.
-INVARIANTS: tuple[Invariant, ...] = (check_source_not_blank,)
+def check_indices_strictly_increasing(files: Sequence[LoadedFile]) -> list[Violation]:
+    """C1 — dans chaque grille ``echelon``, ``gross_index`` et ``increased_index``
+
+    sont strictement croissants par ``rank`` croissant.
+    """
+    violations: list[Violation] = []
+    for loaded in files:
+        if loaded.schema != "echelon":
+            continue
+        violations.extend(_echelon_index_violations(loaded))
+    return violations
+
+
+def _echelon_index_violations(loaded: LoadedFile) -> list[Violation]:
+    grilles: dict[str, list[tuple[int, dict[str, str]]]] = {}
+    for line, row in loaded.rows:
+        grilles.setdefault(row["grille"], []).append((line, row))
+
+    violations: list[Violation] = []
+    for grille, entries in grilles.items():
+        ordered = sorted(entries, key=lambda entry: int(entry[1]["rank"]))
+        for (_, previous), (line, row) in pairwise(ordered):
+            for column in ("gross_index", "increased_index"):
+                current_value = int(row[column])
+                previous_value = int(previous[column])
+                if current_value <= previous_value:
+                    violations.append(
+                        Violation(
+                            invariant="indices",
+                            file=loaded.filename,
+                            line=line,
+                            message=(
+                                f"grille {grille} rang {row['rank']} : "
+                                f"{column} non strictement croissant "
+                                f"({current_value} <= {previous_value})"
+                            ),
+                        )
+                    )
+    return violations
+
+
+# Registre des invariants appliqués. C2/C3 s'y ajouteront aux jalons J3-J4.
+INVARIANTS: tuple[Invariant, ...] = (
+    check_source_not_blank,
+    check_indices_strictly_increasing,
+)
 
 
 def read_rows(path: Path) -> list[tuple[int, dict[str, str]]]:
