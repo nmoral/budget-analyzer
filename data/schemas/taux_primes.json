@@ -3,6 +3,7 @@
     { "name": "body_code", "type": "string", "constraints": { "required": true } },
     { "name": "value", "type": "number", "constraints": { "required": true } },
     { "name": "observation_year", "type": "year", "constraints": { "required": true } },
-    { "name": "source", "type": "string", "constraints": { "required": true } }
+    { "name": "source", "type": "string", "constraints": { "required": true } },
+    { "name": "fallback", "type": "boolean", "constraints": { "required": true } }
   ]
 }
