@@ -28,7 +28,7 @@ Taux de primes moyen par corps des deux profils V1 (schéma `taux_primes`) :
 
 - `taux_primes` — une ligne par corps (`PE`, `ISG`), colonnes `body_code, value, observation_year, source, fallback`. `value` est le ratio décimal du traitement indiciaire brut (`0.21` = 21 % du TIB). `fallback` distingue l'observation directe (`false`) du repli versant × catégorie DGAFP (`true`) : `PE`→false, `ISG`→true.
 
-La source retenue, la raison du choix et le statut de repli pour chaque corps sont documentés dans `../data/catalogue_primes.md`.
+La source retenue, la raison du choix et le statut de repli pour chaque corps sont documentés dans `../data/catalogue_primes.md`. Les publications sources sont archivées dans `../data/sources/publications/` (`dgafp-ra-2025.pdf` pour `PE`, `insee-ip-2067.pdf` pour `ISG`) pour rester traçables même si les URL disparaissent ; `manifest.url` pointe le permalien de la publication (permalien DGAFP pour ce jeu).
 
 Coûts moyens chargés PAP par catégorie d'emploi, saisis à la main, chaque ligne sourcée au document et à la page (règle de transparence n° 7) :
 
