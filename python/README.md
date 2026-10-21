@@ -30,6 +30,12 @@ Taux de primes moyen par corps des deux profils V1 (schéma `taux_primes`) :
 
 La source retenue, la raison du choix et le statut de repli pour chaque corps sont documentés dans `../data/catalogue_primes.md`.
 
-Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04, #07) et #08 (contrôles de cohérence, dont la non-superposition des périodes d'une même clé et les indices majorés croissants par rang).
+Coûts moyens chargés PAP par catégorie d'emploi, saisis à la main, chaque ligne sourcée au document et à la page (règle de transparence n° 7) :
+
+- `couts_pap` — coût moyen chargé d'une catégorie d'emploi d'un programme (schéma `couts_pap`), colonnes `program, employment_category, average_loaded_cost, year, document, page, url`. Une ligne en V0 : programme 140, `enseignant_1er_degre` (professeur des écoles), 46139 € en 2025, sourcée `PAP2025-ENSSCOL-P140` page 49 (PAP 2025, annexe « Enseignement scolaire »). `document` et `page` sont requis : une ligne privée de l'un ou l'autre est rejetée à la validation.
+
+`average_loaded_cost` est le **coût global** (coût moyen sur la carrière, et non entrée/sortie), en base **HCAS** (hors CAS Pensions) — seule valeur publiée par catégorie dans le PAP. Le coût « y compris CAS Pensions » n'est pas calculé ici : il relève de #22, qui appliquera `taux_cas_civil`. Une seule catégorie du programme 140 est saisie (celle du calibrage #22) ; les autres sont hors périmètre V0.
+
+Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04) et #08 (contrôles de cohérence, dont la non-superposition des périodes d'une même clé et les indices majorés croissants par rang).
 
 Qualité (#00) : pytest, mutmut, mypy strict, ruff — lancés via `make qa` depuis la racine.

@@ -1,0 +1,9 @@
+{
+  "raw": "couts_pap.json",
+  "retrieved_at": "2026-10-21",
+  "script": "sources.couts_pap",
+  "script_version": "1",
+  "sha256": "10d3c8ae1154f71c37841cbf0a5e787ce1c49308b971153e77b887a2498cc499",
+  "source": "PAP 2025 — annexe « Enseignement scolaire » (programme 140)",
+  "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf"
+}
