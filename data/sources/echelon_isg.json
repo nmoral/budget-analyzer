@@ -1,0 +1,15 @@
+{
+  "rows": [
+    { "grille": "ISG_grade_1_2024", "rank": "1", "gross_index": "444", "increased_index": "395", "duration_months": "12" },
+    { "grille": "ISG_grade_1_2024", "rank": "2", "gross_index": "484", "increased_index": "424", "duration_months": "18" },
+    { "grille": "ISG_grade_1_2024", "rank": "3", "gross_index": "514", "increased_index": "447", "duration_months": "24" },
+    { "grille": "ISG_grade_1_2024", "rank": "4", "gross_index": "544", "increased_index": "468", "duration_months": "24" },
+    { "grille": "ISG_grade_1_2024", "rank": "5", "gross_index": "576", "increased_index": "491", "duration_months": "30" },
+    { "grille": "ISG_grade_1_2024", "rank": "6", "gross_index": "611", "increased_index": "518", "duration_months": "36" },
+    { "grille": "ISG_grade_1_2024", "rank": "7", "gross_index": "653", "increased_index": "550", "duration_months": "36" },
+    { "grille": "ISG_grade_1_2024", "rank": "8", "gross_index": "693", "increased_index": "580", "duration_months": "36" },
+    { "grille": "ISG_grade_1_2024", "rank": "9", "gross_index": "732", "increased_index": "610", "duration_months": "48" },
+    { "grille": "ISG_grade_1_2024", "rank": "10", "gross_index": "778", "increased_index": "645", "duration_months": "48" },
+    { "grille": "ISG_grade_1_2024", "rank": "11", "gross_index": "821", "increased_index": "678", "duration_months": "" }
+  ]
+}
