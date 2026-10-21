@@ -1,6 +1,6 @@
 COMPOSE = docker compose
 DATA_DIR = $(CURDIR)/data
-CORE = src/contract/*,src/ingest/*,src/sources/*
+CORE = src/contract/*,src/ingest/*,src/sources/*,src/checks/*
 
 .PHONY: up down build qa qa-python qa-symfony import
 
@@ -22,6 +22,7 @@ qa-python:
 	cd python && uv run pytest --cov=src
 	cd python && uv run coverage report --fail-under=90
 	cd python && uv run coverage report --include="$(CORE)" --fail-under=100
+	cd python && PYTHONPATH=src BUDGET_DATA_DIR="$(DATA_DIR)" uv run python -m checks
 	cd python && BUDGET_DATA_DIR="$(DATA_DIR)" uv run mutmut run
 	cd python && uv run mutmut export-cicd-stats
 	cd python && uv run python scripts/check_msi.py

@@ -25,8 +25,15 @@ make qa-symfony    # skip explicite tant que symfony/vendor est absent
 4. `pytest --cov=src`
 5. `coverage report --fail-under=90` (couverture globale)
 6. `coverage report --include=<cœur> --fail-under=100` (couverture du cœur)
-7. `mutmut run` + `mutmut export-cicd-stats` + `scripts/check_msi.py` (porte MSI)
-8. `frictionless validate --type schema` sur chaque `data/schemas/*.json`
+7. `python -m checks` (contrôles de cohérence métier sur `data/data/`, via `BUDGET_DATA_DIR`)
+8. `mutmut run` + `mutmut export-cicd-stats` + `scripts/check_msi.py` (porte MSI)
+9. `frictionless validate --type schema` sur chaque `data/schemas/*.json`
+
+L'étape 7 applique les invariants métier décrits dans `python/README.md` (indices
+croissants, périodes sans chevauchement, valeurs dans les bornes de
+`data/coherence.toml`, `source` renseignée) ; elle échoue (exit 1) à la moindre
+anomalie. Elle s'ajoute à la validation de schéma `frictionless` (étape 9), qui ne
+contrôle que la forme.
 
 Toutes les commandes Python tournent via `uv` depuis `python/` (aucune installation
 hôte hors `uv`). En local, installer les hooks : `uv run --project python pre-commit install`.
@@ -34,7 +41,8 @@ hôte hors `uv`). En local, installer les hooks : `uv run --project python pre-c
 ### pre-commit
 
 `.pre-commit-config.yaml` (hooks locaux alignés sur le Makefile) : `ruff check`,
-`ruff format --check`, `mypy src`, `pytest`.
+`ruff format --check`, `mypy src`, `pytest`, `checks` (contrôles de cohérence
+`python -m checks`, déclenché quand un CSV de `data/data/` ou `src/checks/` change).
 
 ```sh
 uv run --project python pre-commit run --all-files
@@ -54,9 +62,10 @@ s'appelle `qa` ; c'est le check à exiger en protection de branche (voir plus ba
 | Format | ruff format --check | 0 écart | oui | `Makefile` |
 | Typage | mypy | `strict = true` | oui | `python/pyproject.toml` |
 | Couverture globale | coverage | ≥ 90 % | oui | `Makefile` (`--fail-under=90`) |
-| Couverture cœur | coverage | 100 % sur `src/ingest`, `src/sources`, `src/contract` | oui | `Makefile` (`--fail-under=100`) |
+| Couverture cœur | coverage | 100 % sur `src/ingest`, `src/sources`, `src/contract`, `src/checks` | oui | `Makefile` (`--fail-under=100`) |
 | Mutation | mutmut + `scripts/check_msi.py` | MSI ≥ 85 % | oui | seuil dans `python/scripts/check_msi.py` (`THRESHOLD`), cibles dans `python/pyproject.toml` (`[tool.mutmut]`) |
-| Données | frictionless validate | schémas `data/schemas/*.json` valides | oui | `Makefile` (`--type schema`) |
+| Schéma données | frictionless validate | schémas `data/schemas/*.json` valides | oui | `Makefile` (`--type schema`) |
+| Cohérence données | `python -m checks` | invariants métier des CSV de `data/data/` (indices, périodes, bornes, `source`) | oui | `Makefile` (`BUDGET_DATA_DIR`), bornes dans `data/coherence.toml` |
 
 Le MSI (Mutation Score Indicator) est calculé comme le badge mutmut :
 `(killed + timeout) / (total - skipped)`.
@@ -88,7 +97,7 @@ sera câblée en bloquant quand #9 (squelette) / #12 (moteur) livreront du code 
 - Cible 3.13+ ; `uv` pour l'environnement et l'exécution.
 - Typage complet (mypy strict) ; pas de `# type: ignore` sans justification.
 - Style et imports gérés par ruff (`ruff format`, lint `I` pour le tri).
-- Cœur (`src/ingest`, `src/sources`, `src/contract`) couvert à 100 %.
+- Cœur (`src/ingest`, `src/sources`, `src/contract`, `src/checks`) couvert à 100 %.
 
 ### PHP (Symfony, à venir)
 

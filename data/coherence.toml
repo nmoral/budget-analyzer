@@ -1,0 +1,17 @@
+# Bornes de cohérence (critère C3 de l'issue #8), lues par `python -m checks`.
+#
+# Liste blanche : seules les clés / schémas listés ici sont contrôlés ; une clé
+# `parametre_date` absente de ce fichier (ou tout autre schéma) n'est pas bornée.
+# Les bornes sont incluses : `[min ; max]` admet `min` et `max`. Une borne peut
+# être omise : `min` seul = pas de plafond, `max` seul = pas de plancher.
+
+# Bornes par valeur de la colonne `key` (schéma `parametre_date`, colonne `value`).
+[parametre_date.key]
+taux_cas_civil = { min = 0, max = 200 }
+taux_cas_militaire = { min = 0, max = 200 }
+taux_cnracl = { min = 0, max = 200 }
+point_indice = { min = 0 }
+
+# Borne par schéma sur la colonne `value` de tout fichier `taux_primes`.
+[taux_primes]
+value = { min = 0, max = 1 }
