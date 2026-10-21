@@ -41,5 +41,5 @@ show_missing = true
 exclude_also = ['if __name__ == "__main__":']
 
 [tool.mutmut]
-source_paths = ["src/contract", "src/ingest", "src/sources"]
+source_paths = ["src/contract", "src/ingest", "src/sources", "src/checks"]
 pytest_add_cli_args_test_selection = ["tests"]

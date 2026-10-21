@@ -27,3 +27,9 @@ repos:
         language: system
         pass_filenames: false
         files: ^python/.*\.py$
+      - id: checks
+        name: contrôles de cohérence (python -m checks)
+        entry: bash -c 'cd python && PYTHONPATH=src BUDGET_DATA_DIR="$(pwd)/../data" uv run python -m checks'
+        language: system
+        pass_filenames: false
+        files: ^(data/data/.*\.csv|python/src/checks/.*\.py)$
