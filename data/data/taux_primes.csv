@@ -1,0 +1,3 @@
+body_code,value,observation_year,source,fallback
+PE,0.21,2023,dgafp-ra-2025,false
+ISG,0.33,2023,insee-ip-2067,true
