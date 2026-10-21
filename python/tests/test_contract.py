@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 import contract
-from contract import contract_version, validate_csv
+from contract import contract_version, schema_fields, validate_csv
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -49,3 +49,25 @@ def test_contract_version_is_semver() -> None:
     parts = version.split(".")
     assert len(parts) == 3
     assert all(part.isdigit() for part in parts)
+
+
+def test_contract_version_bumped_to_major_two() -> None:
+    # C3 : l'ajout du champ requis `fallback` est un changement incompatible.
+    assert contract_version() == "2.0.0"
+
+
+def test_taux_primes_schema_requires_fallback_field() -> None:
+    # C3 : le schéma étendu expose un champ `fallback`.
+    assert "fallback" in schema_fields("taux_primes")
+
+
+def test_taux_primes_valid_fixture_passes() -> None:
+    # C3.1 : la fixture valide (avec `fallback`) valide contre le schéma étendu.
+    report = validate_csv(FIXTURES / "taux_primes_valid.csv", "taux_primes")
+    assert report.valid
+
+
+def test_taux_primes_missing_fallback_is_rejected() -> None:
+    # C3.2 : un CSV sans la colonne `fallback` est rejeté (champ requis).
+    report = validate_csv(FIXTURES / "taux_primes_missing_fallback.csv", "taux_primes")
+    assert not report.valid
