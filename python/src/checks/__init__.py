@@ -14,11 +14,14 @@ from __future__ import annotations
 
 import csv
 import json
+import math
+import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from itertools import combinations, pairwise
 from pathlib import Path
+from typing import Any
 
 from contract import data_dir
 
@@ -200,11 +203,109 @@ def _period_violations(
     return violations
 
 
-# Registre des invariants appliqués. C3 s'y ajoutera au jalon J4.
+@dataclass(frozen=True)
+class _Bound:
+    """Bornes incluses ``[minimum ; maximum]`` (±∞ si une borne est omise)."""
+
+    minimum: float
+    maximum: float
+
+    def violations_of(self, raw_value: str) -> list[str]:
+        value = float(raw_value)
+        messages: list[str] = []
+        if value < self.minimum:
+            messages.append(f"sous la borne min {self.minimum:g}")
+        if value > self.maximum:
+            messages.append(f"au-dessus de la borne max {self.maximum:g}")
+        return messages
+
+
+@dataclass(frozen=True)
+class _Bounds:
+    """Liste blanche C3 : bornes par ``key`` ``parametre_date`` et par schéma."""
+
+    parametre_date_by_key: dict[str, _Bound]
+    taux_primes_value: _Bound | None
+
+
+def _as_float(raw: float | None, default: float) -> float:
+    return default if raw is None else float(raw)
+
+
+def _bound_from(spec: dict[str, Any]) -> _Bound:
+    return _Bound(
+        minimum=_as_float(spec.get("min"), -math.inf),
+        maximum=_as_float(spec.get("max"), math.inf),
+    )
+
+
+def load_bounds(root: Path) -> _Bounds:
+    """Charge ``root/coherence.toml`` (liste blanche C3 ; absent = rien de borné)."""
+    path = root / "coherence.toml"
+    if not path.exists():
+        return _Bounds(parametre_date_by_key={}, taux_primes_value=None)
+    with path.open("rb") as handle:
+        config: dict[str, Any] = tomllib.load(handle)
+    by_key = {
+        name: _bound_from(spec)
+        for name, spec in config.get("parametre_date", {}).get("key", {}).items()
+    }
+    taux_primes = config.get("taux_primes", {})
+    value_bound = _bound_from(taux_primes["value"]) if "value" in taux_primes else None
+    return _Bounds(parametre_date_by_key=by_key, taux_primes_value=value_bound)
+
+
+def check_values_within_bounds(files: Sequence[LoadedFile]) -> list[Violation]:
+    """C3 — chaque valeur bornée reste dans ``[min ; max]`` (data/coherence.toml).
+
+    Liste blanche : pour ``parametre_date`` les bornes sont indexées par la colonne
+    ``key`` (valeur contrôlée : ``value``) ; pour ``taux_primes`` une borne unique
+    s'applique à la colonne ``value``. Clé ou schéma non listé = non contrôlé.
+    """
+    bounds = load_bounds(data_dir())
+    violations: list[Violation] = []
+    for loaded in files:
+        if loaded.schema == "parametre_date":
+            for line, row in loaded.rows:
+                bound = bounds.parametre_date_by_key.get(row["key"])
+                if bound is not None:
+                    violations.extend(
+                        _bound_violations(loaded, line, row["key"], row["value"], bound)
+                    )
+        elif loaded.schema == "taux_primes" and bounds.taux_primes_value is not None:
+            for line, row in loaded.rows:
+                violations.extend(
+                    _bound_violations(
+                        loaded,
+                        line,
+                        "taux_primes.value",
+                        row["value"],
+                        bounds.taux_primes_value,
+                    )
+                )
+    return violations
+
+
+def _bound_violations(
+    loaded: LoadedFile, line: int, label: str, raw_value: str, bound: _Bound
+) -> list[Violation]:
+    return [
+        Violation(
+            invariant="bornes",
+            file=loaded.filename,
+            line=line,
+            message=f"clé {label} : valeur {raw_value} {breach}",
+        )
+        for breach in bound.violations_of(raw_value)
+    ]
+
+
+# Registre des invariants appliqués.
 INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
     check_indices_strictly_increasing,
     check_periods_no_overlap,
+    check_values_within_bounds,
 )
 
 

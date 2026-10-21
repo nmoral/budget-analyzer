@@ -504,3 +504,214 @@ def test_period_ending_on_another_start_day_overlaps(data_root: Path) -> None:
     code, report = run(data_root)
     assert code == 1
     assert "2025-01-01→2025-12-31 et 2025-01-01→2025-01-01 se chevauchent" in report
+
+
+# --- C3 : bornes min/max (liste blanche data/coherence.toml) ----------------
+
+DEFAULT_COHERENCE = (
+    "[parametre_date.key]\n"
+    "taux_cas_civil = { min = 0, max = 200 }\n"
+    "taux_cas_militaire = { min = 0, max = 200 }\n"
+    "taux_cnracl = { min = 0, max = 200 }\n"
+    "point_indice = { min = 0 }\n"
+    "[taux_primes]\n"
+    "value = { min = 0, max = 1 }\n"
+)
+
+
+def _write_config(root: Path, content: str = DEFAULT_COHERENCE) -> None:
+    (root / "coherence.toml").write_text(content, "utf-8")
+
+
+def test_rate_above_100_percent_within_bounds(data_root: Path) -> None:  # C3.1
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_cas_militaire",
+        PARAMETRE_HEADER,
+        "taux_cas_militaire,126.07,PCT_TIB,2025-01-01,,an-rapport-cas-pensions",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_rate_above_max_is_reported(data_root: Path) -> None:  # C3.2
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,250,PCT_TIB,2025-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "taux_cas_civil.csv:2 [bornes] clé taux_cas_civil : "
+        "valeur 250 au-dessus de la borne max 200\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_rate_below_min_is_reported(data_root: Path) -> None:  # C3.3
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,-5,PCT_TIB,2025-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "taux_cas_civil.csv:2 [bornes] clé taux_cas_civil : "
+        "valeur -5 sous la borne min 0\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_taux_primes_ratio_above_one_is_reported(data_root: Path) -> None:  # C3.4
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_primes",
+        TAUX_PRIMES_HEADER,
+        "PE,1.5,2023,dgafp,false",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "taux_primes.csv:2 [bornes] clé taux_primes.value : "
+        "valeur 1.5 au-dessus de la borne max 1\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_taux_primes_ratio_within_bounds_passes(data_root: Path) -> None:
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_primes",
+        TAUX_PRIMES_HEADER,
+        "PE,0.21,2023,dgafp,false",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_bounds_are_inclusive(data_root: Path) -> None:
+    # min et max sont admis (bornes incluses) : 0 et 200 ne violent pas [0 ; 200].
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,0,PCT_TIB,2024-01-01,2024-12-31,src",
+        "taux_cas_civil,200,PCT_TIB,2025-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_unlisted_key_is_not_bounded(data_root: Path) -> None:
+    # Liste blanche : une clé parametre_date absente de la config n'est pas bornée,
+    # même avec une valeur qui dépasserait des bornes usuelles.
+    _write_config(data_root)
+    _write(
+        data_root,
+        "point_indice",  # fichier parametre_date hébergeant une clé non listée
+        PARAMETRE_HEADER,
+        "clé_hors_liste,9999,EUR_PER_YEAR,2023-07-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_min_only_bound_allows_large_value_but_rejects_negative(
+    data_root: Path,
+) -> None:
+    # point_indice n'a qu'une borne min (0) : une grande valeur passe, une valeur
+    # négative viole la borne min.
+    _write_config(data_root)
+    _write(
+        data_root,
+        "point_indice",
+        PARAMETRE_HEADER,
+        "point_indice,99999,EUR_PER_YEAR,2020-01-01,2022-12-31,src",
+        "point_indice,-1,EUR_PER_YEAR,2023-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "point_indice.csv:3 [bornes] clé point_indice : "
+        "valeur -1 sous la borne min 0\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_max_only_bound_rejects_above_without_min(data_root: Path) -> None:
+    # Config où une clé n'a qu'une borne max : pas de plancher, plafond respecté.
+    _write_config(
+        data_root,
+        "[parametre_date.key]\nplafond = { max = 10 }\n",
+    )
+    _write(
+        data_root,
+        "point_indice",
+        PARAMETRE_HEADER,
+        "plafond,-100,EUR_PER_YEAR,2020-01-01,2022-12-31,src",
+        "plafond,20,EUR_PER_YEAR,2023-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "point_indice.csv:3 [bornes] clé plafond : "
+        "valeur 20 au-dessus de la borne max 10\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_taux_primes_not_configured_is_skipped(data_root: Path) -> None:
+    # Config sans section taux_primes : la colonne value n'est pas bornée.
+    _write_config(data_root, "[parametre_date.key]\ntaux_cnracl = { min = 0 }\n")
+    _write(
+        data_root,
+        "taux_primes",
+        TAUX_PRIMES_HEADER,
+        "PE,1.5,2023,dgafp,false",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_missing_config_bounds_nothing(data_root: Path) -> None:
+    # Aucun coherence.toml : liste blanche vide, rien n'est borné.
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,250,PCT_TIB,2025-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_all_bound_violations_reported(data_root: Path) -> None:
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,250,PCT_TIB,2025-01-01,2025-12-31,src",
+        "taux_cas_civil,-5,PCT_TIB,2026-01-01,,src",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "valeur 250 au-dessus de la borne max 200" in report
+    assert "valeur -5 sous la borne min 0" in report
+    assert "Récapitulatif : 2 anomalie(s) détectée(s)." in report
