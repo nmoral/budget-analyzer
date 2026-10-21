@@ -36,6 +36,38 @@ Coûts moyens chargés PAP par catégorie d'emploi, saisis à la main, chaque li
 
 `average_loaded_cost` est le **coût global** (coût moyen sur la carrière, et non entrée/sortie), en base **HCAS** (hors CAS Pensions) — seule valeur publiée par catégorie dans le PAP. Le coût « y compris CAS Pensions » n'est pas calculé ici : il relève de #22, qui appliquera `taux_cas_civil`. Une seule catégorie du programme 140 est saisie (celle du calibrage #22) ; les autres sont hors périmètre V0.
 
-Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04) et #08 (contrôles de cohérence, dont la non-superposition des périodes d'une même clé et les indices majorés croissants par rang).
+Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04).
+
+## Contrôles de cohérence (`python -m checks`)
+
+Commande unique qui applique des **invariants métier** sur les CSV normalisés présents dans `data/data/`, en complément de la validation de schéma `frictionless` (qui ne contrôle que la forme). Chaque fichier est relié à son schéma par un mapping explicite ; les schémas sans CSV réel sont ignorés sans erreur.
+
+Usage, depuis `python/` :
+
+```sh
+PYTHONPATH=src BUDGET_DATA_DIR=../data uv run python -m checks
+```
+
+`BUDGET_DATA_DIR` désigne la racine du dépôt de données (celle qui contient `data/`, `schemas/` et `coherence.toml`). La commande lit les CSV de `<BUDGET_DATA_DIR>/data/`, les schémas de `<BUDGET_DATA_DIR>/schemas/` et les bornes de `<BUDGET_DATA_DIR>/coherence.toml`. Elle imprime un rapport texte (une ligne par anomalie + un récapitulatif), sort **0** si aucune anomalie et **1** sinon, en rapportant **toutes** les anomalies (pas d'arrêt à la première).
+
+Invariants appliqués :
+
+- **Indices croissants** — dans chaque grille d'un fichier `echelon` (groupée par la colonne `grille`), `gross_index` et `increased_index` sont strictement croissants par `rank` croissant. Les deux colonnes sont contrôlées indépendamment.
+- **Périodes sans chevauchement** — les périodes d'effet d'une même clé ne se chevauchent pas : `parametre_date` groupé par `key`, `grille` par `body_code` + `grade`. Période `[start_date ; end_date]` bornes incluses, `end_date` vide = ouverte (∞) ; l'adjacence (fin le jour J, début le jour J+1) est autorisée.
+- **Valeurs dans les bornes** — chaque valeur soumise à bornes reste dans `[min ; max]` défini dans `coherence.toml` (voir ci-dessous).
+- **Source renseignée** — toute ligne d'un schéma portant une colonne `source` a une `source` non blanche (après `strip`). La présence de la colonne est dérivée du schéma livré, pas d'une liste codée en dur ; les schémas sans colonne `source` (ex. `echelon`, `couts_pap`) ne sont pas concernés.
+
+### `data/coherence.toml` — liste blanche des bornes
+
+Les bornes de l'invariant « valeurs dans les bornes » sont versionnées dans `data/coherence.toml`. C'est une **liste blanche** : seules les clés et schémas listés sont contrôlés ; une clé `parametre_date` absente (ou tout autre schéma) n'est pas bornée. Fichier absent = aucune borne appliquée.
+
+- `[parametre_date.key]` — une table inline `{ min, max }` par valeur de la colonne `key` (la valeur contrôlée est la colonne `value`). Ex. `taux_cas_civil`, `taux_cas_militaire`, `taux_cnracl` en `[0 ; 200]` (admet les taux > 100 %, p. ex. 126,07 du versant militaire), `point_indice` avec `min = 0` seul.
+- `[taux_primes]` — une borne `value = { min, max }` appliquée à la colonne `value` de tout fichier du schéma `taux_primes` (ratio du TIB, `[0 ; 1]`).
+
+Les bornes sont **incluses**. Une borne peut être omise : `min` seul = pas de plafond, `max` seul = pas de plancher.
+
+### Câblage
+
+`python -m checks` fait partie de `make qa-python` et d'un hook `pre-commit` (`id: checks`), déclenché quand un CSV de `data/data/` ou un fichier de `src/checks/` change. Le cœur `src/checks` est couvert à 100 % et inclus dans les cibles mutmut (cf. `CLAUDE.md`).
 
 Qualité (#00) : pytest, mutmut, mypy strict, ruff — lancés via `make qa` depuis la racine.

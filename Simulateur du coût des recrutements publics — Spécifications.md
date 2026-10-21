@@ -127,7 +127,7 @@ Le dépôt de données est le seul point de passage : aucune brique ne lit les s
 - Un script par source, idempotent, rejouable à partir du fichier brut archivé.
 - Sortie en CSV normalisé : UTF-8, dates ISO 8601, point décimal, une ligne par valeur datée.
 - Un manifeste par fichier : source, URL, date de récupération, empreinte SHA-256 du brut, script et version.
-- Contrôles de cohérence avant commit : indices croissants dans une grille, périodes d'effet sans chevauchement, taux dans des bornes plausibles.
+- Contrôles de cohérence avant commit (une commande unique, qui bloque si une anomalie est détectée et liste toutes les anomalies) : indices (brut et majoré) strictement croissants par rang dans une grille ; périodes d'effet d'une même valeur datée sans chevauchement (adjacence autorisée, fin de période ouverte admise) ; valeurs dans des bornes plausibles, définies en liste blanche (une valeur non listée n'est pas bornée) ; source renseignée sur toute valeur dont le schéma en porte une.
 - Toute modification de données passe par une pull request : le diff montre la valeur changée et sa source.
 - Exception en V1 : les coûts moyens des PAP sont saisis à la main dans un CSV, chaque ligne référençant le document et la page. Un script d'extraction ne sera écrit que si le nombre de programmes à suivre le justifie.
 
