@@ -1,0 +1,15 @@
+{
+  "rows": [
+    { "grille": "PE_classe_normale_2024", "rank": "1", "gross_index": "444", "increased_index": "395", "duration_months": "12" },
+    { "grille": "PE_classe_normale_2024", "rank": "2", "gross_index": "513", "increased_index": "446", "duration_months": "12" },
+    { "grille": "PE_classe_normale_2024", "rank": "3", "gross_index": "523", "increased_index": "453", "duration_months": "24" },
+    { "grille": "PE_classe_normale_2024", "rank": "4", "gross_index": "542", "increased_index": "466", "duration_months": "24" },
+    { "grille": "PE_classe_normale_2024", "rank": "5", "gross_index": "562", "increased_index": "481", "duration_months": "30" },
+    { "grille": "PE_classe_normale_2024", "rank": "6", "gross_index": "582", "increased_index": "497", "duration_months": "36" },
+    { "grille": "PE_classe_normale_2024", "rank": "7", "gross_index": "619", "increased_index": "524", "duration_months": "36" },
+    { "grille": "PE_classe_normale_2024", "rank": "8", "gross_index": "668", "increased_index": "562", "duration_months": "42" },
+    { "grille": "PE_classe_normale_2024", "rank": "9", "gross_index": "712", "increased_index": "595", "duration_months": "48" },
+    { "grille": "PE_classe_normale_2024", "rank": "10", "gross_index": "763", "increased_index": "634", "duration_months": "48" },
+    { "grille": "PE_classe_normale_2024", "rank": "11", "gross_index": "821", "increased_index": "678", "duration_months": "" }
+  ]
+}

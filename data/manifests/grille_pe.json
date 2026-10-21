@@ -1,0 +1,9 @@
+{
+  "raw": "grille_pe.json",
+  "retrieved_at": "2026-10-21",
+  "script": "sources.grille_pe",
+  "script_version": "1",
+  "sha256": "3b1d88471fa7dddbdb1b5336dcf510cd1f3f59b25b2a193cc36d4a3d1127f728",
+  "source": "Décret n° 2017-789 du 4 mai 2017",
+  "url": "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000034601473"
+}
