@@ -14,6 +14,9 @@ Le taux `value` est exprimé en ratio du traitement indiciaire brut (TIB) :
 - **Taux** : `0.21` (année d'observation `2023`)
 - **Source** : `dgafp-ra-2025` — DGAFP, rapport annuel sur l'état de la fonction
   publique, édition 2025 (données 2023).
+- **Publication** : <https://www.fonction-publique.gouv.fr/toutes-les-publications/rapport-annuel-sur-letat-de-la-fonction-publique-edition-2025>
+  (permalien DGAFP) ; copie archivée dans le dépôt :
+  `data/sources/publications/dgafp-ra-2025.pdf`.
 - **Raison du choix** : part des primes (y compris SFT et indemnité de résidence)
   des enseignants = 17,2 % du salaire brut, convertie en part du TIB :
   `0,172 / 0,828 ≈ 0,21`. Chiffre directement observé pour les enseignants.
@@ -24,6 +27,9 @@ Le taux `value` est exprimé en ratio du traitement indiciaire brut (TIB) :
 - **Code corps** : `ISG`
 - **Taux** : `0.33` (année d'observation `2023`)
 - **Source** : `insee-ip-2067` — Insee Première n° 2067 (données 2023).
+- **Publication** : <https://www.insee.fr/fr/statistiques/8612479> (permalien Insee
+  Première n° 2067) ; copie archivée dans le dépôt :
+  `data/sources/publications/insee-ip-2067.pdf`.
 - **Raison du choix** : aucun chiffre de primes spécifique au corps infirmier n'est
   extractible (publication DREES non exploitable) ; on se replie sur la part des
   primes de la catégorie A de la fonction publique hospitalière = 24,9 % du brut,

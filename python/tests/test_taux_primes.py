@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -9,6 +10,20 @@ from contract import validate_csv
 from ingest import verify_manifest
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
+
+PERMALINK_DGAFP = (
+    "https://www.fonction-publique.gouv.fr/toutes-les-publications/"
+    "rapport-annuel-sur-letat-de-la-fonction-publique-edition-2025"
+)
+PERMALINK_INSEE = "https://www.insee.fr/fr/statistiques/8612479"
+PUBLICATIONS = {
+    "dgafp-ra-2025.pdf": (
+        "1e85e8b295b482848d613f5a31d91c171906cb09c510534ea972bca3eaf12a48"
+    ),
+    "insee-ip-2067.pdf": (
+        "d35011dd12452888a03e877519811a0fadcab390e7d71e42318b2633d9676754"
+    ),
+}
 
 
 @pytest.fixture
@@ -105,6 +120,38 @@ def test_taux_primes_manifest_is_verifiable(data_dir: Path) -> None:
     for key in ("source", "url", "sha256", "script", "script_version"):
         assert manifest[key]
     assert manifest["script"] == "sources.taux_primes"
+
+
+# --- C1.1 / C1.2 : url reelle dans le manifeste ----------------------------
+def test_taux_primes_manifest_url_is_dgafp_permalink(data_dir: Path) -> None:
+    from sources.taux_primes import run
+
+    run()
+    manifest = json.loads((data_dir / "manifests" / "taux_primes.json").read_text())
+    assert manifest["url"] == PERMALINK_DGAFP  # C1.1
+    assert manifest["url"] != "https://www.insee.fr/fr/statistiques"  # C1.2
+
+
+# --- C2.1 / C2.2 : publications sources archivees --------------------------
+def test_publications_archived_with_expected_sha256() -> None:
+    publications = REAL_DATA / "sources" / "publications"
+    for name, expected_sha in PUBLICATIONS.items():
+        path = publications / name
+        assert path.exists(), f"publication manquante : {name}"
+        actual_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        assert actual_sha == expected_sha, f"sha256 inattendu pour {name}"
+
+
+# --- C3.1 / C3.2 : catalogue cite permalien + chemin archive ---------------
+def test_catalogue_cites_permalink_and_archived_path() -> None:
+    catalogue = (REAL_DATA / "catalogue_primes.md").read_text("utf-8")
+    sections = _catalogue_sections(catalogue)
+    pe = sections["PE"]
+    assert PERMALINK_DGAFP in pe  # C3.1
+    assert "data/sources/publications/dgafp-ra-2025.pdf" in pe  # C3.1
+    isg = sections["ISG"]
+    assert PERMALINK_INSEE in isg  # C3.2
+    assert "data/sources/publications/insee-ip-2067.pdf" in isg  # C3.2
 
 
 # --- main() imprime le chemin du CSV ---------------------------------------
