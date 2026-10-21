@@ -6,8 +6,10 @@ schéma par un mapping explicite, les invariants pertinents sont appliqués, et
 récapitulatif). Sortie 0 si aucune anomalie, 1 sinon.
 
 Les invariants sont des fonctions prenant la liste des fichiers chargés et
-renvoyant des violations ; de nouveaux invariants s'enregistrent simplement dans
-``INVARIANTS`` (C1/C2/C3 aux jalons suivants) sans toucher à l'agrégation.
+renvoyant des violations. Ceux sans configuration externe s'enregistrent dans
+``STATELESS_INVARIANTS`` ; C3 dépend des bornes de ``root/coherence.toml`` et est
+fabriqué dans ``run(root)`` à partir de ces bornes, de sorte que ``run(root)``
+reste fonction de son seul argument (données **et** config issues de ``root``).
 """
 
 from __future__ import annotations
@@ -255,35 +257,43 @@ def load_bounds(root: Path) -> _Bounds:
     return _Bounds(parametre_date_by_key=by_key, taux_primes_value=value_bound)
 
 
-def check_values_within_bounds(files: Sequence[LoadedFile]) -> list[Violation]:
-    """C3 — chaque valeur bornée reste dans ``[min ; max]`` (data/coherence.toml).
+def check_values_within_bounds(bounds: _Bounds) -> Invariant:
+    """C3 — fabrique l'invariant « valeurs dans les bornes » à partir des ``bounds``
+    déjà chargés depuis ``root/coherence.toml`` (liste blanche de la racine contrôlée).
 
     Liste blanche : pour ``parametre_date`` les bornes sont indexées par la colonne
     ``key`` (valeur contrôlée : ``value``) ; pour ``taux_primes`` une borne unique
     s'applique à la colonne ``value``. Clé ou schéma non listé = non contrôlé.
     """
-    bounds = load_bounds(data_dir())
-    violations: list[Violation] = []
-    for loaded in files:
-        if loaded.schema == "parametre_date":
-            for line, row in loaded.rows:
-                bound = bounds.parametre_date_by_key.get(row["key"])
-                if bound is not None:
+
+    def invariant(files: Sequence[LoadedFile]) -> list[Violation]:
+        violations: list[Violation] = []
+        for loaded in files:
+            if loaded.schema == "parametre_date":
+                for line, row in loaded.rows:
+                    bound = bounds.parametre_date_by_key.get(row["key"])
+                    if bound is not None:
+                        violations.extend(
+                            _bound_violations(
+                                loaded, line, row["key"], row["value"], bound
+                            )
+                        )
+            elif (
+                loaded.schema == "taux_primes" and bounds.taux_primes_value is not None
+            ):
+                for line, row in loaded.rows:
                     violations.extend(
-                        _bound_violations(loaded, line, row["key"], row["value"], bound)
+                        _bound_violations(
+                            loaded,
+                            line,
+                            "taux_primes.value",
+                            row["value"],
+                            bounds.taux_primes_value,
+                        )
                     )
-        elif loaded.schema == "taux_primes" and bounds.taux_primes_value is not None:
-            for line, row in loaded.rows:
-                violations.extend(
-                    _bound_violations(
-                        loaded,
-                        line,
-                        "taux_primes.value",
-                        row["value"],
-                        bounds.taux_primes_value,
-                    )
-                )
-    return violations
+        return violations
+
+    return invariant
 
 
 def _bound_violations(
@@ -300,12 +310,11 @@ def _bound_violations(
     ]
 
 
-# Registre des invariants appliqués.
-INVARIANTS: tuple[Invariant, ...] = (
+# Registre des invariants sans configuration externe (C3 est fabriqué dans run()).
+STATELESS_INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
     check_indices_strictly_increasing,
     check_periods_no_overlap,
-    check_values_within_bounds,
 )
 
 
@@ -354,10 +363,15 @@ def format_report(violations: Sequence[Violation]) -> str:
 
 
 def run(root: Path) -> tuple[int, str]:
-    """Applique tous les invariants sur ``root`` et renvoie ``(code, rapport)``."""
+    """Applique tous les invariants sur ``root`` et renvoie ``(code, rapport)``.
+
+    Données et bornes C3 proviennent de la même racine ``root`` : ``run`` est
+    fonction de son seul argument, sans état global masqué.
+    """
     files = collect_files(root)
+    invariants = (*STATELESS_INVARIANTS, check_values_within_bounds(load_bounds(root)))
     violations: list[Violation] = []
-    for invariant in INVARIANTS:
+    for invariant in invariants:
         violations.extend(invariant(files))
     code = 1 if violations else 0
     return code, format_report(violations)

@@ -701,6 +701,27 @@ def test_missing_config_bounds_nothing(data_root: Path) -> None:
     assert report == NO_ANOMALY
 
 
+def test_c3_bounds_loaded_from_run_root_not_env(
+    data_root: Path,
+    tmp_path_factory: pytest.TempPathFactory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # R1 : les bornes C3 proviennent de la racine passée à run(), pas de
+    # BUDGET_DATA_DIR. On fait pointer l'env sur une racine SANS coherence.toml :
+    # la violation doit tout de même être détectée (bornes lues depuis data_root).
+    _write_config(data_root)
+    _write(
+        data_root,
+        "taux_cas_civil",
+        PARAMETRE_HEADER,
+        "taux_cas_civil,250,PCT_TIB,2025-01-01,,src",
+    )
+    monkeypatch.setenv("BUDGET_DATA_DIR", str(tmp_path_factory.mktemp("no_config")))
+    code, report = run(data_root)
+    assert code == 1
+    assert "valeur 250 au-dessus de la borne max 200" in report
+
+
 def test_all_bound_violations_reported(data_root: Path) -> None:
     _write_config(data_root)
     _write(
