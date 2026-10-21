@@ -132,6 +132,17 @@ def test_taux_primes_manifest_url_is_dgafp_permalink(data_dir: Path) -> None:
     assert manifest["url"] != "https://www.insee.fr/fr/statistiques"  # C1.2
 
 
+# --- C1 (garde anti-regression) : manifeste committe == constante URL -------
+def test_committed_manifest_url_matches_source_constant() -> None:
+    from sources.taux_primes import URL
+
+    committed = json.loads(
+        (REAL_DATA / "manifests" / "taux_primes.json").read_text("utf-8")
+    )
+    assert committed["url"] == URL
+    assert committed["url"] == PERMALINK_DGAFP
+
+
 # --- C2.1 / C2.2 : publications sources archivees --------------------------
 def test_publications_archived_with_expected_sha256() -> None:
     publications = REAL_DATA / "sources" / "publications"
