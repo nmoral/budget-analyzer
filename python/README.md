@@ -24,6 +24,12 @@ Grilles indiciaires des deux profils V1, au grade d'entrée de chaque corps (une
 
 La clé d'identité d'une grille est `{body_code}_{grade}_{version}` ; chaque ligne d'échelon s'y rattache par sa colonne `grille`. Une seule version courante par corps en V1 (indices majorés intégrant les +5 points au 01/01/2024), sans historique antérieur.
 
-Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04, #06, #07) et #08 (contrôles de cohérence, dont la non-superposition des périodes d'une même clé et les indices majorés croissants par rang).
+Taux de primes moyen par corps des deux profils V1 (schéma `taux_primes`) :
+
+- `taux_primes` — une ligne par corps (`PE`, `ISG`), colonnes `body_code, value, observation_year, source, fallback`. `value` est le ratio décimal du traitement indiciaire brut (`0.21` = 21 % du TIB). `fallback` distingue l'observation directe (`false`) du repli versant × catégorie DGAFP (`true`) : `PE`→false, `ISG`→true.
+
+La source retenue, la raison du choix et le statut de repli pour chaque corps sont documentés dans `../data/catalogue_primes.md`.
+
+Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04, #07) et #08 (contrôles de cohérence, dont la non-superposition des périodes d'une même clé et les indices majorés croissants par rang).
 
 Qualité (#00) : pytest, mutmut, mypy strict, ruff — lancés via `make qa` depuis la racine.
