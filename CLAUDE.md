@@ -127,3 +127,7 @@ JSON
 
 Le contexte `qa` correspond au job du workflow `.github/workflows/qa.yml`. Adapter
 le nombre de revues requis selon la politique de l'équipe.
+
+**Méthode de merge des PR : squash.** L'historique linéaire est imposé
+(`required_linear_history`), donc pas de merge commit ; les PR sont intégrées en
+**squash** (un commit par PR sur `main`, le détail des jalons restant dans la PR).
