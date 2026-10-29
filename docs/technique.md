@@ -196,7 +196,14 @@ tout le travail au service `App\Infrastructure\Import\Importer`.
 ```sh
 docker compose run --rm symfony php bin/console app:import <commit>
 docker compose run --rm symfony php bin/console app:import <commit> --data-dir=/chemin/fixture
+
+make import                  # raccourci : démarre Postgres puis importe le commit courant
+make import COMMIT=<commit>  # importe un commit précis
 ```
+
+Le `Makefile` expose un raccourci `make import` qui démarre Postgres (`up -d --wait
+postgres`) puis lance `app:import` ; la variable `COMMIT` (défaut `git rev-parse HEAD`)
+fournit la référence attendue par la commande.
 
 - Argument `commit` (requis) : référence du commit du dépôt de données. C'est une
   **chaîne opaque** utilisée comme `version_id` du `ParameterSet` ; elle n'est **pas**
@@ -351,11 +358,65 @@ docker compose logs symfony
 La chaîne qualité PHP est exécutée **dans le conteneur** et **bloquante** depuis #9.
 `make qa-symfony` build l'image `symfony`, démarre Postgres (`up -d --wait postgres`)
 puis enchaîne PHP-CS-Fixer (dry-run), PHPStan (`level: max`) et PHPUnit, en échouant
-au premier garde-fou KO. `make qa` lance `qa-python` puis `qa-symfony`.
+au premier garde-fou KO. `make qa` lance `qa-python` puis `qa-symfony` ; en **local**,
+`make qa` reste la **chaîne complète séquentielle inchangée** (mutmut complet).
 
-En CI (`.github/workflows/qa.yml`, job `qa`), le `.env` est dérivé de `.env.example`
-(`cp .env.example .env`) avant `make qa`, ce qui build l'image `symfony` et exécute
-la chaîne PHP.
+### Orchestration CI (`.github/workflows/qa.yml`)
+
+Le workflow applique **les mêmes garde-fous et les mêmes seuils** que `make qa` mais
+**diverge dans l'orchestration** pour réduire le temps mur : au lieu d'un job unique
+lançant `make qa`, il éclate la chaîne en deux jobs parallèles (`qa-python`,
+`qa-symfony`) plus un job agrégateur `qa`. L'aperçu de cette divergence est dans
+`CLAUDE.md` (section CI) ; les paragraphes ci-dessous documentent les **mécanismes
+d'implémentation** côté dépôt.
+
+**Caches.**
+
+- `qa-python` installe `uv` avec `enable-cache: true` et
+  `cache-dependency-glob: python/uv.lock` : le cache uv est restauré entre runs et
+  invalidé quand `uv.lock` change.
+- `qa-symfony` pré-build l'image `symfony` via `docker/build-push-action`
+  (`cache-from/to: type=gha`, `push: false`) pour **réchauffer** le cache de layers du
+  builder buildx par défaut du job. `docker compose build symfony` (dans
+  `make qa-symfony`) réutilise alors ce builder et retrouve les layers apt/composer
+  `CACHED` tant que `composer.lock` est inchangé, rejouées sinon. Les build-args
+  `UID`/`GID` (hôte, `id -u` / `id -g`) sont passés au pré-build pour que sa clé de
+  cache **coïncide** avec celle du build du `Makefile` ; sinon les layers postérieures à
+  l'`ARG` seraient rejouées.
+
+**Mutation (mutmut) scopée sur PR.** Sur un événement `pull_request`, mutmut ne mute que
+le cœur Python modifié par la PR, pour raccourcir la CI sans baisser le MSI (≥ 85 %,
+bloquant). Le job procède en deux temps :
+
+1. `make qa-python MUTMUT_SKIP=1` : chaîne Python complète **sans** mutmut. Le hook
+   `MUTMUT_SKIP` du `Makefile` neutralise uniquement les trois lignes mutmut (`run`,
+   `export-cicd-stats`, `check_msi.py`) ; vide par défaut, il laisse `make qa-python`
+   en local et sur push `main` en mutmut **complet**.
+2. `python/scripts/mutmut_scoped.sh` (var `MUTMUT_BASE=origin/<base_ref>`,
+   checkout en `fetch-depth: 0` pour disposer de l'historique) : calcule le `merge-base`
+   avec la branche de base, liste les fichiers `src/{contract,ingest,sources,checks}/*.py`
+   **ajoutés/modifiés/renommés** (`git diff --diff-filter=ACMR`, pour ignorer les
+   suppressions et l'ancien chemin d'un renommage, absents de HEAD), puis restreint
+   mutmut à ce périmètre via `python/scripts/scope_mutmut_config.py`. Ce dernier injecte
+   un `only_mutate = [...]` dans la section `[tool.mutmut]` de `pyproject.toml`,
+   **transitoirement sur le runner, jamais commité** ; les chemins hors
+   `[A-Za-z0-9_./-]` sont rejetés pour ne pas corrompre le TOML. Comportements :
+   - aucun fichier cœur modifié → étape **no-op verte** ;
+   - périmètre produisant **0 mutant** (`total=0`, p. ex. module réduit à des imports)
+     → **no-op verte** aussi (rien à tuer, MSI non calculable) ; `check_msi.py` n'est
+     alors pas appelé ;
+   - sinon, `check_msi.py` reste **bloquant** sur le périmètre réduit.
+
+   Sur **push `main`**, aucun scoping : `make qa-python` joue mutmut **complet** sur les
+   4 packages du cœur (MSI global), identique au local. Aucun seuil n'est modifié ; seul
+   le **périmètre** muté sur PR change.
+
+**Gate `qa`.** Le job `qa` (`needs: [qa-python, qa-symfony]`) est le **seul check requis**
+par la protection de `main` ; son nom est préservé. Il porte `if: always()` et inspecte
+`needs.*.result`, échouant (exit 1) si l'un des deux amonts n'est pas `success`. Sans
+`if: always()`, un amont en échec rendrait `qa` *skipped* — or la protection de branche
+traite un check requis *skipped* comme **passant**, et le merge ne serait pas bloqué. Le
+gate est donc vert uniquement quand les deux chaînes le sont, rouge sinon.
 
 Les seuils et outils (PHP-CS-Fixer PSR-12 + `strict_types`, PHPStan `level: max`,
 PHPUnit ; Infection et Deptrac à venir avec #12) sont décrits dans `CLAUDE.md`, qui
