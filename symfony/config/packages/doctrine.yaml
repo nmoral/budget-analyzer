@@ -1,5 +1,23 @@
 doctrine:
     dbal:
         url: '%env(resolve:DATABASE_URL)%'
-        # Connexion seule (DBAL). Aucun ORM, aucune entité, aucune migration en #9 :
-        # le schéma public reste vide (cf. critère C3.2). Le mapping applicatif arrive avec #10.
+    orm:
+        auto_generate_proxy_classes: true
+        enable_native_lazy_objects: true
+        report_fields_where_declared: true
+        validate_xml_mapping: true
+        naming_strategy: doctrine.orm.naming_strategy.underscore_number_aware
+        auto_mapping: true
+        mappings:
+            App:
+                type: attribute
+                is_bundle: false
+                dir: '%kernel.project_dir%/src/Infrastructure/Entity'
+                prefix: 'App\Infrastructure\Entity'
+                alias: App
+
+when@test:
+    doctrine:
+        dbal:
+            # Pas de suffixe _test : la stack isolée (worktree) dédie déjà sa base.
+            dbname_suffix: ''
