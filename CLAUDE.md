@@ -4,7 +4,8 @@ Doc technique et point d'entrée du monorepo **budget-analyser** (simulateur du 
 des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
 
 - `python/` — agrégation des sources publiques (brique V0, livrée).
-- `symfony/` — moteur de calcul + API + front (brique V1, pas encore scaffoldée : #9, #12).
+- `symfony/` — moteur de calcul + API + front (brique V1 ; squelette livré #9,
+  moteur de calcul #12).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.
@@ -14,8 +15,16 @@ Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 ```sh
 make qa            # tout : qa-python puis qa-symfony (entrée unique)
 make qa-python     # chaîne Python complète (voir ci-dessous)
-make qa-symfony    # skip explicite tant que symfony/vendor est absent
+make qa-symfony    # chaîne PHP complète, dans le conteneur (voir ci-dessous)
 ```
+
+`make qa-symfony` build l'image `symfony`, démarre Postgres (`up -d --wait postgres`,
+nécessaire aux tests d'intégration DBAL), puis exécute **dans le conteneur**, dans
+l'ordre, en échouant au premier garde-fou KO :
+
+1. `vendor/bin/php-cs-fixer fix --dry-run --diff` (style PSR-12 + `strict_types`)
+2. `vendor/bin/phpstan analyse` (`level: max`)
+3. `vendor/bin/phpunit -c phpunit.dist.xml` (suite de tests)
 
 `make qa-python` enchaîne, dans l'ordre, et échoue au premier garde-fou KO :
 
@@ -50,9 +59,12 @@ uv run --project python pre-commit run --all-files
 
 ### CI
 
-`.github/workflows/qa.yml` installe `uv`, synchronise les dépendances et lance
-`make qa` — **mêmes commandes qu'en local, source unique = le `Makefile`**. Le job
-s'appelle `qa` ; c'est le check à exiger en protection de branche (voir plus bas).
+`.github/workflows/qa.yml` dérive le `.env` depuis `.env.example` (`cp .env.example
+.env`, variables lues par `docker compose`), installe `uv`, synchronise les
+dépendances Python et lance `make qa` — **mêmes commandes qu'en local, source unique
+= le `Makefile`**. `make qa` enchaîne donc `qa-python` puis `qa-symfony` : la CI build
+l'image `symfony` et exécute la chaîne PHP. Le job s'appelle `qa` ; c'est le check à
+exiger en protection de branche (voir plus bas).
 
 ## Seuils versionnés (appliqués par la chaîne)
 
@@ -70,19 +82,20 @@ s'appelle `qa` ; c'est le check à exiger en protection de branche (voir plus ba
 Le MSI (Mutation Score Indicator) est calculé comme le badge mutmut :
 `(killed + timeout) / (total - skipped)`.
 
-### Seuils PHP (brique Symfony — config posée, durcissement avec #9/#12)
+### Seuils PHP (brique Symfony)
 
 | Garde-fou | Outil | Seuil / règle visé | État |
 |-----------|-------|--------------------|------|
-| Style | PHP-CS-Fixer | PSR-12 + `declare(strict_types=1)` | config posée (`symfony/.php-cs-fixer.dist.php`), non bloquant |
-| Typage | PHPStan | `level: max` | config posée (`symfony/phpstan.dist.neon`), non bloquant |
-| Tests | PHPUnit | TDD, suite verte | config posée (`symfony/phpunit.dist.xml`), non bloquant |
-| Mutation | Infection | MSI ≥ 85 % | à poser avec le code PHP |
-| Architecture | Deptrac | domaine sans Doctrine ni infra | à poser avec le code PHP |
+| Style | PHP-CS-Fixer | PSR-12 + `declare(strict_types=1)` | bloquant (livré #9), config `symfony/.php-cs-fixer.dist.php` |
+| Typage | PHPStan | `level: max` | bloquant (livré #9), config `symfony/phpstan.dist.neon` |
+| Tests | PHPUnit | TDD, suite verte | bloquant (livré #9), config `symfony/phpunit.dist.xml` |
+| Mutation | Infection | MSI ≥ 85 % | à poser (#12) |
+| Architecture | Deptrac | domaine sans Doctrine ni infra | à poser (#12) |
 
-`make qa-symfony` **skip proprement** (exit 0, message explicite) tant que
-`symfony/vendor` est absent : la config ci-dessus n'est pas encore exécutée. Elle
-sera câblée en bloquant quand #9 (squelette) / #12 (moteur) livreront du code PHP.
+Depuis #9, `make qa-symfony` exécute PHP-CS-Fixer, PHPStan et PHPUnit dans le
+conteneur et est **bloquant** au premier garde-fou KO (cf. « Lancer la chaîne
+qualité »). Infection (MSI) et Deptrac seront câblés en bloquant avec le moteur de
+calcul (#12).
 
 ## Standards de code
 
