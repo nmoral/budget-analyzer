@@ -19,5 +19,7 @@ doctrine:
 when@test:
     doctrine:
         dbal:
-            # Pas de suffixe _test : la stack isolée (worktree) dédie déjà sa base.
-            dbname_suffix: ''
+            # Base de test dédiée `budget_test` (suffixe `_test`, mécanisme Doctrine
+            # natif) : les tests ne touchent jamais aux données de dev de `budget`.
+            # Provisionnée et remise à zéro par `tests/bootstrap.php`.
+            dbname_suffix: '_test'

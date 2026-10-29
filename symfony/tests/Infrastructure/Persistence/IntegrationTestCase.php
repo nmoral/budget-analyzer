@@ -53,13 +53,11 @@ abstract class IntegrationTestCase extends KernelTestCase
      *
      * `SchemaTool::dropSchema()` ne connaît que le mapping ORM : il laisse
      * intacte `doctrine_migration_versions` (gérée par doctrine/migrations, hors
-     * mapping). Sur la base de dev partagée par la stack — les tests ne
-     * suffixent pas la base (cf. `when@test` dans `config/packages/doctrine.yaml`)
-     * — ce résidu casse la remise à zéro locale : `doctrine:migrations:migrate`
-     * répond « Already at the latest version » sans recréer le schéma, et le
-     * contrôle « schéma public vide » (DatabaseConnectionTest) échoue au run
-     * suivant. On purge donc aussi cette table pour laisser le schéma `public`
-     * réellement vide après chaque test.
+     * mapping). On purge donc aussi cette table pour laisser le schéma `public`
+     * réellement vide après chaque test, et ainsi garder déterministe le contrôle
+     * « schéma public vide » (DatabaseConnectionTest). La suite opère sur la base
+     * de test dédiée `budget_test` (suffixe `_test`, cf. `when@test` dans
+     * `config/packages/doctrine.yaml`), jamais sur la base de dev `budget`.
      */
     private function dropSchemaCompletely(): void
     {
