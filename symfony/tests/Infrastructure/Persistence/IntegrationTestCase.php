@@ -34,17 +34,39 @@ abstract class IntegrationTestCase extends KernelTestCase
         self::assertInstanceOf(EntityManagerInterface::class, $em);
         $this->em = $em;
 
-        $this->schemaTool()->dropSchema($this->metadata());
+        $this->dropSchemaCompletely();
         $this->schemaTool()->createSchema($this->metadata());
     }
 
     protected function tearDown(): void
     {
-        $this->schemaTool()->dropSchema($this->metadata());
+        $this->dropSchemaCompletely();
         $this->em->clear();
         $this->em->close();
 
         parent::tearDown();
+    }
+
+    /**
+     * Supprime les tables mappées par l'ORM *et* la table de suivi des
+     * migrations.
+     *
+     * `SchemaTool::dropSchema()` ne connaît que le mapping ORM : il laisse
+     * intacte `doctrine_migration_versions` (gérée par doctrine/migrations, hors
+     * mapping). Sur la base de dev partagée par la stack — les tests ne
+     * suffixent pas la base (cf. `when@test` dans `config/packages/doctrine.yaml`)
+     * — ce résidu casse la remise à zéro locale : `doctrine:migrations:migrate`
+     * répond « Already at the latest version » sans recréer le schéma, et le
+     * contrôle « schéma public vide » (DatabaseConnectionTest) échoue au run
+     * suivant. On purge donc aussi cette table pour laisser le schéma `public`
+     * réellement vide après chaque test.
+     */
+    private function dropSchemaCompletely(): void
+    {
+        $this->schemaTool()->dropSchema($this->metadata());
+        $this->em->getConnection()->executeStatement(
+            'DROP TABLE IF EXISTS doctrine_migration_versions',
+        );
     }
 
     protected function newSource(string $code): Source
