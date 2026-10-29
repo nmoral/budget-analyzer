@@ -14,7 +14,7 @@ use App\Infrastructure\Entity\Source;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * Orchestration de l'import du dépôt de données vers Postgres (J1 + J2).
+ * Orchestration de l'import du dépôt de données vers Postgres (J1 + J2 + J3).
  *
  * Tout se joue dans une seule transaction (atomicité, C2) : validation Frictionless
  * de tous les CSV du périmètre d'import (C3), vérification des empreintes des bruts
@@ -25,7 +25,10 @@ use Doctrine\ORM\EntityManagerInterface;
  * (`data/sources.json`) et `Corps` (`data/corps.json`) et vers le `ParameterSet`.
  *
  * Un slug/corps référencé mais absent de son référentiel → refus (rollback total).
- * L'idempotence (C6) relève de J3.
+ *
+ * Réimport idempotent du même commit (C6, décision Q5) : en tête de transaction, les
+ * entités scopées au `ParameterSet` du commit sont purgées puis rechargées, tandis que
+ * les référentiels globaux `Source`/`Corps` sont mis à jour par upsert sur `code`.
  */
 final class Importer
 {
