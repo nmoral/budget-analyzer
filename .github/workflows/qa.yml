@@ -6,7 +6,47 @@ on:
   pull_request:
 
 jobs:
-  qa:
+  # Chaîne Python (= make qa-python) : ruff, format, mypy, cov 90/100, checks,
+  # mutmut+MSI, frictionless. Tourne en parallèle de qa-symfony (aucun needs mutuel).
+  qa-python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Historique complet : le merge-base avec main sert au scoping mutmut sur PR.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          # Cache uv persistant entre runs ; invalidé quand uv.lock change (C1).
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
+
+      - name: Sync Python dependencies
+        run: cd python && uv sync
+
+      # Hors PR (push main) : chaîne complète, mutmut mute tout le cœur (4 packages),
+      # MSI global bloquant (C4.3) — comportement identique au local.
+      - name: make qa-python (chaîne complète, mutmut full)
+        if: github.event_name != 'pull_request'
+        run: make qa-python
+
+      # PR : chaîne complète SANS mutmut (MUTMUT_SKIP=1), puis mutmut restreint au cœur
+      # modifié par la PR (C4.1) — no-op vert si aucun fichier cœur touché (C4.2).
+      - name: make qa-python (hors mutmut)
+        if: github.event_name == 'pull_request'
+        run: make qa-python MUTMUT_SKIP=1
+
+      - name: mutmut scopé au cœur modifié (MSI bloquant)
+        if: github.event_name == 'pull_request'
+        env:
+          MUTMUT_BASE: origin/${{ github.base_ref }}
+        run: bash python/scripts/mutmut_scoped.sh
+
+  # Chaîne PHP (= make qa-symfony) : php-cs-fixer, phpstan, phpunit, avec pré-build
+  # buildx/cache gha de l'image symfony. Tourne en parallèle de qa-python.
+  qa-symfony:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,13 +56,58 @@ jobs:
       - name: Prepare environment file
         run: cp .env.example .env
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      # Hôte UID/GID : le Makefile build l'image symfony avec ces args (id -u / id -g).
+      # On les passe au pré-build buildx pour que la clé de cache de layers coïncide
+      # avec celle de `docker compose build symfony` (sinon les layers post-ARG rejouées).
+      - name: Compute host UID/GID
+        id: ids
+        run: |
+          echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+          echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
 
-      - name: Sync Python dependencies
-        run: cd python && uv sync
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      # Source unique de la chaîne qualité : le Makefile (make qa = qa-python + qa-symfony).
-      # Échec bloquant au moindre garde-fou KO.
-      - name: make qa
-        run: make qa
+      # Pré-build de l'image symfony avec cache de layers persistant (type=gha) : réchauffe
+      # le cache du builder buildx (par défaut dans ce job) à partir de GitHub Actions Cache.
+      # `docker compose build symfony` (dans `make qa-symfony`) réutilise ensuite ce même
+      # builder : layers apt/composer CACHED si composer.lock inchangé, rejouées sinon (C2).
+      # Pas de load/push : seul le cache importe, le make rebuild depuis ce cache chaud.
+      - name: Warm Docker layer cache (symfony)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./symfony
+          file: ./symfony/Dockerfile
+          push: false
+          build-args: |
+            UID=${{ steps.ids.outputs.uid }}
+            GID=${{ steps.ids.outputs.gid }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: make qa-symfony
+        run: make qa-symfony
+
+  # Gate agrégateur : SEUL check requis par la protection de main (nom `qa` préservé).
+  # `if: always()` force ce job à tourner MÊME si un amont échoue ou est annulé :
+  # sans lui, un `needs` en échec rend `qa` *skipped*, or un check requis *skipped*
+  # est traité comme PASSANT par la protection de branche → le merge ne serait pas
+  # bloqué. L'étape inspecte donc `needs.*.result` et échoue (exit 1) si l'un des deux
+  # n'est pas `success` : le gate est vert UNIQUEMENT quand les deux chaînes le sont,
+  # rouge sinon → merge bloqué (C3.2).
+  qa:
+    needs: [qa-python, qa-symfony]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate
+        env:
+          PYTHON_RESULT: ${{ needs.qa-python.result }}
+          SYMFONY_RESULT: ${{ needs.qa-symfony.result }}
+        run: |
+          echo "qa-python=$PYTHON_RESULT, qa-symfony=$SYMFONY_RESULT"
+          if [ "$PYTHON_RESULT" != "success" ] || [ "$SYMFONY_RESULT" != "success" ]; then
+            echo "Gate qa KO : une chaîne amont n'est pas 'success' -> merge bloqué."
+            exit 1
+          fi
+          echo "qa-python et qa-symfony verts, gate qa OK"
