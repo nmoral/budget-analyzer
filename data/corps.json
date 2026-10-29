@@ -1,0 +1,12 @@
+{
+  "PE": {
+    "label": "professeur des écoles",
+    "versant": "FPE",
+    "category": "A"
+  },
+  "ISG": {
+    "label": "infirmier en soins généraux",
+    "versant": "FPH",
+    "category": "A"
+  }
+}
