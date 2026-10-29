@@ -9,7 +9,8 @@ unique).
 
 - PHP 8.4 (`require: php >=8.4`), Symfony 7.x.
 - Application construite sur le `MicroKernelTrait` (`App\Kernel`, `src/Kernel.php`).
-- `doctrine/doctrine-bundle` branché en **DBAL seule** (aucun ORM, voir plus bas).
+- `doctrine/doctrine-bundle` avec **Doctrine ORM** (`doctrine/orm ^3.7`) et
+  `doctrine/doctrine-migrations-bundle ^3.7` (voir « Persistance » plus bas).
 - Serveur web : **serveur PHP intégré**, pas de PHP-FPM / nginx à ce stade.
 
 ## Organisation du code et séparation domaine / infrastructure
@@ -25,10 +26,12 @@ Le code applicatif vit sous `symfony/src/` avec un mapping PSR-4 déclaré dans
 
 Les tests sont sous `tests/` (`App\Tests\`, mapping `autoload-dev`).
 
-À ce stade, `src/Domain/` et `src/Infrastructure/` sont versionnés via des `.gitkeep`
-(aucun code métier encore). La frontière « le domaine ne connaît ni Doctrine ni
-l'infra » est une décision structurante (voir `CLAUDE.md`, section PHP) et sera
-rendue bloquante par Deptrac avec le moteur de calcul (#12).
+`src/Domain/` reste en **PHP pur** (aucune occurrence de Doctrine, frontière vérifiée
+par `DomainBoundaryTest`). Le modèle de données Doctrine (entités et repositories) vit
+sous `src/Infrastructure/` : c'est un **modèle de persistance**, pas le domaine métier.
+La frontière « le domaine ne connaît ni Doctrine ni l'infra » est une décision
+structurante (voir `CLAUDE.md`, section PHP) et sera rendue bloquante par Deptrac avec
+le moteur de calcul (#12).
 
 Le seul composant applicatif livré est le contrôleur de santé
 `App\Infrastructure\Controller\HealthController`, routé par attribut sur `/health`
@@ -47,18 +50,108 @@ depuis `src/Infrastructure/Controller/` (`config/routes.yaml`).
   cohérent avec `public/index.php`). Les commandes se lancent dans le conteneur :
   `docker compose run --rm symfony php bin/console <cmd>`.
 
-## Persistance : Doctrine DBAL seule
+## Persistance : Doctrine ORM
 
-`config/packages/doctrine.yaml` ne configure **que** le bloc `dbal`, avec l'URL de
-connexion lue dans `DATABASE_URL` (`%env(resolve:DATABASE_URL)%`). Aucun ORM n'est
-installé : pas d'entité, pas de mapping, pas de migration. Le schéma `public` de la
-base reste donc vide à ce stade. Le modèle de données arrive avec #10.
+`config/packages/doctrine.yaml` configure le bloc `dbal` (URL de connexion lue dans
+`DATABASE_URL`, `%env(resolve:DATABASE_URL)%`) **et** le bloc `orm`. Le mapping est
+déclaré par **attributs** sur les entités de `src/Infrastructure/Entity`
+(`prefix App\Infrastructure\Entity`, alias `App`). La naming strategy
+`underscore_number_aware` produit des colonnes en `snake_case`. Les migrations sont
+gérées par `doctrine-migrations-bundle` (`config/packages/doctrine_migrations.yaml`,
+namespace `App\Migrations` → `symfony/migrations/`). La migration initiale
+(`Version20261029171156`) crée l'ensemble du schéma.
 
-Conséquence pour les tests : la connexion DBAL est fournie par `docker compose` au
-conteneur ; les tests qui l'exercent (`DatabaseConnectionTest`) exigent une base
-Postgres saine, donc `make up` (ou le `up --wait postgres` de `make qa-symfony`). Le
-test du endpoint `/health` (`HealthControllerTest`, `WebTestCase`) tourne, lui, sans
-base.
+### Modèle de données
+
+Le modèle de persistance comprend **12 entités** dans `src/Infrastructure/Entity/`.
+Le code est en anglais, aligné sur les colonnes CSV du dépôt `data/` ; les noms de
+domaine français (Corps, Grille, Échelon) sont conservés comme noms d'entité. Les
+identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (mappés en
+`string` PHP) ; les dates en `date_immutable`.
+
+- **Source** — origine documentaire d'une valeur réglementaire : `code` (clé métier
+  unique, slug référencé par la colonne `source` des CSV, ex. `decret-2023-519`, résolu
+  à l'import #11), `label`, `publisher`, `url`, `retrievedAt`, `fileHash`.
+- **Corps** — `code` (unique), `label`, `versant`, `category` (A/B/C).
+- **Grille** — version d'une grille indiciaire : `body` (FK Corps), `grade`, `version`,
+  `startDate`, `endDate` (nullable), `source` (FK), `parameterSet` (FK). Valeur datée.
+- **Echelon** — `grille` (FK), `rank`, `grossIndex`, `increasedIndex`,
+  `durationMonths` (nullable). Valeur datée **via sa grille** (pas de FK directe vers
+  le jeu de paramètres).
+- **RetirementScheme** — `code` (unique), `label`.
+- **Funder** — `code` (unique), `label`, puis codes de nomenclature tous nullables :
+  `mission` / `program` / `action` (État), `ondamSubObjective`, `cofog`.
+- **DatedParameter** — valeur scalaire réglementaire : `key` (`point_indice`,
+  `taux_cas_civil`…), `value`, `unit`, `startDate`, `endDate` (nullable), `source` (FK),
+  `parameterSet` (FK). Valeur datée. La colonne `key` est échappée (`` `key` ``).
+- **PrimeRate** — taux de primes (primes V1) : `body` (FK Corps), `value`,
+  `observationYear`, `source` (FK), `fallback` (booléen), `parameterSet` (FK).
+- **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
+  `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité dédiée,
+  les primes V1 passent par `PrimeRate`), `funder` (FK), `status`, `referenceCalendar`.
+- **Scenario** — `title`, `provenance`, `announcedAmount` (DECIMAL nullable),
+  `parameterSet` (FK).
+- **ScenarioLine** — `scenario` (FK), `profile` (FK), `volume`, `recruitmentDate`,
+  `spreadYears`.
+- **ParameterSet** — jeu de paramètres pour la reproductibilité : `versionId` (unique,
+  commit du dépôt de données), `importedAt`. Les valeurs datées (DatedParameter, Grille,
+  Echelon via sa grille, PrimeRate) et les Scénarios portent une FK vers ce jeu.
+
+Les entités sont **purement déclaratives** (aucun `repositoryClass`, aucune logique) ;
+seul le peuplement de test est fourni en #10, le peuplement réel relève de l'import #11.
+
+### Valeurs datées : sémantique et repositories
+
+Les accès « datés » sont des **services autonomes** de `src/Infrastructure/Repository/`
+(l'`EntityManagerInterface` est injecté ; les entités ne déclarent pas de repository).
+
+- **Bornes de validité incluses** : une valeur datée est en vigueur sur
+  `[startDate, endDate]`, bornes **incluses** ; `endDate` à `NULL` = période ouverte
+  (∞). L'adjacence est autorisée (fin au jour J, début au jour J+1). Cette sémantique
+  suit le contrat Python (`python/src/checks` `check_periods_no_overlap`, bornes
+  incluses) et les données (`taux_cas_civil` : 2025-12-31 → 2026-01-01).
+- **« Valeur en vigueur à la date D »** = l'unique ligne où `startDate ≤ D` et
+  (`endDate IS NULL OR endDate ≥ D`), regroupée par `key` (`DatedParameterRepository::`
+  `valueInEffectAt`) ou par `body_code` + `grade` (`GrilleRepository::valueInEffectAt`),
+  et **scopée à un jeu de paramètres**. L'unicité repose sur l'invariant de
+  non-chevauchement des périodes d'un même groupe (une contrainte DB est envisagée à
+  l'import #11). Retourne `null` si aucune période ne couvre D.
+- **Scope du jeu de paramètres** : les deux méthodes prennent un `ParameterSet`
+  optionnel ; à défaut, elles utilisent le **dernier jeu importé**
+  (`ParameterSetRepository::latest()`, tri `importedAt` puis `id` décroissants).
+  Si aucun jeu n'existe, le résultat est `null`.
+- **Taux de primes « pour l'année Y »** (`PrimeRateRepository::forYear`) : dernier
+  `observationYear ≤ Y` pour le corps ; à année égale, le tri `fallback ASC` fait
+  gagner la ligne non-fallback. L'entité renvoyée porte le drapeau `fallback`. Cette
+  méthode n'est **pas scopée à un jeu de paramètres** (le scope n'est pas requis par
+  #10 ; il pourra être ajouté si le moteur de calcul #12 l'exige). `null` si aucune
+  observation `≤ Y`.
+
+### Tests et exécution
+
+Les tests de persistance (`tests/Persistence/`) s'appuient sur `IntegrationTestCase`,
+qui **recrée le schéma depuis le mapping ORM** en `setUp`/`tearDown` et laisse la base
+vide après chaque test (le test #9 `DatabaseConnectionTest`, qui exige un schéma
+`public` vide, reste donc vert). `MappingValidationTest` valide le mapping sans dépendre
+de l'état de la base. Les repositories datés sont exposés `public` **en environnement de
+test seulement** (`config/services.yaml`, bloc `when@test`) pour être récupérables
+depuis le conteneur de test, faute de référence applicative tant que le moteur #12 ne
+les injecte pas.
+
+Les tests d'intégration ORM exigent une base Postgres saine, donc `make up` (ou le
+`up --wait postgres` de `make qa-symfony`). Le test du endpoint `/health`
+(`HealthControllerTest`, `WebTestCase`) tourne, lui, sans base.
+
+### Commandes Doctrine
+
+```sh
+docker compose run --rm symfony php bin/console doctrine:migrations:migrate --no-interaction
+docker compose run --rm symfony php bin/console doctrine:schema:validate
+docker compose run --rm symfony php bin/console doctrine:query:sql '<SQL>'
+```
+
+`migrate` sur base vide suivi de `schema:validate` confirme que le mapping est correct
+et que le schéma est « in sync ».
 
 ## Docker et exécution locale
 
