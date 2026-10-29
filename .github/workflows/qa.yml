@@ -6,15 +6,12 @@ on:
   pull_request:
 
 jobs:
-  qa:
+  # Chaîne Python (= make qa-python) : ruff, format, mypy, cov 90/100, checks,
+  # mutmut+MSI, frictionless. Tourne en parallèle de qa-symfony (aucun needs mutuel).
+  qa-python:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # docker compose lit ces variables (ports, Postgres, nom de projet).
-      # Le .env est gitignoré (propre au worktree) : la CI le dérive de .env.example.
-      - name: Prepare environment file
-        run: cp .env.example .env
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -25,6 +22,21 @@ jobs:
 
       - name: Sync Python dependencies
         run: cd python && uv sync
+
+      - name: make qa-python
+        run: make qa-python
+
+  # Chaîne PHP (= make qa-symfony) : php-cs-fixer, phpstan, phpunit, avec pré-build
+  # buildx/cache gha de l'image symfony. Tourne en parallèle de qa-python.
+  qa-symfony:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # docker compose lit ces variables (ports, Postgres, nom de projet).
+      # Le .env est gitignoré (propre au worktree) : la CI le dérive de .env.example.
+      - name: Prepare environment file
+        run: cp .env.example .env
 
       # Hôte UID/GID : le Makefile build l'image symfony avec ces args (id -u / id -g).
       # On les passe au pré-build buildx pour que la clé de cache de layers coïncide
@@ -55,7 +67,14 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Source unique de la chaîne qualité : le Makefile (make qa = qa-python + qa-symfony).
-      # Échec bloquant au moindre garde-fou KO.
-      - name: make qa
-        run: make qa
+      - name: make qa-symfony
+        run: make qa-symfony
+
+  # Gate agrégateur : SEUL check requis par la protection de main (nom `qa` préservé).
+  # Ne fait que dépendre des deux chaînes ; rouge si l'une d'elles échoue (C3.2).
+  qa:
+    needs: [qa-python, qa-symfony]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Gate
+        run: echo "qa-python et qa-symfony verts, gate qa OK"

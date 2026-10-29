@@ -60,12 +60,27 @@ uv run --project python pre-commit run --all-files
 
 ### CI
 
-`.github/workflows/qa.yml` dérive le `.env` depuis `.env.example` (`cp .env.example
-.env`, variables lues par `docker compose`), installe `uv`, synchronise les
-dépendances Python et lance `make qa` — **mêmes commandes qu'en local, source unique
-= le `Makefile`**. `make qa` enchaîne donc `qa-python` puis `qa-symfony` : la CI build
-l'image `symfony` et exécute la chaîne PHP. Le job s'appelle `qa` ; c'est le check à
-exiger en protection de branche (voir plus bas).
+`.github/workflows/qa.yml` applique **les mêmes garde-fous qu'en local** (source
+unique = le `Makefile`) mais **diverge dans l'orchestration** pour réduire le temps
+mur. Au lieu d'un job unique lançant `make qa`, la CI éclate la chaîne en **deux jobs
+parallèles** plus un job agrégateur :
+
+- **`qa-python`** : installe `uv` (avec **cache uv** `enable-cache`, clé sur
+  `python/uv.lock`), synchronise les dépendances puis lance `make qa-python` (ruff,
+  format, mypy, cov 90/100, checks, mutmut+MSI, frictionless).
+- **`qa-symfony`** (en parallèle, aucun `needs` vers `qa-python`) : dérive le `.env`
+  depuis `.env.example`, pré-build l'image `symfony` avec **buildx + cache de layers
+  persistant** (`type=gha`) pour réchauffer le cache réutilisé par `docker compose
+  build symfony`, puis lance `make qa-symfony` (php-cs-fixer, phpstan, phpunit).
+- **`qa`** : job final **agrégateur** (`needs: [qa-python, qa-symfony]`) qui ne fait
+  que réussir une fois les deux chaînes vertes. Son nom `qa` est **préservé tel quel**
+  car c'est le **seul check requis** par la protection de `main` (voir plus bas) ; il
+  passe au rouge dès que l'une des deux chaînes échoue, ce qui bloque le merge.
+
+En revanche, **`make qa` local reste la chaîne complète séquentielle inchangée**
+(`qa-python` puis `qa-symfony`, mutmut complet) : c'est l'entrée unique en local et la
+référence des garde-fous. Seule l'orchestration CI (jobs parallèles, caches uv/buildx)
+diffère ; les commandes et les seuils sont identiques.
 
 ## Seuils versionnés (appliqués par la chaîne)
 
