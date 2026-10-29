@@ -11,6 +11,14 @@
          failOnRisky="true"
          failOnDeprecation="true"
          cacheDirectory="var/cache/phpunit">
+    <php>
+        <ini name="display_errors" value="1"/>
+        <ini name="error_reporting" value="-1"/>
+        <env name="APP_ENV" value="test" force="true"/>
+        <env name="APP_DEBUG" value="1" force="true"/>
+        <env name="KERNEL_CLASS" value="App\Kernel" force="true"/>
+        <env name="APP_SECRET" value="test-secret" force="true"/>
+    </php>
     <testsuites>
         <testsuite name="default">
             <directory>tests</directory>

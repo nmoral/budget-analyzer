@@ -22,13 +22,18 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?serverVersion=16&charset=utf8"
+      APP_ENV: dev
+      APP_DEBUG: "1"
+      APP_SECRET: "${APP_SECRET:-dev-secret}"
     ports:
       - "${WEB_PORT}:8000"
     volumes:
       - ./symfony:/app
       - ./data:/data:ro
-    # Serveur applicatif câblé en #09 ; conteneur maintenu vivant d'ici là.
-    command: ["sleep", "infinity"]
+      # Volume anonyme : préserve le vendor/ construit dans l'image malgré le bind-mount ./symfony.
+      - /app/vendor
+    # Serveur web = PHP intégré ; public/index.php sert aussi de routeur (routes Symfony).
+    command: ["php", "-S", "0.0.0.0:8000", "-t", "public", "public/index.php"]
 
   python:
     build: ./python

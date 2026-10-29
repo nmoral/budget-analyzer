@@ -8,3 +8,13 @@ RUN apt-get update \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /app
+
+# Couche de dépendances : rejouée seulement si composer.json / composer.lock changent.
+COPY composer.json composer.lock ./
+RUN composer install --no-interaction --no-scripts --prefer-dist
+
+# Code applicatif (vendor/ et var/ exclus via .dockerignore).
+COPY . .
+RUN composer dump-autoload --optimize
+
+EXPOSE 8000
