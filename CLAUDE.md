@@ -5,7 +5,8 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
 
 - `python/` — agrégation des sources publiques (brique V0, livrée).
 - `symfony/` — moteur de calcul + API + front (brique V1 ; squelette livré #9,
-  modèle de données Doctrine #10, moteur de calcul #12).
+  modèle de données Doctrine #10, commande d'import `app:import` #11, moteur de
+  calcul #12).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.
