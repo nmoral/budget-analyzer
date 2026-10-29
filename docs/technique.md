@@ -77,11 +77,19 @@ Le service `symfony` :
 - reçoit `DATABASE_URL`, `APP_ENV=dev`, `APP_DEBUG=1`, `APP_SECRET` par
   l'environnement du compose ;
 - monte `./symfony` dans `/app` et utilise un **volume anonyme `/app/vendor`** pour
-  préserver le `vendor/` construit dans l'image malgré le bind-mount.
+  préserver le `vendor/` construit dans l'image malgré le bind-mount ;
+- tourne sous un **utilisateur non-root `app`** dont l'UID/GID est aligné sur celui
+  de l'hôte (build args `UID`/`GID`, exportés par le `Makefile` depuis `id -u`/`id -g`,
+  défaut `1000`). Ainsi tout ce que le conteneur écrit sur le bind-mount
+  (`var/cache`, `var/log`, caches des outils…) appartient à l'utilisateur et non à
+  `root` : un `git worktree remove` ou un `rm` ordinaire suffit, sans `sudo`. Le point
+  de montage `symfony/vendor` est pré-créé par le `Makefile` (`mkdir -p`) pour que le
+  démon Docker ne le crée pas lui-même en `root`.
 
 Le `Dockerfile` (base `php:8.4-cli`) installe les extensions `intl`, `pdo_pgsql`,
-`opcache`, copie Composer, puis fait le `composer install` au build (couche de
-dépendances isolée) et un `composer dump-autoload --optimize` après copie du code.
+`opcache`, copie Composer, crée l'utilisateur `app` (UID/GID hôte), puis — sous cet
+utilisateur — fait le `composer install` au build (couche de dépendances isolée) et un
+`composer dump-autoload --optimize` après copie du code.
 
 ### Ports et `.env`
 
