@@ -16,7 +16,14 @@ services:
       retries: 10
 
   symfony:
-    build: ./symfony
+    build:
+      context: ./symfony
+      # UID/GID de l'hôte, pour que les fichiers créés par le conteneur (var/, vendor/)
+      # n'appartiennent pas à root. Le Makefile les exporte via `id -u`/`id -g` ;
+      # en appel direct, défaut 1000 (cas courant).
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
     depends_on:
       postgres:
         condition: service_healthy

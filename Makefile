@@ -2,15 +2,27 @@ COMPOSE = docker compose
 DATA_DIR = $(CURDIR)/data
 CORE = src/contract/*,src/ingest/*,src/sources/*,src/checks/*
 
+# UID/GID de l'hôte, transmis à docker compose (build args du service symfony) pour
+# que les fichiers créés par le conteneur (var/, vendor/) appartiennent à l'utilisateur
+# et non à root. Exportés -> visibles par toutes les invocations `docker compose`.
+export UID ?= $(shell id -u)
+export GID ?= $(shell id -g)
+
 .PHONY: up down build qa qa-python qa-symfony import
 
-up:
+# Point de montage du volume anonyme vendor/ pré-créé côté hôte et possédé par
+# l'utilisateur : sinon le démon Docker (root) le crée lui-même en root:root.
+# Cible « fichier » : jouée seulement si le dossier n'existe pas encore.
+symfony/vendor:
+	mkdir -p symfony/vendor
+
+up: symfony/vendor
 	$(COMPOSE) up -d
 
 down:
 	$(COMPOSE) down -v
 
-build:
+build: symfony/vendor
 	$(COMPOSE) build
 
 qa: qa-python qa-symfony
@@ -30,7 +42,7 @@ qa-python:
 		uv run frictionless validate --trusted --type schema "$$schema" || exit 1; \
 	done
 
-qa-symfony:
+qa-symfony: symfony/vendor
 	$(COMPOSE) build symfony
 	$(COMPOSE) up -d --wait postgres
 	$(COMPOSE) run --rm symfony vendor/bin/php-cs-fixer fix --dry-run --diff
