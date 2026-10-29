@@ -204,6 +204,43 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame('A', $isg['category']);
     }
 
+    /** C6.1 — réimport du même commit : état identique, aucun doublon ni accumulation. */
+    public function testReimportingSameCommitIsIdempotent(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode());
+
+        // Un seul jeu de paramètres pour ce commit, mêmes comptes qu'après un import unique.
+        self::assertSame(1, $this->rowCount('parameter_set'));
+        self::assertSame(7, $this->rowCount('dated_parameter'));
+        self::assertSame(2, $this->rowCount('grille'));
+        self::assertSame(22, $this->rowCount('echelon'));
+        self::assertSame(2, $this->rowCount('prime_rate'));
+        self::assertSame(8, $this->rowCount('source'));
+        self::assertSame(2, $this->rowCount('corps'));
+
+        // Upsert par `code` : aucun doublon sur les référentiels globaux.
+        self::assertSame(1, $this->rowCountWhere('source', "code = 'decret-2023-519'"));
+        self::assertSame(1, $this->rowCountWhere('corps', "code = 'PE'"));
+
+        // Les valeurs datées restent rattachées à l'unique ParameterSet du commit.
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+        self::assertSame(7, $this->rowCountWhere('dated_parameter', 'parameter_set_id = ' . $setId));
+    }
+
+    /** C6.2 — nom de commande impératif `app:import`. */
+    public function testCommandIsNamedAppImport(): void
+    {
+        $kernel = self::$kernel ?? self::bootKernel();
+        $application = new Application($kernel);
+        $command = $application->find('app:import');
+
+        self::assertSame('app:import', $command->getName());
+    }
+
     private function dataDir(): string
     {
         $dir = getenv('BUDGET_DATA_DIR');

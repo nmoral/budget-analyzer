@@ -86,6 +86,13 @@ final class Importer
             $sourceReferential = $this->sourceReferential->load($dataDir);
             $corpsReferential = $this->corpsReferential->load($dataDir);
 
+            // Reproductibilité (C6, décision Q5) : repartir d'un état propre pour ce
+            // commit. Les valeurs datées scopées (DatedParameter/Grille/Echelon/PrimeRate)
+            // du ParameterSet existant sont purgées, puis le set est recréé. Les
+            // référentiels globaux (Source/Corps) sont conservés et mis à jour par
+            // upsert sur `code`. Le tout dans la même transaction (atomicité préservée).
+            $this->purgeExistingCommit($commit);
+
             $set = new ParameterSet();
             $set->versionId = $commit;
             $set->importedAt = new \DateTimeImmutable();
@@ -236,6 +243,37 @@ final class Importer
         }
     }
 
+    /**
+     * Purge les entités scopées du ParameterSet de ce commit puis le set lui-même,
+     * s'il existe déjà (réimport). Échelons d'abord (FK vers Grille), puis Grille /
+     * DatedParameter / PrimeRate (FK vers le set), enfin le ParameterSet. Les Source
+     * et Corps globaux ne sont pas touchés. L'identité est réinitialisée pour éviter
+     * tout état résiduel avant rechargement.
+     */
+    private function purgeExistingCommit(string $commit): void
+    {
+        $existing = $this->em->getRepository(ParameterSet::class)->findOneBy(['versionId' => $commit]);
+        if (!$existing instanceof ParameterSet || $existing->id === null) {
+            return;
+        }
+
+        $setId = $existing->id;
+
+        $deletes = [
+            'DELETE App\Infrastructure\Entity\Echelon e WHERE IDENTITY(e.grille) IN '
+                . '(SELECT g.id FROM App\Infrastructure\Entity\Grille g WHERE IDENTITY(g.parameterSet) = :set)',
+            'DELETE App\Infrastructure\Entity\Grille g WHERE IDENTITY(g.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\DatedParameter p WHERE IDENTITY(p.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\PrimeRate r WHERE IDENTITY(r.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\ParameterSet s WHERE s.id = :set',
+        ];
+        foreach ($deletes as $dql) {
+            $this->em->createQuery($dql)->setParameter('set', $setId)->execute();
+        }
+
+        $this->em->clear();
+    }
+
     private function grilleKey(string $bodyCode, string $grade, string $version): string
     {
         return sprintf('%s_%s_%s', $bodyCode, $grade, $version);
@@ -251,19 +289,25 @@ final class Importer
             return $cache[$slug];
         }
 
+        // Le référentiel `data/sources.json` fait foi : un slug référencé mais absent
+        // est refusé (C5.3), même si une ligne `source` de même code existait en base.
         if (!isset($referential[$slug])) {
             throw new UnknownSourceException(sprintf('source inconnue `%s`', $slug));
         }
 
         $data = $referential[$slug];
-        $source = new Source();
-        $source->code = $slug;
+        // Upsert par `code` (C6, Q5) : réutilise la ligne existante, sinon la crée.
+        $source = $this->em->getRepository(Source::class)->findOneBy(['code' => $slug]);
+        if (!$source instanceof Source) {
+            $source = new Source();
+            $source->code = $slug;
+            $this->em->persist($source);
+        }
         $source->label = $data['label'];
         $source->publisher = $data['publisher'];
         $source->url = $data['url'];
         $source->retrievedAt = new \DateTimeImmutable($data['retrievedAt']);
         $source->fileHash = $data['fileHash'];
-        $this->em->persist($source);
 
         return $cache[$slug] = $source;
     }
@@ -283,12 +327,16 @@ final class Importer
         }
 
         $data = $referential[$code];
-        $corps = new Corps();
-        $corps->code = $code;
+        // Upsert par `code` (C6, Q5) : réutilise la ligne existante, sinon la crée.
+        $corps = $this->em->getRepository(Corps::class)->findOneBy(['code' => $code]);
+        if (!$corps instanceof Corps) {
+            $corps = new Corps();
+            $corps->code = $code;
+            $this->em->persist($corps);
+        }
         $corps->label = $data['label'];
         $corps->versant = $data['versant'];
         $corps->category = $data['category'];
-        $this->em->persist($corps);
 
         return $cache[$code] = $corps;
     }
