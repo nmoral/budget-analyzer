@@ -49,5 +49,10 @@ qa-symfony: symfony/vendor
 	$(COMPOSE) run --rm symfony vendor/bin/phpstan analyse
 	$(COMPOSE) run --rm symfony vendor/bin/phpunit -c phpunit.dist.xml
 
-import:
-	@echo "TODO: commande d'import Symfony d'un commit du dépôt de données — voir issue #11"
+# Importe le dépôt de données vers Postgres (commande `app:import <commit>`, livrée #11).
+# COMMIT : référence opaque étiquetée comme version_id (défaut = HEAD du dépôt courant).
+COMMIT ?= $(shell git rev-parse HEAD)
+
+import: symfony/vendor
+	$(COMPOSE) up -d --wait postgres
+	$(COMPOSE) run --rm symfony php bin/console app:import $(COMMIT)

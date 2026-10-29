@@ -18,9 +18,42 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          # Cache uv persistant entre runs ; invalidé quand uv.lock change (C1).
+          enable-cache: true
+          cache-dependency-glob: python/uv.lock
 
       - name: Sync Python dependencies
         run: cd python && uv sync
+
+      # Hôte UID/GID : le Makefile build l'image symfony avec ces args (id -u / id -g).
+      # On les passe au pré-build buildx pour que la clé de cache de layers coïncide
+      # avec celle de `docker compose build symfony` (sinon les layers post-ARG rejouées).
+      - name: Compute host UID/GID
+        id: ids
+        run: |
+          echo "uid=$(id -u)" >> "$GITHUB_OUTPUT"
+          echo "gid=$(id -g)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Pré-build de l'image symfony avec cache de layers persistant (type=gha) : réchauffe
+      # le cache du builder buildx (par défaut dans ce job) à partir de GitHub Actions Cache.
+      # `docker compose build symfony` (dans `make qa-symfony`) réutilise ensuite ce même
+      # builder : layers apt/composer CACHED si composer.lock inchangé, rejouées sinon (C2).
+      # Pas de load/push : seul le cache importe, le make rebuild depuis ce cache chaud.
+      - name: Warm Docker layer cache (symfony)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./symfony
+          file: ./symfony/Dockerfile
+          push: false
+          build-args: |
+            UID=${{ steps.ids.outputs.uid }}
+            GID=${{ steps.ids.outputs.gid }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       # Source unique de la chaîne qualité : le Makefile (make qa = qa-python + qa-symfony).
       # Échec bloquant au moindre garde-fou KO.
