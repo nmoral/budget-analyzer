@@ -67,7 +67,13 @@ parallèles** plus un job agrégateur :
 
 - **`qa-python`** : installe `uv` (avec **cache uv** `enable-cache`, clé sur
   `python/uv.lock`), synchronise les dépendances puis lance `make qa-python` (ruff,
-  format, mypy, cov 90/100, checks, mutmut+MSI, frictionless).
+  format, mypy, cov 90/100, checks, mutmut+MSI, frictionless). **Mutation scopée sur
+  PR** : sur un `pull_request`, mutmut ne mute que les fichiers du cœur
+  (`src/{contract,ingest,sources,checks}`) modifiés depuis le merge-base avec `main`
+  (via `MUTMUT_SKIP=1 make qa-python` puis `python/scripts/mutmut_scoped.sh`), MSI
+  bloquant sur ce périmètre ; aucun cœur modifié → étape no-op verte. Sur **push
+  `main`**, mutmut reste **complet** (4 packages, MSI global). Aucun seuil n'est
+  changé : seul le périmètre muté sur PR l'est.
 - **`qa-symfony`** (en parallèle, aucun `needs` vers `qa-python`) : dérive le `.env`
   depuis `.env.example`, pré-build l'image `symfony` avec **buildx + cache de layers
   persistant** (`type=gha`) pour réchauffer le cache réutilisé par `docker compose

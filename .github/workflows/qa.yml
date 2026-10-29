@@ -12,6 +12,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Historique complet : le merge-base avec main sert au scoping mutmut sur PR.
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -23,8 +26,23 @@ jobs:
       - name: Sync Python dependencies
         run: cd python && uv sync
 
-      - name: make qa-python
+      # Hors PR (push main) : chaîne complète, mutmut mute tout le cœur (4 packages),
+      # MSI global bloquant (C4.3) — comportement identique au local.
+      - name: make qa-python (chaîne complète, mutmut full)
+        if: github.event_name != 'pull_request'
         run: make qa-python
+
+      # PR : chaîne complète SANS mutmut (MUTMUT_SKIP=1), puis mutmut restreint au cœur
+      # modifié par la PR (C4.1) — no-op vert si aucun fichier cœur touché (C4.2).
+      - name: make qa-python (hors mutmut)
+        if: github.event_name == 'pull_request'
+        run: make qa-python MUTMUT_SKIP=1
+
+      - name: mutmut scopé au cœur modifié (MSI bloquant)
+        if: github.event_name == 'pull_request'
+        env:
+          MUTMUT_BASE: origin/${{ github.base_ref }}
+        run: bash python/scripts/mutmut_scoped.sh
 
   # Chaîne PHP (= make qa-symfony) : php-cs-fixer, phpstan, phpunit, avec pré-build
   # buildx/cache gha de l'image symfony. Tourne en parallèle de qa-python.

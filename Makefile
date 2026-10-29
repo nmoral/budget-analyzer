@@ -35,9 +35,14 @@ qa-python:
 	cd python && uv run coverage report --fail-under=90
 	cd python && uv run coverage report --include="$(CORE)" --fail-under=100
 	cd python && PYTHONPATH=src BUDGET_DATA_DIR="$(DATA_DIR)" uv run python -m checks
+# mutmut complet par défaut (local, push main). MUTMUT_SKIP=1 neutralise ces lignes
+# UNIQUEMENT en CI sur une PR, où le périmètre réduit est joué à part (scripts/mutmut_scoped.sh).
+# Non posé en local : le comportement de `make qa-python` reste inchangé (mutmut full).
+ifeq ($(strip $(MUTMUT_SKIP)),)
 	cd python && BUDGET_DATA_DIR="$(DATA_DIR)" uv run mutmut run
 	cd python && uv run mutmut export-cicd-stats
 	cd python && uv run python scripts/check_msi.py
+endif
 	cd python && for schema in ../data/schemas/*.json; do \
 		uv run frictionless validate --trusted --type schema "$$schema" || exit 1; \
 	done
