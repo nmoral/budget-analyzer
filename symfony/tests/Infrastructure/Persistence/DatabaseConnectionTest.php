@@ -11,11 +11,28 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * Tests d'intégration touchant réellement le Postgres de la stack (pas de mock).
  * Nécessitent que la stack tourne (`make up`, Postgres sain).
  *
- * C3.1 : SELECT 1 via la connexion DBAL -> 1.
- * C3.2 : le schéma public ne contient aucune table applicative (0).
+ * La suite s'exécute sur la base de test dédiée `budget_test` (suffixe `_test`
+ * via `when@test` dans `config/packages/doctrine.yaml`), jamais sur `budget`
+ * (dev). Le bootstrap PHPUnit (`tests/bootstrap.php`) provisionne `budget_test`
+ * et remet son schéma `public` à zéro une fois avant la suite, ce qui rend le
+ * contrôle « schéma public sain » déterministe même si `budget` est migrée.
+ *
+ * C1 : la connexion DBAL cible bien `budget_test`, jamais `budget`.
+ * C1.2 : SELECT 1 via la connexion DBAL -> 1 (base `budget_test` auto-provisionnée répond).
+ * C3.1 : le schéma public (de `budget_test`) ne contient aucune table applicative (0).
  */
 final class DatabaseConnectionTest extends KernelTestCase
 {
+    public function testConnectionTargetsDedicatedTestDatabase(): void
+    {
+        $params = $this->connection()->getParams();
+        $dbName = $params['dbname'] ?? null;
+
+        self::assertIsString($dbName);
+        self::assertStringEndsWith('_test', $dbName);
+        self::assertNotSame('budget', $dbName);
+    }
+
     public function testSelectOneReturnsOne(): void
     {
         self::assertSame(1, $this->fetchInt('SELECT 1 AS ok'));
