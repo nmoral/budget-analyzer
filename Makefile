@@ -31,11 +31,11 @@ qa-python:
 	done
 
 qa-symfony:
-	@if [ -d symfony/vendor ]; then \
-		echo "qa-symfony: chaîne qualité PHP (phpstan, php-cs-fixer, phpunit) — à activer avec #9"; \
-	else \
-		echo "qa-symfony: SKIP — symfony/vendor absent (brique PHP non encore livrée, cf. #9)"; \
-	fi
+	$(COMPOSE) build symfony
+	$(COMPOSE) up -d --wait postgres
+	$(COMPOSE) run --rm symfony vendor/bin/php-cs-fixer fix --dry-run --diff
+	$(COMPOSE) run --rm symfony vendor/bin/phpstan analyse
+	$(COMPOSE) run --rm symfony vendor/bin/phpunit -c phpunit.dist.xml
 
 import:
 	@echo "TODO: commande d'import Symfony d'un commit du dépôt de données — voir issue #11"
