@@ -1,0 +1,5 @@
+doctrine:
+    dbal:
+        url: '%env(resolve:DATABASE_URL)%'
+        # Connexion seule (DBAL). Aucun ORM, aucune entité, aucune migration en #9 :
+        # le schéma public reste vide (cf. critère C3.2). Le mapping applicatif arrive avec #10.

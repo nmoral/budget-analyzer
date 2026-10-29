@@ -11,6 +11,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # docker compose lit ces variables (ports, Postgres, nom de projet).
+      # Le .env est gitignoré (propre au worktree) : la CI le dérive de .env.example.
+      - name: Prepare environment file
+        run: cp .env.example .env
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 

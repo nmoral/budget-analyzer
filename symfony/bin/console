@@ -1,0 +1,23 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Kernel;
+use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Component\Dotenv\Dotenv;
+
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+$envFile = dirname(__DIR__) . '/.env';
+if (is_file($envFile)) {
+    (new Dotenv())->bootEnv($envFile);
+}
+
+$appEnv = (string) ($_SERVER['APP_ENV'] ?? 'dev');
+$appDebug = (bool) ($_SERVER['APP_DEBUG'] ?? ('prod' !== $appEnv));
+
+$kernel = new Kernel($appEnv, $appDebug);
+$application = new Application($kernel);
+
+exit($application->run());
