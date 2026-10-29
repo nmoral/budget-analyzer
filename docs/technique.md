@@ -131,14 +131,46 @@ Les accès « datés » sont des **services autonomes** de `src/Infrastructure/R
 
 ### Tests et exécution
 
-Les tests de persistance (`tests/Persistence/`) s'appuient sur `IntegrationTestCase`,
-qui **recrée le schéma depuis le mapping ORM** en `setUp`/`tearDown` et laisse la base
-vide après chaque test (le test #9 `DatabaseConnectionTest`, qui exige un schéma
-`public` vide, reste donc vert). `MappingValidationTest` valide le mapping sans dépendre
-de l'état de la base. Les repositories datés sont exposés `public` **en environnement de
-test seulement** (`config/services.yaml`, bloc `when@test`) pour être récupérables
-depuis le conteneur de test, faute de référence applicative tant que le moteur #12 ne
-les injecte pas.
+#### Base de test dédiée `budget_test`
+
+Les tests s'exécutent sur une **base dédiée `budget_test`**, isolée de la base de dev
+`budget` : un run de la suite ne touche jamais aux données de développement. L'isolation
+est obtenue par le **mécanisme Doctrine natif** `dbname_suffix` — `config/packages/doctrine.yaml`,
+bloc `when@test`, définit `dbname_suffix: '_test'`, qui suffixe le nom de base configuré
+dans `DATABASE_URL`. On isole ainsi au niveau **base** (pas au niveau schéma PostgreSQL),
+sans manipuler le `search_path`.
+
+Le bootstrap PHPUnit **`tests/bootstrap.php`** (référencé par l'attribut `bootstrap` de
+`phpunit.dist.xml`) provisionne cette base **une fois, avant la suite** :
+
+1. il crée `budget_test` si elle est absente (`doctrine:database:create --if-not-exists`,
+   via la console Symfony) — aucune étape manuelle de création de base, en local comme en CI ;
+2. il remet le schéma `public` de `budget_test` à zéro (`DROP SCHEMA public CASCADE` puis
+   `CREATE SCHEMA public`), ce qui garantit un état vide déterministe et rend le contrôle
+   « schéma public sain » (`DatabaseConnectionTest`) fiable **même si `budget` est migrée**.
+
+Le bootstrap est **tolérant à un serveur Postgres absent** : toute erreur de connexion ou
+de provisioning est journalisée sur `STDERR` sans faire échouer le bootstrap, de sorte que
+les tests purs unitaires (p. ex. `Architecture`) tournent sans base.
+
+**Garde-fou** : le reset destructeur du schéma n'est exécuté **que si la base ciblée se
+termine par `_test`** (`App\Tests\Support\TestDatabaseGuard::isTestDatabase`, testé
+unitairement). Si `dbname_suffix` repassait à `''`, le bootstrap s'interromprait proprement
+plutôt que de droper le schéma de la base de dev `budget` — aucune action destructrice hors
+base de test.
+
+#### Cas de test
+
+Les tests de persistance (`tests/Infrastructure/Persistence/`) s'appuient sur
+`IntegrationTestCase`, qui **recrée le schéma depuis le mapping ORM** en `setUp`/`tearDown`
+et laisse la base (`budget_test`) vide après chaque test — y compris en purgeant
+`doctrine_migration_versions`, hors mapping ORM —, pour que `DatabaseConnectionTest`
+(qui exige un schéma `public` sans table applicative) reste vert.
+`DatabaseConnectionTest` vérifie en outre que la connexion cible bien une base `_test`,
+jamais `budget`. `MappingValidationTest` valide le mapping sans dépendre de l'état de la
+base. Les repositories datés sont exposés `public` **en environnement de test seulement**
+(`config/services.yaml`, bloc `when@test`) pour être récupérables depuis le conteneur de
+test, faute de référence applicative tant que le moteur #12 ne les injecte pas.
 
 Les tests d'intégration ORM exigent une base Postgres saine, donc `make up` (ou le
 `up --wait postgres` de `make qa-symfony`). Le test du endpoint `/health`
