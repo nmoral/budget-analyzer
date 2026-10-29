@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Kernel;
+use App\Tests\Support\TestDatabaseGuard;
 use Doctrine\DBAL\Connection;
 use Doctrine\Persistence\ManagerRegistry;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
@@ -48,6 +49,24 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
         $connection = $registry->getConnection();
         if (!$connection instanceof Connection) {
+            return;
+        }
+
+        // Garde-fou défensif (R1) : ne jamais exécuter le DROP destructeur si la
+        // base ciblée n'est pas une base `_test`. Protège la base de dev `budget`
+        // au cas où `dbname_suffix` repasserait à '' (CLAUDE.md : aucune action
+        // destructrice hors base de test). On interrompt proprement, sans exception.
+        $databaseName = $connection->getDatabase();
+        if (!TestDatabaseGuard::isTestDatabase($databaseName)) {
+            fwrite(
+                STDERR,
+                '[bootstrap] Reset du schéma public ignoré : la base ciblée '
+                . '(' . ($databaseName ?? 'inconnue') . ') ne se termine pas par '
+                . '"_test". Aucune action destructrice hors base de test.' . PHP_EOL,
+            );
+            $connection->close();
+            $kernel->shutdown();
+
             return;
         }
 

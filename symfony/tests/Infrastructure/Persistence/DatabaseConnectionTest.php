@@ -18,7 +18,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
  * contrôle « schéma public sain » déterministe même si `budget` est migrée.
  *
  * C1 : la connexion DBAL cible bien `budget_test`, jamais `budget`.
- * C3.1 : SELECT 1 via la connexion DBAL -> 1.
+ * C1.2 : SELECT 1 via la connexion DBAL -> 1 (base `budget_test` auto-provisionnée répond).
  * C3.1 : le schéma public (de `budget_test`) ne contient aucune table applicative (0).
  */
 final class DatabaseConnectionTest extends KernelTestCase
