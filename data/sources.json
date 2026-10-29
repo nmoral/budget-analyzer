@@ -1,0 +1,58 @@
+{
+  "decret-2023-519": {
+    "label": "Décret n° 2023-519 du 28 juin 2023",
+    "publisher": "Légifrance/JORF",
+    "url": "https://www.legifrance.gouv.fr/eli/decret/2023/6/28/2023-519/jo/texte",
+    "retrievedAt": "2026-10-19",
+    "fileHash": "03eff22fb00d9d1326b35fae7fe60594ff400542854c81d1014deab87b70f067"
+  },
+  "retraites-etat-2026": {
+    "label": "Retraites de l'État — taux de cotisation 2026",
+    "publisher": "Retraites de l'État",
+    "url": "https://retraitesdeletat.gouv.fr/professionnels/le-versement-des-cotisations/les-entites-privees-associations-entreprises-gip-etc",
+    "retrievedAt": "2026-10-19",
+    "fileHash": "f9030ab005a5721021687853ea04d05ae16de458e856e7f477fceacdb9ae1664"
+  },
+  "an-rapport-cas-pensions": {
+    "label": "Assemblée nationale — rapport CAS Pensions (RAPPANR5L17B1996)",
+    "publisher": "Assemblée nationale",
+    "url": "https://www.assemblee-nationale.fr/dyn/opendata/RAPPANR5L17B1996-tIII-a37.html",
+    "retrievedAt": "2026-10-19",
+    "fileHash": "a7cb6de59d79fe1e67c93fc570f58cb16d0ca3ebc0f9ad4e6cd74d8ead864591"
+  },
+  "decret-2025-86": {
+    "label": "Décret n° 2025-86 du 30 janvier 2025",
+    "publisher": "Légifrance/JORF",
+    "url": "https://blog.landot-avocats.net/2025/01/31/augmentation-du-taux-de-cotisation-employeurs-a-la-cnracl/",
+    "retrievedAt": "2026-10-19",
+    "fileHash": "632ba375683691ed4fd85c161e7c92bd24bad7636d1a0d967f5f65838692cb0d"
+  },
+  "decret-2017-789": {
+    "label": "Décret n° 2017-789 du 4 mai 2017",
+    "publisher": "Légifrance/JORF",
+    "url": "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000034601473",
+    "retrievedAt": "2026-10-21",
+    "fileHash": "3b1d88471fa7dddbdb1b5336dcf510cd1f3f59b25b2a193cc36d4a3d1127f728"
+  },
+  "arrete-2016-05-19": {
+    "label": "Arrêté du 19 mai 2016 (échelonnement indiciaire, corps ISGS — décret n° 2010-1139)",
+    "publisher": "Légifrance/JORF",
+    "url": "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000032551975",
+    "retrievedAt": "2026-10-21",
+    "fileHash": "de9497b06c7eee9fd82c858b4b228d7aa44288127bc581e806e08d86f3f8d573"
+  },
+  "dgafp-ra-2025": {
+    "label": "DGAFP, rapport annuel sur l'état de la fonction publique, édition 2025",
+    "publisher": "DGAFP",
+    "url": "https://www.fonction-publique.gouv.fr/toutes-les-publications/rapport-annuel-sur-letat-de-la-fonction-publique-edition-2025",
+    "retrievedAt": "2026-10-21",
+    "fileHash": "5f8af8a516468cf9f1f7f27039c0ffbc08e61efe6d588b02923acb4b40a122c7"
+  },
+  "insee-ip-2067": {
+    "label": "Insee Première n° 2067",
+    "publisher": "Insee",
+    "url": "https://www.insee.fr/fr/statistiques/8612479",
+    "retrievedAt": "2026-10-21",
+    "fileHash": "5f8af8a516468cf9f1f7f27039c0ffbc08e61efe6d588b02923acb4b40a122c7"
+  }
+}

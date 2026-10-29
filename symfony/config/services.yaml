@@ -1,7 +1,14 @@
+parameters:
+    # Racine du dépôt de données, montée en lecture seule sous /data dans le conteneur.
+    # Surchargée par BUDGET_DATA_DIR (ou l'option --data-dir, ex. pour une racine fixture).
+    env(BUDGET_DATA_DIR): '/data'
+
 services:
     _defaults:
         autowire: true
         autoconfigure: true
+        bind:
+            string $defaultDataDir: '%env(BUDGET_DATA_DIR)%'
 
     App\:
         resource: '../src/'
