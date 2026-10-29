@@ -7,3 +7,18 @@ services:
         resource: '../src/'
         exclude:
             - '../src/Kernel.php'
+
+when@test:
+    services:
+        # Repositories rendus publics en test pour pouvoir les récupérer depuis le
+        # conteneur de test (sinon supprimés car inlined, faute de référence applicative
+        # tant que le moteur de calcul — #12 — ne les injecte pas).
+        App\Infrastructure\Repository\DatedParameterRepository:
+            autowire: true
+            public: true
+        App\Infrastructure\Repository\GrilleRepository:
+            autowire: true
+            public: true
+        App\Infrastructure\Repository\PrimeRateRepository:
+            autowire: true
+            public: true

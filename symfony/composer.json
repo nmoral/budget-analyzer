@@ -6,9 +6,12 @@
     "require": {
         "php": ">=8.4",
         "doctrine/doctrine-bundle": "^2.12",
+        "doctrine/doctrine-migrations-bundle": "^3.7",
+        "doctrine/orm": "^3.7",
         "symfony/console": "^7.0",
         "symfony/dotenv": "^7.0",
         "symfony/framework-bundle": "^7.0",
+        "symfony/var-exporter": "^8.1",
         "symfony/yaml": "^7.0"
     },
     "require-dev": {
