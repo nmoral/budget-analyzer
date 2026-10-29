@@ -12,13 +12,23 @@ chaîne ``make qa`` / ``make qa-python`` garde mutmut complet. La modification d
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
 MARKER = "[tool.mutmut]"
 
+# Les chemins proviennent de noms de fichiers d'une PR non validée (via git diff).
+# On restreint aux caractères attendus d'un chemin de module Python pour qu'un chemin
+# hostile (p. ex. contenant un guillemet) ne puisse pas corrompre le TOML ni y injecter
+# autre chose. Tout chemin hors de ce jeu est rejeté explicitement.
+SAFE_PATH = re.compile(r"^[A-Za-z0-9_./-]+$")
+
 
 def build_only_mutate(files: list[str]) -> str:
+    for f in files:
+        if not SAFE_PATH.match(f):
+            raise ValueError(f"chemin refusé (caractères non autorisés) : {f!r}")
     patterns = ", ".join(f'"{f}"' for f in files)
     return f"only_mutate = [{patterns}]"
 
@@ -32,7 +42,11 @@ def main(files: list[str]) -> int:
         print("scope_mutmut_config : pyproject.toml introuvable", file=sys.stderr)
         return 1
 
-    only_mutate = build_only_mutate(files)
+    try:
+        only_mutate = build_only_mutate(files)
+    except ValueError as err:
+        print(f"scope_mutmut_config : {err}", file=sys.stderr)
+        return 1
     out: list[str] = []
     injected = False
     for line in pyproject.read_text(encoding="utf-8").splitlines():

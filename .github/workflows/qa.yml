@@ -89,10 +89,25 @@ jobs:
         run: make qa-symfony
 
   # Gate agrégateur : SEUL check requis par la protection de main (nom `qa` préservé).
-  # Ne fait que dépendre des deux chaînes ; rouge si l'une d'elles échoue (C3.2).
+  # `if: always()` force ce job à tourner MÊME si un amont échoue ou est annulé :
+  # sans lui, un `needs` en échec rend `qa` *skipped*, or un check requis *skipped*
+  # est traité comme PASSANT par la protection de branche → le merge ne serait pas
+  # bloqué. L'étape inspecte donc `needs.*.result` et échoue (exit 1) si l'un des deux
+  # n'est pas `success` : le gate est vert UNIQUEMENT quand les deux chaînes le sont,
+  # rouge sinon → merge bloqué (C3.2).
   qa:
     needs: [qa-python, qa-symfony]
+    if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
       - name: Gate
-        run: echo "qa-python et qa-symfony verts, gate qa OK"
+        env:
+          PYTHON_RESULT: ${{ needs.qa-python.result }}
+          SYMFONY_RESULT: ${{ needs.qa-symfony.result }}
+        run: |
+          echo "qa-python=$PYTHON_RESULT, qa-symfony=$SYMFONY_RESULT"
+          if [ "$PYTHON_RESULT" != "success" ] || [ "$SYMFONY_RESULT" != "success" ]; then
+            echo "Gate qa KO : une chaîne amont n'est pas 'success' -> merge bloqué."
+            exit 1
+          fi
+          echo "qa-python et qa-symfony verts, gate qa OK"
