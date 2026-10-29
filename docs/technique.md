@@ -98,7 +98,8 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   Echelon via sa grille, PrimeRate) et les Scénarios portent une FK vers ce jeu.
 
 Les entités sont **purement déclaratives** (aucun `repositoryClass`, aucune logique) ;
-seul le peuplement de test est fourni en #10, le peuplement réel relève de l'import #11.
+le peuplement réel est assuré par la commande d'import `app:import` (voir « Import du
+dépôt de données » plus bas).
 
 ### Valeurs datées : sémantique et repositories
 
@@ -114,8 +115,9 @@ Les accès « datés » sont des **services autonomes** de `src/Infrastructure/R
   (`endDate IS NULL OR endDate ≥ D`), regroupée par `key` (`DatedParameterRepository::`
   `valueInEffectAt`) ou par `body_code` + `grade` (`GrilleRepository::valueInEffectAt`),
   et **scopée à un jeu de paramètres**. L'unicité repose sur l'invariant de
-  non-chevauchement des périodes d'un même groupe (une contrainte DB est envisagée à
-  l'import #11). Retourne `null` si aucune période ne couvre D.
+  non-chevauchement des périodes d'un même groupe, garanti en amont (contrôles Python) ;
+  l'import #11 n'ajoute **pas** de contrainte DB d'unicité (décision Q7, voir « Import du
+  dépôt de données »). Retourne `null` si aucune période ne couvre D.
 - **Scope du jeu de paramètres** : les deux méthodes prennent un `ParameterSet`
   optionnel ; à défaut, elles utilisent le **dernier jeu importé**
   (`ParameterSetRepository::latest()`, tri `importedAt` puis `id` décroissants).
@@ -152,6 +154,106 @@ docker compose run --rm symfony php bin/console doctrine:query:sql '<SQL>'
 
 `migrate` sur base vide suivi de `schema:validate` confirme que le mapping est correct
 et que le schéma est « in sync ».
+
+## Import du dépôt de données (`app:import`)
+
+La commande console `app:import <commit>` peuple le modèle de persistance à partir du
+dépôt de données. Elle vit sous `src/Infrastructure/Command/ImportCommand.php` et délègue
+tout le travail au service `App\Infrastructure\Import\Importer`.
+
+```sh
+docker compose run --rm symfony php bin/console app:import <commit>
+docker compose run --rm symfony php bin/console app:import <commit> --data-dir=/chemin/fixture
+```
+
+- Argument `commit` (requis) : référence du commit du dépôt de données. C'est une
+  **chaîne opaque** utilisée comme `version_id` du `ParameterSet` ; elle n'est **pas**
+  résolue ni checkoutée (le conteneur ne monte pas `.git` — décision Q1). L'appelant
+  (p. ex. CI via `git rev-parse HEAD`) fournit la valeur.
+- Option `--data-dir` : racine du dépôt de données à importer. Défaut lié au paramètre
+  `env(BUDGET_DATA_DIR)` (`/data`, montée en lecture seule dans le conteneur) ; surchargée
+  pour viser une racine fixture.
+- Codes de sortie : `0` au succès ; en cas d'`ImportException`, la commande affiche le
+  message d'erreur et retourne `Command::FAILURE` (≠ 0).
+
+### Composants de l'import
+
+Sous `src/Infrastructure/Import/` :
+
+- **`Importer`** : orchestre tout l'import dans **une seule transaction**
+  (`EntityManagerInterface::wrapInTransaction`). Tout échec lève une `ImportException`
+  (classe de base) et provoque le **rollback total** — aucune écriture partielle.
+- **`CsvReader`** : lecture d'un CSV (`data/data/<fichier>.csv`) en en-tête + lignes
+  associatives.
+- **`FrictionlessSchemaValidator`** : validation de schéma **maison** (aucune lib
+  Frictionless en PHP). Contrôle, contre `data/schemas/<schéma>.json` : présence des
+  colonnes requises, valeurs requises non vides, et typage des valeurs non vides
+  (`number`, `integer`, `year`, `boolean`, `date` ISO ; `string` et types non contraints
+  acceptés). Les colonnes non requises peuvent être vides (ex. `end_date`). Lève
+  `SchemaValidationException`. Ne contrôle que la **forme** (décision Q6) : les invariants
+  métier restent côté Python.
+- **`ManifestVerifier`** : vérifie l'intégrité des bruts par
+  `sha256(data/sources/<manifest.raw>) == manifest.sha256`, manifeste lu dans
+  `data/manifests/<fichier>.json`. Toute divergence (ou brut/manifeste manquant) lève
+  `ManifestMismatchException` (décision Q4).
+- **`SourceReferential`** / **`CorpsReferential`** : chargent les référentiels curatés
+  `data/sources.json` (slug → `label`/`publisher`/`url`/`retrievedAt`/`fileHash`) et
+  `data/corps.json` (code → `label`/`versant`/`category`).
+
+### Périmètre, mapping et ordre de chargement
+
+Le mapping fichier → schéma est la constante `Importer::FILE_TO_SCHEMA`, alignée sur le
+`FILE_TO_SCHEMA` Python **hors `couts_pap`** (non importé, aucune entité cible — hors
+périmètre #11). Avant tout chargement, l'`Importer` valide le schéma **et** vérifie
+l'empreinte de **chacun** des 9 fichiers du mapping (C3 « avant tout chargement », C4).
+
+Le chargement peuple ensuite, dans l'ordre :
+
+1. `DatedParameter` (fichiers `point_indice`, `taux_cas_civil`, `taux_cas_militaire`,
+   `taux_cnracl`) — FK `source`, FK `parameterSet` ;
+2. `Grille` (`grille_pe`, `grille_isg`) — FK `body` (Corps), `source`, `parameterSet` ;
+   chaque grille est indexée en mémoire par la clé `{body_code}_{grade}_{version}` ;
+3. `Echelon` (`echelon_pe`, `echelon_isg`) — rattaché à sa `Grille` par la colonne
+   `grille` du CSV, résolue via cette clé composite ; clé introuvable → `ImportException`
+   (« grille inconnue ») ;
+4. `PrimeRate` (`taux_primes`) — FK `body` (Corps), `source`, `parameterSet`.
+
+Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 7, `grille` = 2,
+`echelon` = 22, `prime_rate` = 2, `source` = 8, `corps` = 2.
+
+### Résolution des FK et référentiels
+
+Les FK `source` et `body` (Corps) sont résolues par **code** via des caches
+code → entité (une seule entité par code dans la transaction) :
+
+- une source citée par une colonne `source` est créée/mise à jour depuis
+  `data/sources.json` ; un slug référencé mais **absent** du référentiel → refus
+  (`UnknownSourceException`), même si une ligne `Source` de même code existait déjà en base
+  (le référentiel fait foi) ;
+- un corps cité par `body_code` est résolu depuis `data/corps.json` ; code absent → refus
+  (`UnknownCorpsException`).
+
+Ces référentiels sont des fichiers **curatés** (pas de CSV ni de schéma Frictionless) : les
+colonnes `Source`/`Corps` étant toutes NOT NULL, le référentiel doit tout fournir
+(décision Q3).
+
+### Idempotence (réimport du même commit)
+
+Réimporter le même commit laisse la base dans le même état (décision Q5, C6). En tête de
+transaction, `purgeExistingCommit()` supprime en DQL les entités **scopées** au
+`ParameterSet` du commit (Echelon d'abord — FK Grille —, puis Grille / DatedParameter /
+PrimeRate, enfin le `ParameterSet`), puis `em->clear()` ; le set est ensuite recréé et
+rechargé. Les référentiels **globaux** `Source`/`Corps` (pas de FK vers `ParameterSet`)
+ne sont pas purgés mais mis à jour par **upsert sur `code`** (`findOneBy`). Aucune nouvelle
+contrainte DB d'unicité n'est introduite (décision Q7) : l'atomicité vient de la
+transaction, l'unicité des données de l'invariant amont.
+
+### Câblage et configuration
+
+L'`Importer` et ses collaborateurs sont des services autowirés (`config/services.yaml`,
+bloc `App\`). La commande reçoit par `bind` le paramètre `string $defaultDataDir` =
+`%env(BUDGET_DATA_DIR)%` (défaut `/data`). Aucune migration n'est ajoutée par #11 (le
+schéma #10 suffit).
 
 ## Docker et exécution locale
 

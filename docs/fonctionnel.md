@@ -4,11 +4,11 @@ Ce document décrit ce que la brique applicative `symfony/` du simulateur de co�
 recrutements publics expose **aujourd'hui**, du point de vue de l'usage et du métier.
 
 La brique Symfony porte, à terme, le moteur de calcul, l'API et le front de la V1.
-À ce stade, l'application fournit un point de santé et le **modèle de données** du
-simulateur avec ses règles de sélection des valeurs réglementaires datées. Aucune
-règle de calcul, aucune commande d'import et aucune interface utilisateur ne sont
-encore exposées : le modèle n'est ni peuplé par un import réel ni consultable via une
-API ou un écran.
+À ce stade, l'application fournit un point de santé, le **modèle de données** du
+simulateur avec ses règles de sélection des valeurs réglementaires datées, et une
+**commande d'import** qui peuple ce modèle depuis le dépôt de données. Aucune règle
+de calcul et aucune interface utilisateur ne sont encore exposées : le modèle n'est
+pas consultable via une API ou un écran.
 
 ## Ce qui est disponible
 
@@ -27,11 +27,52 @@ porte aucune logique métier.
 
 Seule la méthode `GET` est prévue sur cette adresse.
 
+### Import d'un jeu de paramètres versionné
+
+La commande `app:import <commit>` charge l'**état présent du dépôt de données**
+(`data/`) dans la base du simulateur. Elle attend en argument la **référence du commit**
+du dépôt de données : cette référence sert uniquement d'étiquette de version, elle n'est
+pas interprétée ni ne déclenche de bascule du dépôt.
+
+Au terme d'un import réussi, il existe un **jeu de paramètres** identifié par cette
+version et daté de son import. C'est ce qui garantit la **reproductibilité** : un
+résultat peut toujours être rattaché à la version exacte des données qui l'a produit, et
+plusieurs versions des données peuvent coexister dans la base sans se mélanger (voir
+« Rattachement à un jeu de paramètres » plus bas).
+
+L'import est **tout ou rien** : si la moindre vérification échoue, aucune donnée n'est
+écrite et la base reste dans l'état où elle était avant l'appel, avec un message d'erreur
+et un code de sortie non nul. Les vérifications menées avant tout chargement sont :
+
+- **conformité de forme** des fichiers de données : chaque fichier importé doit présenter
+  les colonnes attendues et des valeurs du bon type ; une colonne requise absente, une
+  valeur requise vide ou une valeur mal typée fait échouer l'import. Seule la *forme* est
+  contrôlée ici ; les règles métier de cohérence (indices croissants, périodes sans
+  chevauchement, bornes de valeurs) restent garanties en amont, du côté de la préparation
+  des données ;
+- **intégrité des fichiers sources** : l'empreinte du fichier brut archivé de chaque
+  source est comparée à celle enregistrée dans son manifeste ; toute divergence fait
+  échouer l'import ;
+- **complétude des référentiels** : toute source et tout corps cités par les données
+  doivent figurer dans les référentiels curatés du dépôt (`data/sources.json`,
+  `data/corps.json`) ; une référence inconnue fait échouer l'import.
+
+Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
+point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes) et les
+**référentiels** de sources et de corps auxquels elles se rattachent. Ne sont pas chargés
+par cette commande : les coûts PAP, les régimes de retraite, les financeurs et les objets
+de simulation (profils, scénarios), qui relèvent d'autres apports.
+
+**Réimport du même commit** : relancer la commande avec la même référence de version
+laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
+sont remplacées, et les sources et corps sont mis à jour sur place.
+
 ### Modèle de données et sélection des valeurs réglementaires
 
-Le simulateur repose sur un ensemble de données métier structurées. Elles ne sont pas
-encore peuplées par un import réel (seules des données de test existent) ni exposées à
-un utilisateur, mais le modèle fixe déjà les règles suivantes.
+Le simulateur repose sur un ensemble de données métier structurées. Elles se peuplent par
+la commande d'import ci-dessus (hors objets de simulation, alimentés par l'application) et
+ne sont pas encore exposées à un utilisateur, mais le modèle fixe déjà les règles
+suivantes.
 
 **Objets métier représentés** :
 
@@ -80,7 +121,6 @@ antérieure ou égale à Y, le résultat est vide.
 Les capacités métier arrivent dans des livraisons ultérieures et ne sont pas
 présentes aujourd'hui :
 
-- la commande d'import d'un instantané du dépôt de données — issue #11 ;
 - le moteur de calcul du coût des recrutements et ses règles métier — issue #12 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
