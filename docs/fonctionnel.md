@@ -223,12 +223,23 @@ nécessaire manque à la date demandée (point d'indice, taux de primes, taux d'
 ou si le régime ou le versant est inconnu, le système **signale une erreur explicite**
 plutôt que de retourner un résultat approché.
 
-**Limite connue — données réelles manquantes** : les **taux « autres cotisations »**
-(`r_autres`, FPE/FPH) et le **taux RAFP** ne sont **pas encore présents dans le dépôt de
-données** (leur sourcing est traité par l'issue #49). Tant que ces valeurs manquent, les
-termes 3 et 4 **ne peuvent pas être calculés** et le système signale l'absence de donnée.
-La formule et ses garde-fous sont en place et vérifiés par les tests (avec des taux
-injectés) ; le calcul complet sur données réelles sera possible une fois #49 livrée.
+**Taux réels disponibles** : les **taux « autres cotisations »** (`r_autres`, FPE/FPH)
+et le **taux RAFP** sont désormais **présents dans le dépôt de données** (sourçage livré
+par l'issue #49, effet au 1er janvier 2026). Les quatre termes, y compris les termes 3
+et 4, se calculent donc sur des **valeurs réglementaires réelles** une fois le dépôt
+importé. Les trois taux employeur retenus (effet `2026-01-01`) sont :
+
+- **FPE / État** (`r_autres`) : **16,07 %** du traitement augmenté des primes ;
+- **FPH / hospitalière** (`r_autres`) : **17,13 %** ;
+- **RAFP** : **5,00 %** (part employeur) appliqué à l'assiette plafonnée.
+
+Chaque taux « autres cotisations » est la **somme de cotisations employeur hors retraite
+et hors RAFP** (maladie, allocations familiales, CSA, FNAL, invalidité, et pour la FPH le
+fonds pour l'emploi hospitalier). Le détail ligne à ligne de chaque agrégat, ses sources
+officielles et l'**exclusion documentée du versement mobilité** (fixé localement, sans
+taux national) figurent dans le catalogue de composition des taux (voir la documentation
+technique). Si un taux manque à la date demandée, le système signale toujours une erreur
+explicite plutôt que de retourner une valeur par défaut.
 
 **Hors de ce périmètre** : les **contractuels** (formule propre, hors V1), les **vues de
 coût** alternatives de la retraite (#18), le **coût d'un scénario** complet (volumes,
