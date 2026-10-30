@@ -8,7 +8,7 @@ CORE = src/contract/*,src/ingest/*,src/sources/*,src/checks/*
 export UID ?= $(shell id -u)
 export GID ?= $(shell id -g)
 
-.PHONY: up down build qa qa-python qa-symfony import
+.PHONY: up down build qa qa-python qa-symfony import generate
 
 # Point de montage du volume anonyme vendor/ pré-créé côté hôte et possédé par
 # l'utilisateur : sinon le démon Docker (root) le crée lui-même en root:root.
@@ -63,3 +63,11 @@ COMMIT ?= $(shell git rev-parse HEAD)
 import: symfony/vendor
 	$(COMPOSE) up -d --wait postgres
 	$(COMPOSE) run --rm symfony php bin/console app:import $(COMMIT)
+
+# Régénère un jeu de données depuis la racine (le `package = false` du pyproject
+# empêche tout one-liner direct : `src` n'est sur le path que via PYTHONPATH).
+# KEY : clé de la source (= module `sources.<clé>`, ex. taux_rafp). (Ré)écrit
+# data/data/<clé>.csv + data/manifests/<clé>.json et imprime le chemin du CSV.
+generate:
+	@test -n "$(KEY)" || { echo "Usage: make generate KEY=<clé> (ex. taux_rafp)"; exit 2; }
+	cd python && PYTHONPATH=src uv run python -m sources.$(KEY)
