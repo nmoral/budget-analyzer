@@ -75,6 +75,40 @@ final class PrimeRateRepositoryTest extends IntegrationTestCase
         self::assertSame(0.21, (float) $rate->value);
     }
 
+    public function testScopedToLatestSetByDefault(): void
+    {
+        // C3 (#14) : la recherche est scopée au jeu de paramètres (défaut : dernier
+        // importé) ; l'observation plus récente d'un jeu antérieur est ignorée.
+        $corps = $this->newCorps('PE');
+        $source = $this->newSource('dgafp-ra-2025');
+        $old = $this->newParameterSet('commit-old', '2025-01-15 10:00:00');
+        $this->newPrimeRate($corps, '0.90', 2025, false, $source, $old);
+        $set = $this->currentSet();
+        $this->newPrimeRate($corps, '0.21', 2023, false, $source, $set);
+        $this->em->flush();
+
+        $rate = $this->repository()->forYear('PE', 2026);
+
+        self::assertNotNull($rate);
+        self::assertSame(0.21, (float) $rate->value);
+    }
+
+    public function testScopedToExplicitSet(): void
+    {
+        $corps = $this->newCorps('PE');
+        $source = $this->newSource('dgafp-ra-2025');
+        $old = $this->newParameterSet('commit-old', '2025-01-15 10:00:00');
+        $this->newPrimeRate($corps, '0.90', 2023, false, $source, $old);
+        $set = $this->currentSet();
+        $this->newPrimeRate($corps, '0.21', 2023, false, $source, $set);
+        $this->em->flush();
+
+        $rate = $this->repository()->forYear('PE', 2026, $old);
+
+        self::assertNotNull($rate);
+        self::assertSame(0.90, (float) $rate->value);
+    }
+
     private function currentSet(): ParameterSet
     {
         $set = $this->newParameterSet('commit-current', '2026-01-15 10:00:00');

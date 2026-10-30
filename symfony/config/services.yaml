@@ -19,11 +19,23 @@ services:
             # par le moteur et l'adapter, jamais injectés comme services.
             - '../src/Domain/Profile/Profile.php'
             - '../src/Domain/Rule/ResolvedRules.php'
+            - '../src/Domain/Cost/AgentSituation.php'
+            - '../src/Domain/Cost/AnnualCost.php'
 
     # Port de domaine « taux daté » (#13) résolu vers l'adapter d'infrastructure
     # au-dessus des paramètres datés (#04) : toute injection de `DatedRateProvider`
     # reçoit l'adapter, sans que le domaine connaisse l'infrastructure.
     App\Domain\Shared\DatedRateProvider: '@App\Infrastructure\Rate\DatedRateProviderAdapter'
+
+    # Port de domaine « montant daté » (#14) résolu vers l'adapter d'infrastructure
+    # au-dessus des paramètres datés : le TIB lit ainsi le point d'indice en vigueur
+    # à D sans que le domaine connaisse l'infrastructure.
+    App\Domain\Shared\DatedAmountProvider: '@App\Infrastructure\Amount\DatedAmountProviderAdapter'
+
+    # Port de domaine « taux de primes » (#14) résolu vers l'adapter d'infrastructure
+    # au-dessus des taux de primes importés (dernière observation <= année de D,
+    # non-fallback prioritaire, scopée au jeu de paramètres), avec drapeau fallback.
+    App\Domain\Shared\PrimeRateProvider: '@App\Infrastructure\Prime\PrimeRateProviderAdapter'
 
     # Règles de retraite réelles (#13), taggées dans leur famille avec leur code
     # métier comme clé d'index du locator. Chacune connaît sa clé de paramètre daté
@@ -34,6 +46,17 @@ services:
         tags: [{ name: 'app.rule.retirement', code: 'CAS_CIVIL' }]
     App\Domain\Rule\Retirement\CnraclRule:
         tags: [{ name: 'app.rule.retirement', code: 'CNRACL' }]
+
+    # Règles « autres cotisations » (r_autres, #14), taggées dans leur famille avec
+    # le versant comme clé d'index du locator. Chacune connaît sa clé de paramètre
+    # daté (`taux_autres_cotisations_fpe` / `_fph`) et reçoit le port `DatedRateProvider`
+    # (aliasé vers l'adapter d'infrastructure) : le taux vient des paramètres datés,
+    # jamais du code. La donnée réelle n'existant pas encore, la règle lève tant que
+    # la valeur manque à la date (sourcing #49).
+    App\Domain\Rule\OtherContributions\FpeOtherContributionsRule:
+        tags: [{ name: 'app.rule.other_contributions', code: 'FPE' }]
+    App\Domain\Rule\OtherContributions\FphOtherContributionsRule:
+        tags: [{ name: 'app.rule.other_contributions', code: 'FPH' }]
 
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du
@@ -59,6 +82,11 @@ services:
         public: true
         arguments:
             $rules: !tagged_locator { tag: 'app.rule.cost_view', index_by: 'code' }
+
+    App\Domain\Rule\OtherContributions\OtherContributionsRuleResolver:
+        public: true
+        arguments:
+            $rules: !tagged_locator { tag: 'app.rule.other_contributions', index_by: 'code' }
 
 when@test:
     services:
@@ -87,4 +115,17 @@ when@test:
             public: true
         App\Infrastructure\Repository\PrimeRateRepository:
             autowire: true
+            public: true
+
+        # Composant de domaine « TIB » (#14) et port « taux de primes » rendus
+        # publics en test pour les récupérer depuis le conteneur et prouver le
+        # câblage de bout en bout (port de domaine → adapter d'infrastructure).
+        App\Domain\Cost\IndexedSalaryCalculator:
+            autowire: true
+            public: true
+        App\Domain\Cost\AnnualCostCalculator:
+            autowire: true
+            public: true
+        App\Domain\Shared\PrimeRateProvider:
+            alias: App\Infrastructure\Prime\PrimeRateProviderAdapter
             public: true
