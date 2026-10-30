@@ -54,6 +54,7 @@ qa-symfony: symfony/vendor
 	$(COMPOSE) run --rm symfony vendor/bin/phpstan analyse
 	$(COMPOSE) run --rm symfony vendor/bin/deptrac analyse --no-progress
 	$(COMPOSE) run --rm symfony vendor/bin/phpunit -c phpunit.dist.xml
+	$(COMPOSE) run --rm symfony vendor/bin/infection --threads=max --no-progress
 
 # Importe le dépôt de données vers Postgres (commande `app:import <commit>`, livrée #11).
 # COMMIT : référence opaque étiquetée comme version_id (défaut = HEAD du dépôt courant).

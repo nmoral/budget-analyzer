@@ -27,6 +27,7 @@ l'ordre, en échouant au premier garde-fou KO :
 2. `vendor/bin/phpstan analyse` (`level: max`)
 3. `vendor/bin/deptrac analyse --no-progress` (frontière : `App\Domain` sans `Doctrine\*` ni `App\Infrastructure\*`)
 4. `vendor/bin/phpunit -c phpunit.dist.xml` (suite de tests)
+5. `vendor/bin/infection --threads=max --no-progress` (mutation testing sur `src/Domain`, MSI ≥ 85 %)
 
 `make qa-python` enchaîne, dans l'ordre, et échoue au premier garde-fou KO :
 
@@ -112,14 +113,16 @@ Le MSI (Mutation Score Indicator) est calculé comme le badge mutmut :
 | Style | PHP-CS-Fixer | PSR-12 + `declare(strict_types=1)` | bloquant (livré #9), config `symfony/.php-cs-fixer.dist.php` |
 | Typage | PHPStan | `level: max` | bloquant (livré #9), config `symfony/phpstan.dist.neon` |
 | Tests | PHPUnit | TDD, suite verte | bloquant (livré #9), config `symfony/phpunit.dist.xml` |
-| Mutation | Infection | MSI ≥ 85 % | à poser (#12) |
+| Mutation | Infection | MSI ≥ 85 % (mutation sur `src/Domain`) | bloquant (#12), config `symfony/infection.json.dist` |
 | Architecture | Deptrac | domaine sans Doctrine ni infra | bloquant (#12), config `symfony/deptrac.yaml` |
 
 Depuis #9, `make qa-symfony` exécute PHP-CS-Fixer, PHPStan et PHPUnit dans le
 conteneur et est **bloquant** au premier garde-fou KO (cf. « Lancer la chaîne
 qualité »). Depuis #12, **Deptrac** y est câblé en bloquant (frontière `App\Domain`
-⊥ `Doctrine\*` et `App\Infrastructure\*`, config `symfony/deptrac.yaml`). Infection
-(MSI) sera câblé en bloquant dans la suite de #12.
+⊥ `Doctrine\*` et `App\Infrastructure\*`, config `symfony/deptrac.yaml`) et
+**Infection** en bloquant (mutation testing sur `src/Domain`, `minMsi` 85 dans
+`symfony/infection.json.dist` ; le driver de couverture `pcov` est embarqué dans
+l'image, cf. `symfony/Dockerfile`).
 
 ## Standards de code
 
