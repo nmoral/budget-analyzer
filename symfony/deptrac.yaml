@@ -1,0 +1,25 @@
+deptrac:
+  paths:
+    - ./src
+  layers:
+    - name: Domain
+      collectors:
+        - type: classLike
+          value: ^App\\Domain\\.*
+    - name: Infrastructure
+      collectors:
+        - type: classLike
+          value: ^App\\Infrastructure\\.*
+    - name: Doctrine
+      collectors:
+        - type: classLike
+          value: ^Doctrine\\.*
+  ruleset:
+    # La couche de domaine est du PHP pur : aucune dépendance autorisée vers
+    # une autre couche cartographiée. Toute référence à Doctrine\* ou à
+    # App\Infrastructure\* depuis App\Domain\* est donc une violation (exit != 0).
+    Domain: ~
+    # L'infrastructure peut s'appuyer sur le domaine et sur Doctrine.
+    Infrastructure:
+      - Domain
+      - Doctrine

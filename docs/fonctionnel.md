@@ -121,9 +121,32 @@ antérieure ou égale à Y, le résultat est vide.
 Les capacités métier arrivent dans des livraisons ultérieures et ne sont pas
 présentes aujourd'hui :
 
-- le moteur de calcul du coût des recrutements et ses règles métier — issue #12 ;
+- le calcul du coût des recrutements et les **règles métier réelles** (retraite,
+  indemnitaire, financeur, vues de coût) — l'**ossature** du moteur est posée (issue
+  #12, voir ci-dessous), mais les règles de calcul elles-mêmes arrivent aux issues
+  #13 à #18 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
 La liste ci-dessus décrit des intentions tracées par leurs issues respectives ; leur
 comportement n'est pas défini par la présente livraison.
+
+### Organisation des règles de calcul (ossature posée, pas encore exécutable)
+
+Le moteur de calcul distingue **quatre familles de règles** qui déterminent le
+traitement d'un profil de simulation :
+
+- **retraite** : le régime appliqué (ex. `CAS_CIVIL`, `CNRACL`) ;
+- **indemnitaire** : le régime de primes ;
+- **financeur** : le rattachement budgétaire ;
+- **vue de coût** : l'angle de restitution du coût.
+
+Chaque famille est sélectionnée par un **code métier**. Les trois premières sont
+portées par le profil ; la **vue de coût est un paramètre de simulation** choisi au
+moment du calcul, et non une caractéristique du profil. Si un profil référence un
+code sans règle correspondante, le système **signale une erreur explicite** (famille
+et code fautif) plutôt que de l'ignorer silencieusement.
+
+À ce stade, cette organisation est **en place mais pas encore exécutable** : aucune
+règle de calcul réelle n'est livrée et aucun coût n'est produit (voir la liste
+ci-dessus).

@@ -15,7 +15,9 @@
         "symfony/yaml": "^7.0"
     },
     "require-dev": {
+        "deptrac/deptrac": "^3.0",
         "friendsofphp/php-cs-fixer": "^3.64",
+        "infection/infection": "^0.35",
         "phpstan/phpstan": "^2.0",
         "phpunit/phpunit": "^11.3",
         "symfony/browser-kit": "^7.0",
@@ -36,7 +38,8 @@
     "config": {
         "sort-packages": true,
         "allow-plugins": {
-            "php-http/discovery": false
+            "php-http/discovery": false,
+            "infection/extension-installer": true
         }
     },
     "minimum-stability": "stable",

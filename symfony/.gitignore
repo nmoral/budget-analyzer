@@ -2,4 +2,5 @@
 /var/
 /.phpunit.cache/
 /.php-cs-fixer.cache
+/.deptrac.cache
 /config/reference.php
