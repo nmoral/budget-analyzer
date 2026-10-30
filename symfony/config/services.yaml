@@ -45,6 +45,17 @@ services:
     App\Domain\Rule\Retirement\CnraclRule:
         tags: [{ name: 'app.rule.retirement', code: 'CNRACL' }]
 
+    # Règles « autres cotisations » (r_autres, #14), taggées dans leur famille avec
+    # le versant comme clé d'index du locator. Chacune connaît sa clé de paramètre
+    # daté (`taux_autres_cotisations_fpe` / `_fph`) et reçoit le port `DatedRateProvider`
+    # (aliasé vers l'adapter d'infrastructure) : le taux vient des paramètres datés,
+    # jamais du code. La donnée réelle n'existant pas encore, la règle lève tant que
+    # la valeur manque à la date (sourcing #49).
+    App\Domain\Rule\OtherContributions\FpeOtherContributionsRule:
+        tags: [{ name: 'app.rule.other_contributions', code: 'FPE' }]
+    App\Domain\Rule\OtherContributions\FphOtherContributionsRule:
+        tags: [{ name: 'app.rule.other_contributions', code: 'FPH' }]
+
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du
     # tag). La sélection passe donc par le locator, jamais par un `match`/`if` sur un
@@ -69,6 +80,11 @@ services:
         public: true
         arguments:
             $rules: !tagged_locator { tag: 'app.rule.cost_view', index_by: 'code' }
+
+    App\Domain\Rule\OtherContributions\OtherContributionsRuleResolver:
+        public: true
+        arguments:
+            $rules: !tagged_locator { tag: 'app.rule.other_contributions', index_by: 'code' }
 
 when@test:
     services:
