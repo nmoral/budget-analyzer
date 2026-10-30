@@ -79,7 +79,8 @@ parallèles** plus un job agrégateur :
 - **`qa-symfony`** (en parallèle, aucun `needs` vers `qa-python`) : dérive le `.env`
   depuis `.env.example`, pré-build l'image `symfony` avec **buildx + cache de layers
   persistant** (`type=gha`) pour réchauffer le cache réutilisé par `docker compose
-  build symfony`, puis lance `make qa-symfony` (php-cs-fixer, phpstan, phpunit).
+  build symfony`, puis lance `make qa-symfony` (php-cs-fixer, phpstan, deptrac,
+  phpunit, infection).
 - **`qa`** : job final **agrégateur** (`needs: [qa-python, qa-symfony]`) qui ne fait
   que réussir une fois les deux chaînes vertes. Son nom `qa` est **préservé tel quel**
   car c'est le **seul check requis** par la protection de `main` (voir plus bas) ; il

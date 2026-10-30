@@ -26,17 +26,91 @@ Le code applicatif vit sous `symfony/src/` avec un mapping PSR-4 déclaré dans
 
 Les tests sont sous `tests/` (`App\Tests\`, mapping `autoload-dev`).
 
-`src/Domain/` reste en **PHP pur** (aucune occurrence de Doctrine, frontière vérifiée
-par `DomainBoundaryTest`). Le modèle de données Doctrine (entités et repositories) vit
-sous `src/Infrastructure/` : c'est un **modèle de persistance**, pas le domaine métier.
+`src/Domain/` est en **PHP pur** (aucune dépendance à Doctrine ni à l'infra). Depuis
+#12 la frontière est **garantie en double** : par **Deptrac** (bloquant dans
+`make qa-symfony`, config `symfony/deptrac.yaml` — toute référence à `Doctrine\*` ou
+`App\Infrastructure\*` depuis `App\Domain\*` fait échouer la CI) **et**, en ceinture
+et bretelles, par les tests d'architecture `DomainBoundaryTest` et `AutoloadTest`
+conservés. Le modèle de données Doctrine (entités et repositories) vit sous
+`src/Infrastructure/` : c'est un **modèle de persistance**, pas le domaine métier.
 La frontière « le domaine ne connaît ni Doctrine ni l'infra » est une décision
-structurante (voir `CLAUDE.md`, section PHP) et sera rendue bloquante par Deptrac avec
-le moteur de calcul (#12).
+structurante (voir `CLAUDE.md`, section PHP).
 
-Le seul composant applicatif livré est le contrôleur de santé
-`App\Infrastructure\Controller\HealthController`, routé par attribut sur `/health`
-(méthode `GET`), qui renvoie `{"status":"ok"}`. Les routes sont chargées par attribut
-depuis `src/Infrastructure/Controller/` (`config/routes.yaml`).
+Le contrôleur de santé `App\Infrastructure\Controller\HealthController`, routé par
+attribut sur `/health` (méthode `GET`), renvoie `{"status":"ok"}`. Les routes sont
+chargées par attribut depuis `src/Infrastructure/Controller/` (`config/routes.yaml`).
+Le domaine héberge par ailleurs le **moteur de règles** décrit à la section suivante.
+
+## Moteur de domaine : règles enfichables par tag
+
+Le moteur de calcul est posé en #12 sous forme d'**ossature pure** : contrats,
+résolveurs et objets de domaine, **sans aucune règle métier réelle** (celles-ci
+arrivent en #13→#18). Tout vit sous `src/Domain/` (PHP pur, frontière Deptrac).
+
+### Familles de règles et contrat
+
+Quatre familles de règles sont modélisées, chacune par une interface sous
+`src/Domain/Rule/<Famille>/` : `RetirementRule`, `IndemnitaryRule`, `FunderRule`,
+`CostViewRule`. Toutes étendent l'interface commune `App\Domain\Rule\Rule`, dont le
+**seul contrat en #12** est l'identité de sélection :
+
+```php
+interface Rule { public function code(): string; }
+```
+
+Les signatures de calcul (coût annuel, horizons…) ne sont **pas** posées ici ; elles
+relèvent de #13→#18 (décision « contrat d'interface minimal »).
+
+### Résolution par service locator indexé par code
+
+Chaque famille a son résolveur (`RetirementRuleResolver`, etc.), tous dérivés de
+`App\Domain\Rule\AbstractRuleResolver`. La sélection est **déléguée à un service
+locator** (port standard `Psr\Container\ContainerInterface`) indexé par code :
+`resolve(string $code)` retourne l'implémentation enregistrée pour ce code, ou lève
+`UnknownRuleCodeException` (exception de domaine `\DomainException`, message nommant la
+famille et le code) si aucune n'existe. **Aucun `match`/`if` sur un code métier** ne
+vit dans le moteur (décision structurante, vérifiée par `RuleResolverSelectionTest`).
+
+Le locator concret est construit par Symfony dans `config/services.yaml` via
+`!tagged_locator { tag: 'app.rule.<famille>', index_by: 'code' }`. **Enficher** une
+règle = déclarer un service implémentant l'interface de la famille, taggé
+`app.rule.<famille>` avec son `code` ; elle devient résolvable **sans toucher au moteur
+ni aux résolveurs**. Les résolveurs sont déclarés `public: true` (points d'entrée du
+moteur, consommés par #13→#18). Aucune implémentation métier n'est livrée en #12 : la
+découvrabilité est prouvée par des implémentations de **test** (`tests/Fixtures/Rule/`,
+codes `CAS_CIVIL`, `X_TEST`, `IFSE`, `ETAT_P140`, `ANNEE_1`) taggées sous `when@test`.
+
+### Profil de domaine pur, adapter et `RuleEngine`
+
+`App\Domain\Profile\Profile` est un objet de domaine **pur** portant trois codes :
+retraite, indemnitaire, financeur. La **vue de coût n'y figure pas** : c'est un
+paramètre de simulation passé en entrée du moteur (décision « vue de coût =
+paramètre de simulation »).
+
+`App\Domain\Rule\RuleEngine::resolve(Profile $profile, string $costViewCode)` résout
+les **quatre** implémentations (les trois codes du profil + le code de vue passé en
+entrée) via les résolveurs et retourne un `ResolvedRules` (agrégat des quatre règles
+sélectionnées).
+
+Le pont avec la persistance est l'**adapter** `App\Infrastructure\Profile\DomainProfileFactory`
+(seul point touchant les deux côtés) : `fromEntity()` construit le `Profile` pur depuis
+l'entité Doctrine `Profile`, avec le mapping `retraite = RetirementScheme.code`,
+`indemnitaire = Profile.indemnitaryScheme`, `financeur = Funder.code`. Le champ
+`indemnitaryScheme` étant **nullable** en base alors que le `Profile` pur exige trois
+codes non nuls, un profil sans régime indemnitaire est **rejeté** (`\InvalidArgumentException`,
+côté infra). Les objets de données purs (`Profile`, `ResolvedRules`) sont **exclus** de
+l'autowiring (`config/services.yaml`) : ils sont construits à la main, jamais injectés.
+
+`RuleEngine` et `DomainProfileFactory` ne sont pas encore déclarés `public` : ils
+seront câblés quand #13+ les consommera. En #12, la résolution est couverte par les
+**tests seuls** (`tests/Domain/Rule/`, `tests/Infrastructure/Profile/`).
+
+### Mutation testing (Infection)
+
+La suite du moteur est passée sous **Infection** (mutation testing), scopé à
+`src/Domain` (`symfony/infection.json.dist`, `minMsi`/`minCoveredMsi` = 85), bloquant
+dans `make qa-symfony`. Le driver de couverture **pcov** est embarqué dans l'image
+(`symfony/Dockerfile`). Seuils et outillage font foi dans `CLAUDE.md`.
 
 ## Kernel et amorçage
 
@@ -357,8 +431,9 @@ docker compose logs symfony
 
 La chaîne qualité PHP est exécutée **dans le conteneur** et **bloquante** depuis #9.
 `make qa-symfony` build l'image `symfony`, démarre Postgres (`up -d --wait postgres`)
-puis enchaîne PHP-CS-Fixer (dry-run), PHPStan (`level: max`) et PHPUnit, en échouant
-au premier garde-fou KO. `make qa` lance `qa-python` puis `qa-symfony` ; en **local**,
+puis enchaîne PHP-CS-Fixer (dry-run), PHPStan (`level: max`), **Deptrac** (frontière du
+domaine, #12), PHPUnit et **Infection** (mutation sur `src/Domain`, MSI ≥ 85 %, #12),
+en échouant au premier garde-fou KO. `make qa` lance `qa-python` puis `qa-symfony` ; en **local**,
 `make qa` reste la **chaîne complète séquentielle inchangée** (mutmut complet).
 
 ### Orchestration CI (`.github/workflows/qa.yml`)
@@ -419,5 +494,5 @@ traite un check requis *skipped* comme **passant**, et le merge ne serait pas bl
 gate est donc vert uniquement quand les deux chaînes le sont, rouge sinon.
 
 Les seuils et outils (PHP-CS-Fixer PSR-12 + `strict_types`, PHPStan `level: max`,
-PHPUnit ; Infection et Deptrac à venir avec #12) sont décrits dans `CLAUDE.md`, qui
+Deptrac, PHPUnit, Infection — tous bloquants) sont décrits dans `CLAUDE.md`, qui
 fait foi.
