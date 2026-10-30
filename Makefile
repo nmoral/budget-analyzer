@@ -52,6 +52,7 @@ qa-symfony: symfony/vendor
 	$(COMPOSE) up -d --wait postgres
 	$(COMPOSE) run --rm symfony vendor/bin/php-cs-fixer fix --dry-run --diff
 	$(COMPOSE) run --rm symfony vendor/bin/phpstan analyse
+	$(COMPOSE) run --rm symfony vendor/bin/deptrac analyse --no-progress
 	$(COMPOSE) run --rm symfony vendor/bin/phpunit -c phpunit.dist.xml
 
 # Importe le dépôt de données vers Postgres (commande `app:import <commit>`, livrée #11).
