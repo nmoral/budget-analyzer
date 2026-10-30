@@ -5,10 +5,11 @@ recrutements publics expose **aujourd'hui**, du point de vue de l'usage et du m�
 
 La brique Symfony porte, à terme, le moteur de calcul, l'API et le front de la V1.
 À ce stade, l'application fournit un point de santé, le **modèle de données** du
-simulateur avec ses règles de sélection des valeurs réglementaires datées, et une
-**commande d'import** qui peuple ce modèle depuis le dépôt de données. Aucune règle
-de calcul et aucune interface utilisateur ne sont encore exposées : le modèle n'est
-pas consultable via une API ou un écran.
+simulateur avec ses règles de sélection des valeurs réglementaires datées, une
+**commande d'import** qui peuple ce modèle depuis le dépôt de données, et les
+**premières règles de calcul** de la famille retraite (taux employeur). Aucune
+interface utilisateur n'est encore exposée : ces règles ne sont consultables ni via
+une API ni via un écran ; elles ne sont exercées que par les tests.
 
 ## Ce qui est disponible
 
@@ -121,10 +122,11 @@ antérieure ou égale à Y, le résultat est vide.
 Les capacités métier arrivent dans des livraisons ultérieures et ne sont pas
 présentes aujourd'hui :
 
-- le calcul du coût des recrutements et les **règles métier réelles** (retraite,
-  indemnitaire, financeur, vues de coût) — l'**ossature** du moteur est posée (issue
-  #12, voir ci-dessous), mais les règles de calcul elles-mêmes arrivent aux issues
-  #13 à #18 ;
+- le calcul du **coût complet** des recrutements et la plupart des **règles métier
+  réelles** (indemnitaire, financeur, vues de coût) — l'**ossature** du moteur est
+  posée (issue #12, voir ci-dessous) et les premières règles réelles de la famille
+  retraite sont livrées (issue #13, voir « Règles de retraite » ci-dessous), mais les
+  autres familles arrivent aux issues #14 à #18 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
@@ -147,6 +149,31 @@ moment du calcul, et non une caractéristique du profil. Si un profil référenc
 code sans règle correspondante, le système **signale une erreur explicite** (famille
 et code fautif) plutôt que de l'ignorer silencieusement.
 
-À ce stade, cette organisation est **en place mais pas encore exécutable** : aucune
-règle de calcul réelle n'est livrée et aucun coût n'est produit (voir la liste
+À ce stade, cette organisation est **en place**, mais seule la famille retraite porte
+des règles réelles (voir ci-dessous) ; les autres familles n'ont pas encore de règle
+de calcul livrée, et aucun **coût complet** n'est encore produit (voir la liste
 ci-dessus).
+
+### Règles de retraite (taux employeur daté)
+
+La famille retraite expose désormais, pour un régime donné, le **taux employeur de
+retraite applicable à une date**. Deux régimes sont réellement implémentés :
+
+- **CAS civil** (code `CAS_CIVIL`) ;
+- **CNRACL** (code `CNRACL`).
+
+Le taux retourné est **la valeur réglementaire en vigueur à la date demandée**, lue
+dans les valeurs datées importées (voir « Valeurs datées » plus haut) : rien n'est
+figé dans l'application. Si le paramètre réglementaire est modifié puis réimporté, le
+taux restitué suit la nouvelle valeur. À défaut de jeu de paramètres précisé, c'est le
+**dernier jeu importé** qui s'applique.
+
+Si **aucune valeur réglementaire ne couvre la date demandée** pour le régime, le
+système **signale une erreur explicite** nommant le paramètre concerné et la date,
+plutôt que de retourner une valeur par défaut silencieuse.
+
+**Hors de ce périmètre** : seul le **taux employeur** est fourni, pas la formule de
+coût complète d'un recrutement (qui combinera ce taux avec le traitement et les autres
+termes — livraisons ultérieures). Les régimes **CAS militaire** et **IRCANTEC** ne sont
+pas encore implémentés. Les valeurs réglementaires datées (import) ne sont pas
+modifiées par cette famille : elle ne fait que les consommer.

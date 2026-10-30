@@ -20,6 +20,21 @@ services:
             - '../src/Domain/Profile/Profile.php'
             - '../src/Domain/Rule/ResolvedRules.php'
 
+    # Port de domaine « taux daté » (#13) résolu vers l'adapter d'infrastructure
+    # au-dessus des paramètres datés (#04) : toute injection de `DatedRateProvider`
+    # reçoit l'adapter, sans que le domaine connaisse l'infrastructure.
+    App\Domain\Shared\DatedRateProvider: '@App\Infrastructure\Rate\DatedRateProviderAdapter'
+
+    # Règles de retraite réelles (#13), taggées dans leur famille avec leur code
+    # métier comme clé d'index du locator. Chacune connaît sa clé de paramètre daté
+    # (`taux_cas_civil` / `taux_cnracl`) et reçoit le port `DatedRateProvider`
+    # (aliasé vers l'adapter d'infrastructure) : le taux vient des paramètres datés,
+    # jamais du code.
+    App\Domain\Rule\Retirement\CasCivilRule:
+        tags: [{ name: 'app.rule.retirement', code: 'CAS_CIVIL' }]
+    App\Domain\Rule\Retirement\CnraclRule:
+        tags: [{ name: 'app.rule.retirement', code: 'CNRACL' }]
+
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du
     # tag). La sélection passe donc par le locator, jamais par un `match`/`if` sur un
@@ -52,8 +67,6 @@ when@test:
         # dans sa famille avec son code comme clé d'index du locator : l'ajout d'une
         # telle implémentation la rend résolvable sans toucher au moteur ni aux
         # résolveurs (C3).
-        App\Tests\Fixtures\Rule\Retirement\CasCivilRetirementRule:
-            tags: [{ name: 'app.rule.retirement', code: 'CAS_CIVIL' }]
         App\Tests\Fixtures\Rule\Retirement\EnfichableRetirementRule:
             tags: [{ name: 'app.rule.retirement', code: 'X_TEST' }]
         App\Tests\Fixtures\Rule\Indemnitary\IfseIndemnitaryRule:

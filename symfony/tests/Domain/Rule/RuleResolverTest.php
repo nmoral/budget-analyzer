@@ -7,12 +7,12 @@ namespace App\Tests\Domain\Rule;
 use App\Domain\Rule\CostView\CostViewRuleResolver;
 use App\Domain\Rule\Funder\FunderRuleResolver;
 use App\Domain\Rule\Indemnitary\IndemnitaryRuleResolver;
+use App\Domain\Rule\Retirement\CasCivilRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Rule\UnknownRuleCodeException;
 use App\Tests\Fixtures\Rule\CostView\AnnualCostViewRule;
 use App\Tests\Fixtures\Rule\Funder\EtatFunderRule;
 use App\Tests\Fixtures\Rule\Indemnitary\IfseIndemnitaryRule;
-use App\Tests\Fixtures\Rule\Retirement\CasCivilRetirementRule;
 use App\Tests\Fixtures\Rule\Retirement\EnfichableRetirementRule;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
@@ -24,12 +24,12 @@ final class RuleResolverTest extends KernelTestCase
 {
     public function testResolvesTaggedRetirementImplementationByCode(): void
     {
-        // C2.1 : famille retraite, code CAS_CIVIL présent -> implémentation taggée.
+        // C2.1 : famille retraite, code CAS_CIVIL présent -> règle réelle taggée (#13).
         $resolver = $this->retirementResolver();
 
         $rule = $resolver->resolve('CAS_CIVIL');
 
-        self::assertInstanceOf(CasCivilRetirementRule::class, $rule);
+        self::assertInstanceOf(CasCivilRule::class, $rule);
         self::assertSame('CAS_CIVIL', $rule->code());
     }
 
