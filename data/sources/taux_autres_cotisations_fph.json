@@ -1,0 +1,12 @@
+{
+  "rows": [
+    {
+      "key": "taux_autres_cotisations_fph",
+      "value": "17.13",
+      "unit": "PCT_TIB",
+      "start_date": "2026-01-01",
+      "end_date": "",
+      "source": "cotisations-fph-2026"
+    }
+  ]
+}

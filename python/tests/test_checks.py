@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from checks import collect_files, main, run
+from checks import collect_files, load_bounds, main, run
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
 NO_ANOMALY = "Contrôles de cohérence : aucune anomalie."
@@ -736,3 +736,126 @@ def test_all_bound_violations_reported(data_root: Path) -> None:
     assert "valeur 250 au-dessus de la borne max 200" in report
     assert "valeur -5 sous la borne min 0" in report
     assert "Récapitulatif : 2 anomalie(s) détectée(s)." in report
+
+
+# --- #49 C2.2 : nouvelles clés bornées min 0 / max 100 ----------------------
+
+AUTRES_COHERENCE = (
+    "[parametre_date.key]\n"
+    "taux_autres_cotisations_fpe = { min = 0, max = 100 }\n"
+    "taux_autres_cotisations_fph = { min = 0, max = 100 }\n"
+    "taux_rafp = { min = 0, max = 100 }\n"
+)
+
+
+def test_autres_cotisations_value_above_max_is_reported(data_root: Path) -> None:
+    # C2.2 : une valeur à 150 (> max 100) sur une clé #49 => exit 1 nommant la clé.
+    _write_config(data_root, AUTRES_COHERENCE)
+    _write(
+        data_root,
+        "taux_autres_cotisations_fph",
+        PARAMETRE_HEADER,
+        "taux_autres_cotisations_fph,150,PCT_TIB,2026-01-01,,cotisations-fph-2026",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "taux_autres_cotisations_fph.csv:2 [bornes] clé taux_autres_cotisations_fph : "
+        "valeur 150 au-dessus de la borne max 100\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_real_coherence_bounds_for_new_keys(data_root: Path) -> None:
+    # Le coherence.toml réel borne les 3 clés #49 à [0 ; 100].
+    bounds = load_bounds(REAL_DATA).parametre_date_by_key
+    for key in (
+        "taux_autres_cotisations_fpe",
+        "taux_autres_cotisations_fph",
+        "taux_rafp",
+    ):
+        assert bounds[key].minimum == 0
+        assert bounds[key].maximum == 100
+
+
+# --- #49 C2.3 : code source inconnu => le contrôle refuse -------------------
+
+SOURCES_JSON = '{"cotisations-fpe-2026": {"label": "x", "fileHash": "deadbeef"}}'
+
+
+def _write_sources(root: Path, content: str = SOURCES_JSON) -> None:
+    (root / "sources.json").write_text(content, "utf-8")
+
+
+def test_unknown_source_code_is_reported(data_root: Path) -> None:
+    # C2.3 : un code source absent de sources.json => violation nommant le code.
+    _write_sources(data_root)
+    _write(
+        data_root,
+        "taux_autres_cotisations_fpe",
+        PARAMETRE_HEADER,
+        "taux_autres_cotisations_fpe,16.07,PCT_TIB,2026-01-01,,code-fantome",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert report == (
+        "taux_autres_cotisations_fpe.csv:2 [source_ref] "
+        "source « code-fantome » absente de sources.json\n"
+        "Récapitulatif : 1 anomalie(s) détectée(s)."
+    )
+
+
+def test_declared_source_code_passes(data_root: Path) -> None:
+    _write_sources(data_root)
+    _write(
+        data_root,
+        "taux_autres_cotisations_fpe",
+        PARAMETRE_HEADER,
+        "taux_autres_cotisations_fpe,16.07,PCT_TIB,2026-01-01,,cotisations-fpe-2026",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_source_declaration_skipped_without_registry(data_root: Path) -> None:
+    # Sans sources.json : la référence de source n'est pas contrôlée (no-op).
+    _write(
+        data_root,
+        "taux_autres_cotisations_fpe",
+        PARAMETRE_HEADER,
+        "taux_autres_cotisations_fpe,16.07,PCT_TIB,2026-01-01,,code-fantome",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY
+
+
+def test_blank_source_not_double_reported_by_source_ref(data_root: Path) -> None:
+    # Une source blanche est signalée par [source], pas par [source_ref].
+    _write_sources(data_root)
+    _write(
+        data_root,
+        "taux_autres_cotisations_fpe",
+        PARAMETRE_HEADER,
+        "taux_autres_cotisations_fpe,16.07,PCT_TIB,2026-01-01,,   ",
+    )
+    code, report = run(data_root)
+    assert code == 1
+    assert "[source] source blanche ou absente" in report
+    assert "[source_ref]" not in report
+    assert "Récapitulatif : 1 anomalie(s) détectée(s)." in report
+
+
+def test_source_ref_skips_schema_without_source_column(data_root: Path) -> None:
+    # Un schéma sans colonne source (echelon) n'est pas contrôlé par source_ref.
+    _write_sources(data_root)
+    _write(
+        data_root,
+        "echelon_pe",
+        ECHELON_HEADER,
+        "PE_cn_2024,1,444,395,12",
+    )
+    code, report = run(data_root)
+    assert code == 0
+    assert report == NO_ANOMALY

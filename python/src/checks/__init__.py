@@ -34,6 +34,9 @@ FILE_TO_SCHEMA: dict[str, str] = {
     "taux_cas_civil": "parametre_date",
     "taux_cas_militaire": "parametre_date",
     "taux_cnracl": "parametre_date",
+    "taux_autres_cotisations_fpe": "parametre_date",
+    "taux_autres_cotisations_fph": "parametre_date",
+    "taux_rafp": "parametre_date",
     "echelon_pe": "echelon",
     "echelon_isg": "echelon",
     "grille_pe": "grille",
@@ -310,6 +313,50 @@ def _bound_violations(
     ]
 
 
+def load_declared_sources(root: Path) -> frozenset[str] | None:
+    """Codes ``source`` déclarés dans ``root/sources.json`` (``None`` si absent).
+
+    ``None`` signifie « pas de référentiel » : la référence des sources n'est alors
+    pas contrôlée (cohérent avec la liste blanche ``coherence.toml`` absente).
+    """
+    path = root / "sources.json"
+    if not path.exists():
+        return None
+    registry: dict[str, Any] = json.loads(path.read_text("utf-8"))
+    return frozenset(registry)
+
+
+def check_sources_declared(declared: frozenset[str] | None) -> Invariant:
+    """Toute ``source`` non blanche d'un CSV doit être déclarée dans ``sources.json``.
+
+    Pas de source silencieuse : un code absent du référentiel est refusé. Les
+    sources blanches relèvent de ``check_source_not_blank`` et sont ignorées ici
+    pour ne pas être signalées deux fois. Référentiel absent → aucun contrôle.
+    """
+
+    def invariant(files: Sequence[LoadedFile]) -> list[Violation]:
+        if declared is None:
+            return []
+        violations: list[Violation] = []
+        for loaded in files:
+            if not loaded.has_source:
+                continue
+            for line, row in loaded.rows:
+                code = row.get("source", "").strip()
+                if code and code not in declared:
+                    violations.append(
+                        Violation(
+                            invariant="source_ref",
+                            file=loaded.filename,
+                            line=line,
+                            message=f"source « {code} » absente de sources.json",
+                        )
+                    )
+        return violations
+
+    return invariant
+
+
 # Registre des invariants sans configuration externe (C3 est fabriqué dans run()).
 STATELESS_INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
@@ -369,7 +416,11 @@ def run(root: Path) -> tuple[int, str]:
     fonction de son seul argument, sans état global masqué.
     """
     files = collect_files(root)
-    invariants = (*STATELESS_INVARIANTS, check_values_within_bounds(load_bounds(root)))
+    invariants = (
+        *STATELESS_INVARIANTS,
+        check_values_within_bounds(load_bounds(root)),
+        check_sources_declared(load_declared_sources(root)),
+    )
     violations: list[Violation] = []
     for invariant in invariants:
         violations.extend(invariant(files))

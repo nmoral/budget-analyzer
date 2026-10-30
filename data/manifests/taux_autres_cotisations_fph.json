@@ -1,0 +1,9 @@
+{
+  "raw": "taux_autres_cotisations_fph.json",
+  "retrieved_at": "2026-10-30",
+  "script": "sources.taux_autres_cotisations_fph",
+  "script_version": "1",
+  "sha256": "2128c0d32603a8825fca1f8f9bb57dd5f3691f78f20648f3953149327bdd41ec",
+  "source": "Cotisations employeur hors retraite — FPH/CNRACL 2026 (URSSAF secteur public / CDG67)",
+  "url": "https://www.urssaf.fr/accueil/employeur/secteur-public.html"
+}

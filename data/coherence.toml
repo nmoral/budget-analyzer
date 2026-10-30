@@ -10,6 +10,9 @@
 taux_cas_civil = { min = 0, max = 200 }
 taux_cas_militaire = { min = 0, max = 200 }
 taux_cnracl = { min = 0, max = 200 }
+taux_autres_cotisations_fpe = { min = 0, max = 100 }
+taux_autres_cotisations_fph = { min = 0, max = 100 }
+taux_rafp = { min = 0, max = 100 }
 point_indice = { min = 0 }
 
 # Borne par schéma sur la colonne `value` de tout fichier `taux_primes`.
