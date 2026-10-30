@@ -50,9 +50,43 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertLessThanOrEqual($after->getTimestamp(), $importedAt->getTimestamp());
 
         self::assertSame(1, $this->rowCount('parameter_set'));
-        self::assertSame(7, $this->rowCount('dated_parameter'));
-        // Les 8 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2).
-        self::assertSame(8, $this->rowCount('source'));
+        self::assertSame(10, $this->rowCount('dated_parameter'));
+        // Les 11 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49).
+        self::assertSame(11, $this->rowCount('source'));
+    }
+
+    /** #49 C4 — les 3 clés r_autres (FPE/FPH) et RAFP sont importées en base. */
+    public function testOtherContributionAndRafpParametersAreImported(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+
+        $expected = [
+            'taux_autres_cotisations_fpe' => '16.07',
+            'taux_autres_cotisations_fph' => '17.13',
+            'taux_rafp' => '5.00',
+        ];
+        foreach ($expected as $key => $value) {
+            $row = $this->em->getConnection()->fetchAssociative(
+                'SELECT value, unit, start_date, end_date FROM dated_parameter '
+                . 'WHERE "key" = ? AND parameter_set_id = ?',
+                [$key, $setId],
+            );
+            self::assertIsArray($row, sprintf('clé %s absente du jeu importé', $key));
+            $stored = $row['value'];
+            if (!is_string($stored) || !is_numeric($stored)) {
+                self::fail(sprintf('valeur %s non numérique', $key));
+            }
+            // DECIMAL(14,6) : la valeur est renvoyée à l'échelle 6 ('16.070000').
+            self::assertSame(0, bccomp($value, $stored, 6), sprintf('valeur %s inattendue', $key));
+            self::assertSame('PCT_TIB', $row['unit']);
+            $startDate = $row['start_date'];
+            self::assertIsString($startDate);
+            self::assertStringStartsWith('2026-01-01', $startDate);
+            self::assertNull($row['end_date']);
+        }
     }
 
     /** C2.1 — schéma invalide (grille sans `version`) : exit ≠ 0, rollback total. */
@@ -93,11 +127,11 @@ final class ImportCommandTest extends IntegrationTestCase
         $tester = $this->runImport('9f3a1c2', $this->dataDir());
         self::assertSame(Command::SUCCESS, $tester->getStatusCode());
 
-        self::assertSame(7, $this->rowCount('dated_parameter'));
+        self::assertSame(10, $this->rowCount('dated_parameter'));
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(8, $this->rowCount('source'));
+        self::assertSame(11, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
 
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
@@ -215,11 +249,11 @@ final class ImportCommandTest extends IntegrationTestCase
 
         // Un seul jeu de paramètres pour ce commit, mêmes comptes qu'après un import unique.
         self::assertSame(1, $this->rowCount('parameter_set'));
-        self::assertSame(7, $this->rowCount('dated_parameter'));
+        self::assertSame(10, $this->rowCount('dated_parameter'));
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(8, $this->rowCount('source'));
+        self::assertSame(11, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
 
         // Upsert par `code` : aucun doublon sur les référentiels globaux.
@@ -228,7 +262,7 @@ final class ImportCommandTest extends IntegrationTestCase
 
         // Les valeurs datées restent rattachées à l'unique ParameterSet du commit.
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
-        self::assertSame(7, $this->rowCountWhere('dated_parameter', 'parameter_set_id = ' . $setId));
+        self::assertSame(10, $this->rowCountWhere('dated_parameter', 'parameter_set_id = ' . $setId));
     }
 
     /** C6.2 — nom de commande impératif `app:import`. */

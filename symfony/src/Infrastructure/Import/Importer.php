@@ -45,6 +45,9 @@ final class Importer
         'taux_cas_civil' => 'parametre_date',
         'taux_cas_militaire' => 'parametre_date',
         'taux_cnracl' => 'parametre_date',
+        'taux_autres_cotisations_fpe' => 'parametre_date',
+        'taux_autres_cotisations_fph' => 'parametre_date',
+        'taux_rafp' => 'parametre_date',
         'echelon_pe' => 'echelon',
         'echelon_isg' => 'echelon',
         'grille_pe' => 'grille',
@@ -58,6 +61,9 @@ final class Importer
         'taux_cas_civil',
         'taux_cas_militaire',
         'taux_cnracl',
+        'taux_autres_cotisations_fpe',
+        'taux_autres_cotisations_fph',
+        'taux_rafp',
     ];
 
     /** @var list<string> */

@@ -1,0 +1,9 @@
+{
+  "raw": "taux_rafp.json",
+  "retrieved_at": "2026-10-30",
+  "script": "sources.taux_rafp",
+  "script_version": "1",
+  "sha256": "4a802b4283e2d4dd949acd7520a47f0d3b56795a3e7b14d3b27683883c3bf284",
+  "source": "RAFP — taux de cotisation employeur 2026 (décret n° 2004-569)",
+  "url": "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000607091"
+}

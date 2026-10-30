@@ -280,15 +280,18 @@ toute valeur datée absente à `D` lève l'exception explicite correspondante (p
 défaut silencieux). `AgentSituation` et `AnnualCost` sont **exclus de l'autowiring**
 (`config/services.yaml`) : ce sont des données pures, jamais injectées.
 
-### Limite : taux réels r_autres et r_RAFP non sourcés
+### Taux réels r_autres et r_RAFP sourcés (#49)
 
-Les clés `taux_autres_cotisations_fpe` / `_fph` (r_autres) et `taux_rafp` (RAFP) sont
-**connues en dur** par leurs composants, mais **les valeurs réelles n'existent pas
-encore** dans le dépôt de données (sourcing reporté à **#49**). Tant que la donnée
-manque, ces composants **lèvent proprement** (`MissingDatedRateException`) à la date
-demandée, plutôt que d'utiliser un défaut. Le reste de la formule (TIB, p,
-r_retraite) fonctionne sur les données réelles ; les tests exercent la formule complète
-avec des taux injectés.
+Les clés `taux_autres_cotisations_fpe` / `_fph` (r_autres) et `taux_rafp` (RAFP),
+**connues en dur** par leurs composants, sont désormais **présentes dans le dépôt de
+données** (sourçage livré par **#49**, entrée datée unique à effet `2026-01-01`, unité
+`PCT_TIB`) : `taux_autres_cotisations_fpe` = 16.07, `taux_autres_cotisations_fph` = 17.13,
+`taux_rafp` = 5.00. Après `app:import`, `DatedRateProvider::rateAt` renvoie ces taux et
+`AnnualCostCalculator::compute` produit les quatre termes **sur données réelles** (termes
+3 et 4 compris). Avant la `start_date` (ex. `2025-12-31`), la lecture lève toujours
+`MissingDatedRateException` — aucun défaut silencieux. La composition ligne à ligne des
+deux agrégats (et l'exclusion du versement mobilité) est documentée dans
+`data/catalogue_autres_cotisations.md`.
 
 ### Câblage et tests
 
@@ -508,12 +511,13 @@ Sous `src/Infrastructure/Import/` :
 Le mapping fichier → schéma est la constante `Importer::FILE_TO_SCHEMA`, alignée sur le
 `FILE_TO_SCHEMA` Python **hors `couts_pap`** (non importé, aucune entité cible — hors
 périmètre #11). Avant tout chargement, l'`Importer` valide le schéma **et** vérifie
-l'empreinte de **chacun** des 9 fichiers du mapping (C3 « avant tout chargement », C4).
+l'empreinte de **chacun** des 12 fichiers du mapping (C3 « avant tout chargement », C4).
 
 Le chargement peuple ensuite, dans l'ordre :
 
 1. `DatedParameter` (fichiers `point_indice`, `taux_cas_civil`, `taux_cas_militaire`,
-   `taux_cnracl`) — FK `source`, FK `parameterSet` ;
+   `taux_cnracl`, et depuis #49 `taux_autres_cotisations_fpe`,
+   `taux_autres_cotisations_fph`, `taux_rafp`) — FK `source`, FK `parameterSet` ;
 2. `Grille` (`grille_pe`, `grille_isg`) — FK `body` (Corps), `source`, `parameterSet` ;
    chaque grille est indexée en mémoire par la clé `{body_code}_{grade}_{version}` ;
 3. `Echelon` (`echelon_pe`, `echelon_isg`) — rattaché à sa `Grille` par la colonne
@@ -521,8 +525,8 @@ Le chargement peuple ensuite, dans l'ordre :
    (« grille inconnue ») ;
 4. `PrimeRate` (`taux_primes`) — FK `body` (Corps), `source`, `parameterSet`.
 
-Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 7, `grille` = 2,
-`echelon` = 22, `prime_rate` = 2, `source` = 8, `corps` = 2.
+Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
+`echelon` = 22, `prime_rate` = 2, `source` = 11, `corps` = 2.
 
 ### Résolution des FK et référentiels
 

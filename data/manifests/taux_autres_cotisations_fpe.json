@@ -1,0 +1,9 @@
+{
+  "raw": "taux_autres_cotisations_fpe.json",
+  "retrieved_at": "2026-10-30",
+  "script": "sources.taux_autres_cotisations_fpe",
+  "script_version": "1",
+  "sha256": "0460a18cdf648f5d5155e6763b4dd67fe767293d0cdad35994c0aeca043a987f",
+  "source": "Cotisations employeur hors retraite — FPE/État 2026 (URSSAF secteur public / CDG67)",
+  "url": "https://www.urssaf.fr/accueil/employeur/secteur-public.html"
+}

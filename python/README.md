@@ -12,8 +12,13 @@ En ligne de commande, depuis `python/` : `PYTHONPATH=src uv run python -m source
 - `taux_cas_civil` — taux de cotisation employeur CAS Pensions, versant civil, unité `PCT_TIB` (schéma `parametre_date`). Deux périodes datées : 78.28 en 2025, 82.28 à partir du 2026-01-01 (fin ouverte).
 - `taux_cas_militaire` — taux de cotisation employeur CAS Pensions, versant militaire, unité `PCT_TIB` (schéma `parametre_date`). Une période : 126.07 à partir du 2025-01-01 (fin ouverte).
 - `taux_cnracl` — taux de cotisation employeur CNRACL, unité `PCT_TIB` (schéma `parametre_date`). Trajectoire 2026→2028 : 37.65, 40.65, puis 43.65 à partir du 2028-01-01 (fin ouverte).
+- `taux_autres_cotisations_fpe` — cotisations employeur hors retraite, versant FPE/État, unité `PCT_TIB` (schéma `parametre_date`). Agrégat 16.07 à partir du 2026-01-01 (fin ouverte), source `cotisations-fpe-2026`.
+- `taux_autres_cotisations_fph` — cotisations employeur hors retraite, versant FPH/CNRACL, unité `PCT_TIB` (schéma `parametre_date`). Agrégat 17.13 à partir du 2026-01-01 (fin ouverte), source `cotisations-fph-2026`.
+- `taux_rafp` — retraite additionnelle de la fonction publique, part employeur, unité `PCT_TIB` (schéma `parametre_date`). 5.00 à partir du 2026-01-01 (fin ouverte), source `rafp-2026`.
 
 Le versant civil et le versant militaire du CAS Pensions sont des sources distinctes (publications et périmètres différents), d'où un CSV par versant.
+
+Les deux taux « autres cotisations » (`taux_autres_cotisations_fpe`, `taux_autres_cotisations_fph`) sont des **agrégats** : la valeur stockée est la somme des cotisations employeur hors retraite et hors RAFP du versant. La composition ligne à ligne, les sources officielles et l'exclusion du versement mobilité sont documentées dans `../data/catalogue_autres_cotisations.md`. La publication de référence CDG67 « Valeurs de paie au 1er janvier 2026 » est archivée dans `../data/sources/publications/cdg67-valeurs-paie-2026.pdf`.
 
 Grilles indiciaires des deux profils V1, au grade d'entrée de chaque corps (une grille datée + ses échelons par corps) :
 
@@ -56,12 +61,13 @@ Invariants appliqués :
 - **Périodes sans chevauchement** — les périodes d'effet d'une même clé ne se chevauchent pas : `parametre_date` groupé par `key`, `grille` par `body_code` + `grade`. Période `[start_date ; end_date]` bornes incluses, `end_date` vide = ouverte (∞) ; l'adjacence (fin le jour J, début le jour J+1) est autorisée.
 - **Valeurs dans les bornes** — chaque valeur soumise à bornes reste dans `[min ; max]` défini dans `coherence.toml` (voir ci-dessous).
 - **Source renseignée** — toute ligne d'un schéma portant une colonne `source` a une `source` non blanche (après `strip`). La présence de la colonne est dérivée du schéma livré, pas d'une liste codée en dur ; les schémas sans colonne `source` (ex. `echelon`, `couts_pap`) ne sont pas concernés.
+- **Source déclarée** — tout code `source` non blanc d'un CSV doit être déclaré dans `data/sources.json` (pas de source silencieuse) ; un code absent du référentiel est refusé. Les sources blanches relèvent de l'invariant précédent et ne sont pas signalées deux fois. Référentiel absent (`sources.json` manquant) → contrôle neutralisé, comme pour la liste blanche des bornes. La correspondance fine code ↔ `fileHash` ↔ brut reste vérifiée à l'import côté Symfony (`ManifestVerifier`).
 
 ### `data/coherence.toml` — liste blanche des bornes
 
 Les bornes de l'invariant « valeurs dans les bornes » sont versionnées dans `data/coherence.toml`. C'est une **liste blanche** : seules les clés et schémas listés sont contrôlés ; une clé `parametre_date` absente (ou tout autre schéma) n'est pas bornée. Fichier absent = aucune borne appliquée.
 
-- `[parametre_date.key]` — une table inline `{ min, max }` par valeur de la colonne `key` (la valeur contrôlée est la colonne `value`). Ex. `taux_cas_civil`, `taux_cas_militaire`, `taux_cnracl` en `[0 ; 200]` (admet les taux > 100 %, p. ex. 126,07 du versant militaire), `point_indice` avec `min = 0` seul.
+- `[parametre_date.key]` — une table inline `{ min, max }` par valeur de la colonne `key` (la valeur contrôlée est la colonne `value`). Ex. `taux_cas_civil`, `taux_cas_militaire`, `taux_cnracl` en `[0 ; 200]` (admet les taux > 100 %, p. ex. 126,07 du versant militaire) ; `taux_autres_cotisations_fpe`, `taux_autres_cotisations_fph`, `taux_rafp` en `[0 ; 100]` ; `point_indice` avec `min = 0` seul.
 - `[taux_primes]` — une borne `value = { min, max }` appliquée à la colonne `value` de tout fichier du schéma `taux_primes` (ratio du TIB, `[0 ; 1]`).
 
 Les bornes sont **incluses**. Une borne peut être omise : `min` seul = pas de plafond, `max` seul = pas de plancher.
