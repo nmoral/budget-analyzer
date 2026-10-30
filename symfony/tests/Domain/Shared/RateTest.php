@@ -30,6 +30,18 @@ final class RateTest extends TestCase
         self::assertFalse(Rate::fromPercentage('82.28')->equals(Rate::fromPercentage('37.65')));
     }
 
+    public function testAcceptsTrailingZerosFromDecimalStorage(): void
+    {
+        // Les paramètres datés sont stockés en DECIMAL(14,6) : la valeur relue
+        // porte des zéros de fin (« 82.280000 »). Elle doit donner un taux égal
+        // à « 82.28 » et une représentation canonique sans zéros superflus.
+        $rate = Rate::fromPercentage('82.280000');
+
+        self::assertSame('82.28', $rate->percentage());
+        self::assertSame('0.8228', $rate->ratio());
+        self::assertTrue($rate->equals(Rate::fromPercentage('82.28')));
+    }
+
     public function testPreservesExactDecimalWithoutFloatDrift(): void
     {
         // C2.2 : « 37.65 » -> pourcentage 37,65 exact, ratio 0,3765 (pas de dérive float).

@@ -20,6 +20,11 @@ services:
             - '../src/Domain/Profile/Profile.php'
             - '../src/Domain/Rule/ResolvedRules.php'
 
+    # Port de domaine « taux daté » (#13) résolu vers l'adapter d'infrastructure
+    # au-dessus des paramètres datés (#04) : toute injection de `DatedRateProvider`
+    # reçoit l'adapter, sans que le domaine connaisse l'infrastructure.
+    App\Domain\Shared\DatedRateProvider: '@App\Infrastructure\Rate\DatedRateProviderAdapter'
+
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du
     # tag). La sélection passe donc par le locator, jamais par un `match`/`if` sur un
