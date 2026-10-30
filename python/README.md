@@ -6,7 +6,7 @@ Un script par source, idempotent, rejouable depuis le brut archivé. Produit les
 
 Chaque source a un script `src/sources/<nom>.py` (fonction `run()`), un brut versionné `data/sources/<nom>.json`, un CSV `data/data/<nom>.csv` et un manifeste `data/manifests/<nom>.json`.
 
-En ligne de commande, depuis `python/` : `PYTHONPATH=src uv run python -m sources.<nom>` exécute `run()` et imprime le chemin du CSV écrit (le `pythonpath=["src"]` du `pyproject` ne vaut que pour pytest).
+En ligne de commande, depuis `python/` : `PYTHONPATH=src uv run python -m sources.<nom>` exécute `run()` et imprime le chemin du CSV écrit (le `pythonpath=["src"]` du `pyproject` ne vaut que pour pytest). Depuis la racine du dépôt, la cible `make generate KEY=<clé>` lance cette même commande.
 
 - `point_indice` — valeur du point d'indice de la fonction publique (schéma `parametre_date`).
 - `taux_cas_civil` — taux de cotisation employeur CAS Pensions, versant civil, unité `PCT_TIB` (schéma `parametre_date`). Deux périodes datées : 78.28 en 2025, 82.28 à partir du 2026-01-01 (fin ouverte).

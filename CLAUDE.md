@@ -20,6 +20,17 @@ make qa-python     # chaîne Python complète (voir ci-dessous)
 make qa-symfony    # chaîne PHP complète, dans le conteneur (voir ci-dessous)
 ```
 
+## Générer un jeu de données
+
+```sh
+make generate KEY=<clé>   # régénère data/data/<clé>.csv + data/manifests/<clé>.json
+```
+
+Depuis la racine du dépôt, `make generate KEY=<clé>` exécute `sources.<clé>` (le
+`package = false` du `pyproject` impose `PYTHONPATH=src`, posé par la cible) et
+imprime le chemin du CSV écrit. Sans `KEY` → exit 2 + message d'usage ; clé inconnue
+→ échec Python (`ModuleNotFoundError`). Ex. `make generate KEY=taux_rafp`.
+
 `make qa-symfony` build l'image `symfony`, démarre Postgres (`up -d --wait postgres`,
 nécessaire aux tests d'intégration DBAL), puis exécute **dans le conteneur**, dans
 l'ordre, en échouant au premier garde-fou KO :
