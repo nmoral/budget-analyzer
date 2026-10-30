@@ -19,6 +19,8 @@ services:
             # par le moteur et l'adapter, jamais injectés comme services.
             - '../src/Domain/Profile/Profile.php'
             - '../src/Domain/Rule/ResolvedRules.php'
+            - '../src/Domain/Cost/AgentSituation.php'
+            - '../src/Domain/Cost/AnnualCost.php'
 
     # Port de domaine « taux daté » (#13) résolu vers l'adapter d'infrastructure
     # au-dessus des paramètres datés (#04) : toute injection de `DatedRateProvider`
@@ -119,6 +121,9 @@ when@test:
         # publics en test pour les récupérer depuis le conteneur et prouver le
         # câblage de bout en bout (port de domaine → adapter d'infrastructure).
         App\Domain\Cost\IndexedSalaryCalculator:
+            autowire: true
+            public: true
+        App\Domain\Cost\AnnualCostCalculator:
             autowire: true
             public: true
         App\Domain\Shared\PrimeRateProvider:

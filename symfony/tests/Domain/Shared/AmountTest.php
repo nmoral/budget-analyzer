@@ -64,6 +64,26 @@ final class AmountTest extends TestCase
         self::assertFalse(Amount::fromString('23333.993')->equals(Amount::fromString('23333.993001')));
     }
 
+    public function testMinReturnsSmallerAmount(): void
+    {
+        // C6 : assiette RAFP plafonnée = min(TIB·p, 0,2·TIB).
+        $tibP = Amount::fromString('4900.138530');
+        $cap = Amount::fromString('4666.798600');
+
+        self::assertSame('4666.798600', $tibP->min($cap)->toString());
+        self::assertSame('4666.798600', $cap->min($tibP)->toString());
+    }
+
+    public function testMinAtEqualityReturnsEqualValue(): void
+    {
+        // C6.2 : à la limite, TIB·p = 0,2·TIB → l'une ou l'autre, de même valeur.
+        $a = Amount::fromString('4666.798600');
+        $b = Amount::fromString('4666.798600');
+
+        self::assertSame('4666.798600', $a->min($b)->toString());
+        self::assertSame('4666.798600', $b->min($a)->toString());
+    }
+
     public function testCanonicalRepresentation(): void
     {
         self::assertSame('12.000000', Amount::fromString('12')->toString());

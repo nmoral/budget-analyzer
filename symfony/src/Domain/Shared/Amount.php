@@ -79,6 +79,15 @@ final class Amount
     }
 
     /**
+     * Le plus petit des deux montants (par valeur). À valeur égale, renvoie
+     * `$this`. Sert au plafonnement de l'assiette RAFP (C6).
+     */
+    public function min(self $other): self
+    {
+        return bccomp($this->value, $other->value, self::SCALE) <= 0 ? $this : $other;
+    }
+
+    /**
      * Représentation canonique à 6 décimales (ex. « 23333.993000 »).
      */
     public function toString(): string
