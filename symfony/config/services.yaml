@@ -25,6 +25,16 @@ services:
     # reçoit l'adapter, sans que le domaine connaisse l'infrastructure.
     App\Domain\Shared\DatedRateProvider: '@App\Infrastructure\Rate\DatedRateProviderAdapter'
 
+    # Port de domaine « montant daté » (#14) résolu vers l'adapter d'infrastructure
+    # au-dessus des paramètres datés : le TIB lit ainsi le point d'indice en vigueur
+    # à D sans que le domaine connaisse l'infrastructure.
+    App\Domain\Shared\DatedAmountProvider: '@App\Infrastructure\Amount\DatedAmountProviderAdapter'
+
+    # Port de domaine « taux de primes » (#14) résolu vers l'adapter d'infrastructure
+    # au-dessus des taux de primes importés (dernière observation <= année de D,
+    # non-fallback prioritaire, scopée au jeu de paramètres), avec drapeau fallback.
+    App\Domain\Shared\PrimeRateProvider: '@App\Infrastructure\Prime\PrimeRateProviderAdapter'
+
     # Règles de retraite réelles (#13), taggées dans leur famille avec leur code
     # métier comme clé d'index du locator. Chacune connaît sa clé de paramètre daté
     # (`taux_cas_civil` / `taux_cnracl`) et reçoit le port `DatedRateProvider`
@@ -87,4 +97,14 @@ when@test:
             public: true
         App\Infrastructure\Repository\PrimeRateRepository:
             autowire: true
+            public: true
+
+        # Composant de domaine « TIB » (#14) et port « taux de primes » rendus
+        # publics en test pour les récupérer depuis le conteneur et prouver le
+        # câblage de bout en bout (port de domaine → adapter d'infrastructure).
+        App\Domain\Cost\IndexedSalaryCalculator:
+            autowire: true
+            public: true
+        App\Domain\Shared\PrimeRateProvider:
+            alias: App\Infrastructure\Prime\PrimeRateProviderAdapter
             public: true
