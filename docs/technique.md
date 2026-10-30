@@ -58,8 +58,20 @@ Quatre familles de règles sont modélisées, chacune par une interface sous
 interface Rule { public function code(): string; }
 ```
 
-Les signatures de calcul (coût annuel, horizons…) ne sont **pas** posées ici ; elles
-relèvent de #13→#18 (décision « contrat d'interface minimal »).
+Le contrat commun `Rule` reste minimal (identité de sélection). Les **signatures de
+calcul** sont ajoutées par famille au fil des issues #13→#18. En #13, `RetirementRule`
+reçoit sa première signature de calcul :
+
+```php
+interface RetirementRule extends Rule
+{
+    public function employerRate(\DateTimeImmutable $date): Rate; // #13
+}
+```
+
+C'est le fait précédent (contrat + value object + port) repris par les familles
+suivantes. Le détail de l'implémentation retraite est décrit à la section « Famille
+retraite » plus bas.
 
 ### Résolution par service locator indexé par code
 
@@ -76,9 +88,14 @@ Le locator concret est construit par Symfony dans `config/services.yaml` via
 règle = déclarer un service implémentant l'interface de la famille, taggé
 `app.rule.<famille>` avec son `code` ; elle devient résolvable **sans toucher au moteur
 ni aux résolveurs**. Les résolveurs sont déclarés `public: true` (points d'entrée du
-moteur, consommés par #13→#18). Aucune implémentation métier n'est livrée en #12 : la
-découvrabilité est prouvée par des implémentations de **test** (`tests/Fixtures/Rule/`,
-codes `CAS_CIVIL`, `X_TEST`, `IFSE`, `ETAT_P140`, `ANNEE_1`) taggées sous `when@test`.
+moteur, consommés par #13→#18). Les **règles réelles de la famille retraite** sont
+livrées en #13 (`CasCivilRule`, `CnraclRule`, taggées dans le bloc `services`
+principal — voir « Famille retraite »). Pour les autres familles, aucune
+implémentation métier n'est encore livrée : la découvrabilité y est prouvée par des
+implémentations de **test** (`tests/Fixtures/Rule/`, codes `X_TEST`, `IFSE`,
+`ETAT_P140`, `ANNEE_1`) taggées sous `when@test`. La fixture de test `CAS_CIVIL` a été
+retirée en #13 (collision de code avec la règle réelle, le locator étant indexé par
+code) ; `X_TEST` est conservée comme preuve d'enfichage.
 
 ### Profil de domaine pur, adapter et `RuleEngine`
 
@@ -111,6 +128,59 @@ La suite du moteur est passée sous **Infection** (mutation testing), scopé à
 `src/Domain` (`symfony/infection.json.dist`, `minMsi`/`minCoveredMsi` = 85), bloquant
 dans `make qa-symfony`. Le driver de couverture **pcov** est embarqué dans l'image
 (`symfony/Dockerfile`). Seuils et outillage font foi dans `CLAUDE.md`.
+
+## Famille retraite : taux employeur daté (#13)
+
+Première famille de règles réelles. Elle expose le **taux employeur de retraite à une
+date** via la signature `RetirementRule::employerRate(\DateTimeImmutable): Rate`. Tout
+le domaine reste pur (frontière Deptrac) ; la valeur vient des paramètres datés (#04)
+par un **port** de domaine et son **adapter** d'infrastructure.
+
+### Value object `Rate` (`App\Domain\Shared`)
+
+`Rate` représente un taux exprimé en pourcentage. Il est **décimal-safe** : la valeur
+est stockée en interne comme un **entier d'échelle** (pourcentage × 10^6), jamais comme
+un `float` — aucune dérive de précision. L'échelle décimale fixe (6 décimales) est
+alignée sur le `DECIMAL(14,6)` des paramètres datés.
+
+- `Rate::fromPercentage(string)` construit depuis une chaîne décimale (ex. `'82.28'`) ;
+  une chaîne non décimale lève `\InvalidArgumentException` (validation de **format**,
+  pas de plage). Au-delà de 6 décimales, la partie fractionnaire est tronquée (sans
+  erreur ni arrondi ; sans impact car la source est `DECIMAL(14,6)`).
+- `percentage()` renvoie la chaîne décimale canonique sans zéros de fin (`'82.28'`) ;
+  `ratio()` renvoie pourcentage / 100 (`'0.8228'`), dérivé du même entier d'échelle.
+- `equals()` : **égalité par valeur**.
+- **Porteur neutre** : aucune validation de plage (la cohérence métier 0–200 reste à
+  l'import #04).
+
+### Port `DatedRateProvider` et adapter
+
+- **Port de domaine** `App\Domain\Shared\DatedRateProvider` :
+  `rateAt(string $key, \DateTimeImmutable $date): Rate`. Générique par clé, réutilisable
+  par #14→#18. PHP pur, aucune dépendance infra.
+- **Adapter d'infrastructure** `App\Infrastructure\Rate\DatedRateProviderAdapter` :
+  lit `DatedParameterRepository::valueInEffectAt($key, $date)` (dernier jeu importé par
+  défaut) et mappe la valeur vers `Rate` via `Rate::fromPercentage`. Si aucun paramètre
+  ne couvre la date, lève `App\Domain\Shared\MissingDatedRateException` (pas de valeur
+  par défaut silencieuse).
+- **Exception** `MissingDatedRateException` (domaine, `\DomainException`) : construite
+  par `forKeyAndDate()`, le message **et** les accesseurs `key()` / `date()` nomment la
+  clé et la date.
+- **Câblage** (`config/services.yaml`) : alias du port vers l'adapter
+  (`App\Domain\Shared\DatedRateProvider: '@App\Infrastructure\Rate\DatedRateProviderAdapter'`),
+  de sorte que toute injection du port reçoive l'adapter sans que le domaine connaisse
+  l'infra.
+
+### Règles réelles
+
+`App\Domain\Rule\Retirement\CasCivilRule` (code `CAS_CIVIL`, clé `taux_cas_civil`) et
+`CnraclRule` (code `CNRACL`, clé `taux_cnracl`) implémentent `RetirementRule`. Chaque
+règle **connaît sa clé** de paramètre daté en dur (une clé, pas une valeur) et reçoit
+le port `DatedRateProvider` ; `employerRate($date)` délègue à `rateAt(clé, $date)` —
+**aucun taux en dur**. Les deux sont taggées `app.rule.retirement` (attribut `code`)
+dans le **bloc `services` principal** de `config/services.yaml`, donc résolues par le
+profil via le moteur #12, et couvertes par Infection (règles pures : elles dépendent du
+port de domaine, pas de l'adapter).
 
 ## Kernel et amorçage
 
