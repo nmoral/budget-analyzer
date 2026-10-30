@@ -62,6 +62,33 @@ final class RateTest extends TestCase
         self::assertFalse($negative->equals(Rate::fromPercentage('82.28')));
     }
 
+    public function testBuildsFromRatio(): void
+    {
+        // Taux de primes : ratio « 0.21 » = 21 %.
+        $rate = Rate::fromRatio('0.21');
+
+        self::assertSame('21', $rate->percentage());
+        self::assertSame('0.21', $rate->ratio());
+        self::assertTrue($rate->equals(Rate::fromPercentage('21')));
+    }
+
+    public function testBuildsFromRatioWithFullPrecisionAndSign(): void
+    {
+        // Le ratio porte deux décimales de plus que le pourcentage (échelle 8).
+        self::assertSame('82.123456', Rate::fromRatio('0.82123456')->percentage());
+        self::assertSame('-33', Rate::fromRatio('-0.33')->percentage());
+        self::assertSame('150', Rate::fromRatio('1.5')->percentage());
+        self::assertSame('0.33', Rate::fromRatio('0.330000')->ratio());
+    }
+
+    public function testRejectsInvalidRatio(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('"0,21"');
+
+        Rate::fromRatio('0,21');
+    }
+
     public function testPreservesExactDecimalWithoutFloatDrift(): void
     {
         // C2.2 : « 37.65 » -> pourcentage 37,65 exact, ratio 0,3765 (pas de dérive float).

@@ -32,15 +32,35 @@ final class Rate
      */
     public static function fromPercentage(string $percentage): self
     {
-        if (preg_match('/^(-?)([0-9]+)(?:\.([0-9]+))?$/', $percentage, $matches) !== 1) {
+        return self::fromDecimal($percentage, self::SCALE, 'Pourcentage');
+    }
+
+    /**
+     * Construit un taux depuis une chaîne décimale représentant un ratio
+     * (ex. « 0.21 » pour 21 %). Le ratio porte deux décimales de plus que le
+     * pourcentage : il est lu à l'échelle SCALE+2.
+     */
+    public static function fromRatio(string $ratio): self
+    {
+        return self::fromDecimal($ratio, self::SCALE + 2, 'Ratio');
+    }
+
+    /**
+     * Convertit une chaîne décimale en entier d'échelle, en lisant `$scale`
+     * décimales (les décimales au-delà sont tronquées).
+     */
+    private static function fromDecimal(string $decimal, int $scale, string $label): self
+    {
+        if (preg_match('/^(-?)([0-9]+)(?:\.([0-9]+))?$/', $decimal, $matches) !== 1) {
             throw new \InvalidArgumentException(sprintf(
-                'Pourcentage décimal invalide : "%s".',
-                $percentage,
+                '%s décimal invalide : "%s".',
+                $label,
+                $decimal,
             ));
         }
 
         $integerPart = $matches[2];
-        $fractionalPart = substr(str_pad($matches[3] ?? '', self::SCALE, '0'), 0, self::SCALE);
+        $fractionalPart = substr(str_pad($matches[3] ?? '', $scale, '0'), 0, $scale);
 
         $scaled = (int) ($integerPart . $fractionalPart);
 
