@@ -112,21 +112,25 @@ précisé, c'est le **dernier jeu importé** qui s'applique. Un même état de l
 réglementation peut ainsi coexister en plusieurs versions sans interférence.
 
 **Taux de primes pour une année** : le taux retenu pour un corps et une année Y est
-celui de la **dernière année d'observation inférieure ou égale à Y**. À année égale,
+celui de la **dernière année d'observation inférieure ou égale à Y**, **dans le
+périmètre d'un jeu de paramètres** (à défaut, le dernier jeu importé). À année égale,
 une valeur observée directement l'emporte sur une valeur de repli (`fallback`). Le
 caractère de repli de la valeur retenue est signalé. S'il n'existe aucune observation
-antérieure ou égale à Y, le résultat est vide.
+antérieure ou égale à Y dans le jeu, le résultat est vide — sans repli silencieux sur
+un autre jeu.
 
 ## Ce qui n'est pas encore disponible
 
 Les capacités métier arrivent dans des livraisons ultérieures et ne sont pas
 présentes aujourd'hui :
 
-- le calcul du **coût complet** des recrutements et la plupart des **règles métier
-  réelles** (indemnitaire, financeur, vues de coût) — l'**ossature** du moteur est
-  posée (issue #12, voir ci-dessous) et les premières règles réelles de la famille
-  retraite sont livrées (issue #13, voir « Règles de retraite » ci-dessous), mais les
-  autres familles arrivent aux issues #14 à #18 ;
+- le calcul du **coût complet** d'un scénario de recrutement (volumes, étalement,
+  cohorte, horizons) et plusieurs **règles métier réelles** (indemnitaire au sens du
+  régime de primes, financeur, vues de coût) — l'**ossature** du moteur est posée
+  (issue #12, voir ci-dessous), les premières règles réelles de la famille retraite
+  sont livrées (issue #13, voir « Règles de retraite » ci-dessous) et le **coût
+  employeur annuel d'un agent** est désormais calculé (issue #14, voir ci-dessous),
+  mais les apports suivants arrivent aux issues #15 à #18 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
@@ -151,8 +155,13 @@ et code fautif) plutôt que de l'ignorer silencieusement.
 
 À ce stade, cette organisation est **en place**, mais seule la famille retraite porte
 des règles réelles (voir ci-dessous) ; les autres familles n'ont pas encore de règle
-de calcul livrée, et aucun **coût complet** n'est encore produit (voir la liste
-ci-dessus).
+de calcul livrée, et aucun **coût complet** de scénario n'est encore produit (voir la
+liste ci-dessus).
+
+L'issue #14 ajoute par ailleurs une **famille de règles « autres cotisations »**,
+indexée par **versant** (FPE/FPH) et dédiée à la formule de coût annuel d'un agent (voir
+« Coût employeur annuel d'un agent titulaire » ci-dessous). Comme les autres familles,
+un versant sans règle correspondante provoque une **erreur explicite**.
 
 ### Règles de retraite (taux employeur daté)
 
@@ -177,3 +186,52 @@ coût complète d'un recrutement (qui combinera ce taux avec le traitement et le
 termes — livraisons ultérieures). Les régimes **CAS militaire** et **IRCANTEC** ne sont
 pas encore implémentés. Les valeurs réglementaires datées (import) ne sont pas
 modifiées par cette famille : elle ne fait que les consommer.
+
+### Coût employeur annuel d'un agent titulaire
+
+Le simulateur calcule désormais le **coût employeur annuel d'un agent titulaire** à une
+**date simulée** donnée. Le résultat est **décomposé en quatre termes** plus leur
+total, afin de rendre lisible chaque composante de la dépense :
+
+1. **Traitement + primes** : le traitement indiciaire brut annuel (TIB) augmenté des
+   primes du corps. Le TIB est l'**indice majoré** de l'agent multiplié par la valeur
+   annuelle du **point d'indice** en vigueur à la date. Les primes sont exprimées par un
+   **taux de primes** `p` propre au corps (voir « Taux de primes pour une année »).
+2. **Retraite** : la cotisation employeur de retraite, soit le TIB multiplié par le
+   **taux employeur du régime** de l'agent à la date (règle de la famille retraite,
+   `CAS_CIVIL` ou `CNRACL`).
+3. **Autres cotisations** (`r_autres`) : les cotisations employeur hors retraite,
+   appliquées au traitement augmenté des primes, à un **taux dépendant du versant** de
+   l'agent — fonction publique d'État (**FPE**) ou hospitalière (**FPH**).
+4. **RAFP** (retraite additionnelle de la fonction publique) : cotisation assise sur les
+   primes mais **plafonnée** — l'assiette est le plus petit de « primes » (TIB·p) et de
+   **20 % du TIB** —, multipliée par le taux RAFP.
+
+Le **total** est la somme exacte des quatre termes. Le calcul est **reproductible** (à
+situation et date identiques, résultat identique au centime près, sans dérive de
+précision) et ne comporte **aucun arrondi d'affichage** à ce stade (il restitue la
+pleine précision ; la présentation arrondie viendra avec l'API et le front, #19/#20).
+Les termes hors retraite sont **indépendants** du taux de retraite : faire varier la
+date (donc le taux de retraite) ne modifie que le terme retraite.
+
+La **situation de l'agent** prise en entrée décrit son corps, son versant, son indice
+majoré et son régime de retraite. Elle est aujourd'hui **composée à la main** ; sa
+dérivation automatique depuis un profil de simulation arrivera plus tard (#15).
+
+**Erreurs explicites, jamais de valeur par défaut** : si une valeur réglementaire
+nécessaire manque à la date demandée (point d'indice, taux de primes, taux d'un régime),
+ou si le régime ou le versant est inconnu, le système **signale une erreur explicite**
+plutôt que de retourner un résultat approché.
+
+**Limite connue — données réelles manquantes** : les **taux « autres cotisations »**
+(`r_autres`, FPE/FPH) et le **taux RAFP** ne sont **pas encore présents dans le dépôt de
+données** (leur sourcing est traité par l'issue #49). Tant que ces valeurs manquent, les
+termes 3 et 4 **ne peuvent pas être calculés** et le système signale l'absence de donnée.
+La formule et ses garde-fous sont en place et vérifiés par les tests (avec des taux
+injectés) ; le calcul complet sur données réelles sera possible une fois #49 livrée.
+
+**Hors de ce périmètre** : les **contractuels** (formule propre, hors V1), les **vues de
+coût** alternatives de la retraite (#18), le **coût d'un scénario** complet (volumes,
+étalement, cohorte, horizons — #15 à #17) et l'**arrondi d'affichage** (#19/#20). Ce
+calcul n'est encore exposé ni par une API ni par un écran : il n'est exercé que par les
+tests.

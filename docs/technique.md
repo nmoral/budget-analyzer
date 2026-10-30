@@ -143,10 +143,14 @@ est stockée en interne comme un **entier d'échelle** (pourcentage × 10^6), ja
 un `float` — aucune dérive de précision. L'échelle décimale fixe (6 décimales) est
 alignée sur le `DECIMAL(14,6)` des paramètres datés.
 
-- `Rate::fromPercentage(string)` construit depuis une chaîne décimale (ex. `'82.28'`) ;
-  une chaîne non décimale lève `\InvalidArgumentException` (validation de **format**,
-  pas de plage). Au-delà de 6 décimales, la partie fractionnaire est tronquée (sans
-  erreur ni arrondi ; sans impact car la source est `DECIMAL(14,6)`).
+- `Rate::fromPercentage(string)` construit depuis une chaîne décimale de pourcentage
+  (ex. `'82.28'`) ; une chaîne non décimale lève `\InvalidArgumentException` (validation
+  de **format**, pas de plage). Au-delà de 6 décimales, la partie fractionnaire est
+  tronquée (sans erreur ni arrondi ; sans impact car la source est `DECIMAL(14,6)`).
+- `Rate::fromRatio(string)` (#14) construit depuis une chaîne décimale de **ratio**
+  (ex. `'0.21'` pour 21 %) : le ratio porte deux décimales de plus que le pourcentage,
+  il est lu à l'échelle SCALE+2 (au-delà, tronqué). Sert à mapper un taux de primes
+  stocké comme ratio vers un `Rate`.
 - `percentage()` renvoie la chaîne décimale canonique sans zéros de fin (`'82.28'`) ;
   `ratio()` renvoie pourcentage / 100 (`'0.8228'`), dérivé du même entier d'échelle.
 - `equals()` : **égalité par valeur**.
@@ -181,6 +185,121 @@ le port `DatedRateProvider` ; `employerRate($date)` délègue à `rateAt(clé, $
 dans le **bloc `services` principal** de `config/services.yaml`, donc résolues par le
 profil via le moteur #12, et couvertes par Infection (règles pures : elles dépendent du
 port de domaine, pas de l'adapter).
+
+## Coût annuel d'un agent titulaire (#14)
+
+Le domaine assemble le **coût employeur annuel** d'un agent titulaire à une date
+simulée `D`, décomposé en quatre termes :
+
+```
+C = TIB·(1+p) + TIB·r_retraite + TIB·(1+p)·r_autres + min(TIB·p, 0,2·TIB)·r_RAFP
+```
+
+Tout vit sous `src/Domain/Cost/` (PHP pur, frontière Deptrac) ; les valeurs datées
+viennent des paramètres importés par des **ports de domaine** et leurs **adapters**
+d'infrastructure. Le calcul est **décimal-safe et reproductible** (aucun float ;
+deux calculs identiques donnent des termes égaux).
+
+### Montant décimal-safe : value object `Amount` (`App\Domain\Shared`)
+
+`Amount` est un value object de domaine pur représentant un montant décimal à
+**échelle fixe 6 décimales** (alignée sur le `DECIMAL(14,6)` des paramètres datés),
+toute l'arithmétique passant par **bcmath** (extension embarquée dans l'image, cf.
+« Docker »). Aucun float n'intervient.
+
+- `fromString(string)` : construit depuis une chaîne décimale à point ; une entrée
+  non décimale (ex. `"12,5"`, exposant, signe `+`) lève `\InvalidArgumentException`.
+  Au-delà de 6 décimales, l'entrée est arrondie half-up.
+- `multipliedByRate(Rate)` : produit par un taux, **arrondi à 6 décimales half-up**
+  (demi s'éloignant de zéro) — le produit intermédiaire est calculé à l'échelle
+  `SCALE + SCALE + 2` avant arrondi.
+- `multipliedByIndex(int)` : produit par un indice entier (ex. indice majoré), exact.
+- `plus(Amount)` : somme **exacte** (aucun arrondi supplémentaire).
+- `min(Amount)` : le plus petit des deux montants (plafonnement de l'assiette RAFP).
+- `equals(Amount)` : égalité par valeur ; `toString()` : forme canonique à 6 décimales.
+
+**Règle d'arrondi d'ensemble** : chaque produit est arrondi half-up à 6 décimales,
+mais le total est la **somme exacte** des quatre termes — aucun arrondi métier du
+résultat (l'arrondi d'affichage relève de #19/#20).
+
+### Ports et adapters des valeurs datées
+
+- **`DatedAmountProvider`** (port de domaine) : `amountAt(string $key, DateTimeImmutable
+  $date): Amount`. Adapter `App\Infrastructure\Amount\DatedAmountProviderAdapter` au-dessus
+  de `DatedParameterRepository::valueInEffectAt` (dernier jeu importé) ; lève
+  `MissingDatedAmountException` si aucun paramètre ne couvre la date. Sert au TIB (clé
+  `point_indice`).
+- **`PrimeRateProvider`** (port de domaine) : `primeRateAt(string $bodyCode,
+  DateTimeImmutable $date): PrimeRateObservation`. `PrimeRateObservation` porte le `Rate`
+  et le **drapeau fallback** (transparence du calcul). Adapter
+  `App\Infrastructure\Prime\PrimeRateProviderAdapter` au-dessus de
+  `PrimeRateRepository::forYear(bodyCode, année de D)` (désormais scopé au jeu de
+  paramètres, cf. « Valeurs datées ») ; mappe la valeur stockée (ratio) via
+  `Rate::fromRatio` ; lève `MissingPrimeRateException` si aucune observation ne précède
+  la date.
+
+Les deux ports sont aliasés vers leur adapter dans `config/services.yaml`, de sorte
+qu'une injection du port reçoive l'adapter sans que le domaine connaisse l'infra.
+
+### Composants de la formule
+
+- **`IndexedSalaryCalculator`** : TIB = indice majoré × valeur annuelle du point
+  d'indice (`point_indice`) en vigueur à `D`, via `DatedAmountProvider`.
+- **Famille « autres cotisations » (r_autres)** : **nouvelle famille de règles
+  enfichables** `App\Domain\Rule\OtherContributions`, indexée par **versant**, découverte
+  par le tag `app.rule.other_contributions` (attribut `code` = versant). Deux règles
+  réelles : `FpeOtherContributionsRule` (code `FPE`, clé `taux_autres_cotisations_fpe`)
+  et `FphOtherContributionsRule` (code `FPH`, clé `taux_autres_cotisations_fph`). Chaque
+  règle expose `rate(DateTimeImmutable): Rate`, connaît sa clé en dur et lit le taux via
+  `DatedRateProvider` (aucun taux en dur). Le résolveur `OtherContributionsRuleResolver`
+  (dérivé de `AbstractRuleResolver`) lève `UnknownRuleCodeException` sur un versant sans
+  règle (ex. `FPT`).
+- **`RafpContributionCalculator`** : composant **fixe** (pas une famille enfichable) du
+  terme RAFP `min(TIB·p, 0,2·TIB)·r_RAFP` ; le plafond 20 % est une constante de la
+  formule portée par ce composant, le taux lu sous la clé `taux_rafp` via
+  `DatedRateProvider`.
+
+### Assemblage : `AnnualCostCalculator` et `AnnualCost`
+
+`AnnualCostCalculator::compute(AgentSituation $situation, DateTimeImmutable $date):
+AnnualCost` assemble les quatre termes :
+
+- **traitement + primes** = `TIB·(1+p)` ;
+- **retraite** = `TIB·r_retraite`, le taux venant de la règle du régime résolue par
+  `RetirementRuleResolver` (#13) ;
+- **autres cotisations** = `TIB·(1+p)·r_autres`, règle résolue par versant ;
+- **RAFP** = terme plafonné ci-dessus.
+
+`AgentSituation` est un value object de domaine pur (code corps, versant, indice
+majoré, code régime de retraite), **construit à la main** ; l'adapter depuis le modèle
+de persistance du profil (`Profile`/`Echelon` Doctrine) est reporté à #15. `AnnualCost`
+est un value object pur exposant les quatre termes et leur **total** (somme exacte,
+calculée dans son constructeur). Les termes hors retraite sont indépendants du taux de
+retraite (prépare #18). Un code de régime inconnu lève `UnknownRuleCodeException` ;
+toute valeur datée absente à `D` lève l'exception explicite correspondante (pas de
+défaut silencieux). `AgentSituation` et `AnnualCost` sont **exclus de l'autowiring**
+(`config/services.yaml`) : ce sont des données pures, jamais injectées.
+
+### Limite : taux réels r_autres et r_RAFP non sourcés
+
+Les clés `taux_autres_cotisations_fpe` / `_fph` (r_autres) et `taux_rafp` (RAFP) sont
+**connues en dur** par leurs composants, mais **les valeurs réelles n'existent pas
+encore** dans le dépôt de données (sourcing reporté à **#49**). Tant que la donnée
+manque, ces composants **lèvent proprement** (`MissingDatedRateException`) à la date
+demandée, plutôt que d'utiliser un défaut. Le reste de la formule (TIB, p,
+r_retraite) fonctionne sur les données réelles ; les tests exercent la formule complète
+avec des taux injectés.
+
+### Câblage et tests
+
+Dans `config/services.yaml` : règles `FPE`/`FPH` taggées, résolveur
+`OtherContributionsRuleResolver` déclaré `public` avec son `!tagged_locator`, et les
+alias de ports `DatedAmountProvider` / `PrimeRateProvider`. Le calcul est un domaine
+PHP pur **exercé par les tests seuls** (aucune route ni commande) : tests unitaires
+purs (`tests/Domain/Cost/`, `tests/Domain/Shared/`) et tests d'intégration sur
+`budget_test` (`tests/Infrastructure/Persistence/`) prouvant le câblage port → adapter
+de bout en bout (`IndexedSalaryCalculator`, `AnnualCostCalculator` et le port de taux de
+primes sont rendus `public` sous `when@test`).
 
 ## Kernel et amorçage
 
@@ -268,10 +387,11 @@ Les accès « datés » sont des **services autonomes** de `src/Infrastructure/R
   Si aucun jeu n'existe, le résultat est `null`.
 - **Taux de primes « pour l'année Y »** (`PrimeRateRepository::forYear`) : dernier
   `observationYear ≤ Y` pour le corps ; à année égale, le tri `fallback ASC` fait
-  gagner la ligne non-fallback. L'entité renvoyée porte le drapeau `fallback`. Cette
-  méthode n'est **pas scopée à un jeu de paramètres** (le scope n'est pas requis par
-  #10 ; il pourra être ajouté si le moteur de calcul #12 l'exige). `null` si aucune
-  observation `≤ Y`.
+  gagner la ligne non-fallback. L'entité renvoyée porte le drapeau `fallback`. Depuis
+  #14, la méthode est **scopée à un jeu de paramètres** : elle prend un `ParameterSet`
+  optionnel (défaut : **dernier jeu importé** via `ParameterSetRepository::latest()`)
+  et ne retient que les observations de ce jeu — **pas de repli silencieux sur un autre
+  jeu**. `null` si aucun jeu n'existe ou aucune observation `≤ Y` dans le jeu.
 
 ### Tests et exécution
 
@@ -465,9 +585,11 @@ Le service `symfony` :
   démon Docker ne le crée pas lui-même en `root`.
 
 Le `Dockerfile` (base `php:8.4-cli`) installe les extensions `intl`, `pdo_pgsql`,
-`opcache`, copie Composer, crée l'utilisateur `app` (UID/GID hôte), puis — sous cet
-utilisateur — fait le `composer install` au build (couche de dépendances isolée) et un
-`composer dump-autoload --optimize` après copie du code.
+`opcache` et **`bcmath`** (arithmétique décimale exacte du value object de domaine
+`Amount`, #14), copie Composer, crée l'utilisateur `app` (UID/GID hôte), puis — sous
+cet utilisateur — fait le `composer install` au build (couche de dépendances isolée)
+et un `composer dump-autoload --optimize` après copie du code. Le driver de couverture
+`pcov` (mutation testing) y est également embarqué.
 
 ### Ports et `.env`
 
