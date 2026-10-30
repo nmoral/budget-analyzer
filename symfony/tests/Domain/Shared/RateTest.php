@@ -42,6 +42,26 @@ final class RateTest extends TestCase
         self::assertTrue($rate->equals(Rate::fromPercentage('82.28')));
     }
 
+    public function testZeroHasNoSign(): void
+    {
+        // Zéro n'est pas négatif : pas de signe parasite « -0 ».
+        $zero = Rate::fromPercentage('0');
+
+        self::assertSame('0', $zero->percentage());
+        self::assertSame('0', $zero->ratio());
+    }
+
+    public function testCarriesSignForNegativeValues(): void
+    {
+        // Porteur neutre (sans validation de plage) : une valeur négative garde
+        // son signe sur le pourcentage ET le ratio, et reste distincte de son opposé.
+        $negative = Rate::fromPercentage('-82.28');
+
+        self::assertSame('-82.28', $negative->percentage());
+        self::assertSame('-0.8228', $negative->ratio());
+        self::assertFalse($negative->equals(Rate::fromPercentage('82.28')));
+    }
+
     public function testPreservesExactDecimalWithoutFloatDrift(): void
     {
         // C2.2 : « 37.65 » -> pourcentage 37,65 exact, ratio 0,3765 (pas de dérive float).
