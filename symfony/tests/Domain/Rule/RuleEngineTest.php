@@ -14,7 +14,7 @@ use App\Domain\Rule\RuleEngine;
 use App\Tests\Fixtures\Rule\CostView\AnnualCostViewRule;
 use App\Tests\Fixtures\Rule\Funder\EtatFunderRule;
 use App\Tests\Fixtures\Rule\Indemnitary\IfseIndemnitaryRule;
-use App\Tests\Fixtures\Rule\Retirement\CasCivilRetirementRule;
+use App\Tests\Fixtures\Rule\Retirement\EnfichableRetirementRule;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -27,20 +27,22 @@ final class RuleEngineTest extends TestCase
 {
     public function testResolvesTheFourImplementationsFromPureProfileAndCostViewCode(): void
     {
-        // C5.1 : Profile pur (retraite CAS_CIVIL, indemnitaire IFSE, financeur
-        // ETAT_P140) + vue ANNEE_1 -> les 4 implémentations correspondantes.
+        // C5.1 : Profile pur (retraite X_TEST, indemnitaire IFSE, financeur
+        // ETAT_P140) + vue ANNEE_1 -> les 4 implémentations correspondantes. On
+        // utilise l'implémentation d'enfichage X_TEST (sans dépendance) : le moteur
+        // ne connaît que l'identité de sélection, pas la famille de règle réelle.
         $engine = $this->engineWith(
-            new CasCivilRetirementRule(),
+            new EnfichableRetirementRule(),
             new IfseIndemnitaryRule(),
             new EtatFunderRule(),
             new AnnualCostViewRule(),
         );
 
-        $profile = new Profile('CAS_CIVIL', 'IFSE', 'ETAT_P140');
+        $profile = new Profile('X_TEST', 'IFSE', 'ETAT_P140');
 
         $resolved = $engine->resolve($profile, 'ANNEE_1');
 
-        self::assertInstanceOf(CasCivilRetirementRule::class, $resolved->retirement());
+        self::assertInstanceOf(EnfichableRetirementRule::class, $resolved->retirement());
         self::assertInstanceOf(IfseIndemnitaryRule::class, $resolved->indemnitary());
         self::assertInstanceOf(EtatFunderRule::class, $resolved->funder());
         self::assertInstanceOf(AnnualCostViewRule::class, $resolved->costView());
