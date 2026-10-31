@@ -11,7 +11,9 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
   — prorata de la date de recrutement + année pleine + vue année scolaire — #15,
   horizon régime permanent — coût moyen en population stationnaire × N postes — #16,
   horizon cohorte — série annuelle avec avancement d'échelon mensuel, horizon ou
-  carrière complète × N agents — #17).
+  carrière complète × N agents — #17, vues de coût enfichables — 4 méthodes de
+  valorisation de la retraite (budgétaire par défaut, équivalent privé, équilibre
+  technique, actuarielle) — #18).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.

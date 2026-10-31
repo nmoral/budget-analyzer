@@ -514,6 +514,112 @@ PHPUnit sans conteneur ni base), les ports/règles étant fournis en classes ano
 `Career`/`AgentSituation` construits à la main. Comme le reste du domaine de coût, l'horizon
 est couvert par Infection (mutation sur `src/Domain`, MSI ≥ 85 %).
 
+## Vues de coût enfichables (#18)
+
+Le domaine valorise la **composante retraite** du coût annuel (#14) selon des **vues de
+coût enfichables**, dans la continuité des familles de règles EX-1 (#12). Tout vit sous
+`src/Domain/` en **PHP pur** (frontière Deptrac, aucune dépendance Doctrine ni infra). Le
+périmètre est **domaine seul** : la situation de l'agent, la date et le code de vue sont
+des **entrées**, composées à la main en test ; aucun câblage de persistance, aucune route
+ni commande n'est ajouté.
+
+### Famille EX-1 `cost_view` et interface `CostViewRule`
+
+La famille `cost_view` (ossature posée en #12, interface marqueur vide) reçoit en #18 sa
+signature de calcul. `App\Domain\Rule\CostView\CostViewRule` (étend `Rule`) expose :
+
+- `retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount`
+  — le terme retraite employeur annuel selon la vue ;
+- `definition(): string`, `question(): string` — métadonnées de restitution (non vides) ;
+- `assumptions(): list<string>` — hypothèses de la vue (**vide** pour la budgétaire) ;
+- `sources(): list<string>` — sources documentaires.
+
+La signature est volontairement en **types `Shared`/natifs** (`Amount`,
+`\DateTimeImmutable`, `string`), **pas** `AgentSituation`, pour éviter un **cycle de
+dépendances domaine** `Cost ↔ Rule` (le paquet `Cost` dépend déjà de `Rule`) : c'est la
+surcouche (dans `App\Domain\Cost`) qui calcule le TIB et le passe à la vue.
+
+Les vues sont **résolues par code** via `CostViewRuleResolver` (dérivé
+d'`AbstractRuleResolver`, `family() = 'vue de coût'`) : elles sont taggées
+`app.rule.cost_view` avec leur `code`, et le résolveur les sélectionne par un **service
+locator indexé par code** (`!tagged_locator { index_by: code }`), jamais par un
+`match`/`if`. Un code de vue inconnu lève `UnknownRuleCodeException`.
+
+### Surcouche `CostViewCalculator`
+
+`App\Domain\Cost\CostViewCalculator::compute(AgentSituation $situation,
+\DateTimeImmutable $date, string $costViewCode): AnnualCost` est la surcouche (décision
+Q2, « option B ») : elle **recompose** l'`AnnualCost` en ne remplaçant **que le terme
+retraite** par celui de la vue sélectionnée, les trois autres termes (traitement + primes,
+autres cotisations, RAFP) restant **ceux d'`AnnualCostCalculator`, laissé inchangé** —
+zéro régression #14→#17 ; en `BUDGETAIRE`, le résultat est **strictement égal** au moteur
+de base. Elle dépend par constructeur d'`AnnualCostCalculator`, d'`IndexedSalaryCalculator`
+(pour calculer le TIB passé à la vue) et de `CostViewRuleResolver`. Elle calcule **une vue
+à la fois** (sélection multi-vues = boucle appelant, #19).
+
+### Les quatre vues
+
+- **`BudgetViewRule`** (`BUDGETAIRE`, défaut) : `retraite = TIB × employerRate(régime, date)`
+  via `RetirementRuleResolver` (#13) — même source de taux que le moteur de base.
+  `assumptions()` vide.
+- **`PrivateEquivalentViewRule`** (`EQUIVALENT_PRIVE`) : `retraite = TIB × rateAt(
+  'taux_employeur_prive', date)` — **clé datée fixe** lue via le port `DatedRateProvider`,
+  indépendante du régime public.
+- **`TechnicalBalanceViewRule`** (`EQUILIBRE_TECHNIQUE`) : `retraite = TIB × rateAt(clé,
+  date)` via `DatedRateProvider`, où la clé est **dérivée par régime** par concaténation
+  (`'taux_equilibre_' . strtolower($code)` → `taux_equilibre_cas_civil`,
+  `taux_equilibre_cnracl` ; pas de table ni de `match`). Un régime sans paramètre
+  d'équilibre fait lever `MissingDatedRateException` (pas de défaut silencieux).
+- **`ActuarialViewRule`** (`ACTUARIELLE`) : `retraite = (TIB × taux d'annuité) × facteur
+  actuariel`, hypothèses lues dans le VO `AssumptionsActuarielles` injecté à ses défauts.
+  Le facteur actuariel (multiplicateur sans unité) est appliqué via un `Rate` porté par son
+  **ratio** (`Rate::fromRatio`) pour réemployer la multiplication décimal-safe d'`Amount`
+  sans étendre le cœur (abus sémantique de `Rate` assumé et localisé).
+
+Les **valeurs réelles** des taux « équivalent privé » et « équilibre technique » relèvent
+de l'import CSV/infra (**hors périmètre #18**) : elles sont posées à la main en test, et la
+règle lève tant qu'elles manquent à la date.
+
+### Value object d'hypothèses `AssumptionsActuarielles`
+
+`App\Domain\Rule\CostView\AssumptionsActuarielles` est un value object de domaine **pur**
+portant les deux hypothèses consommées par la formule V1 :
+
+- `tauxAnnuite(): Rate` — droits de pension acquis par année de service (défaut **1,75 %**) ;
+- `facteurActuariel(): string` — multiplicateur (ä) résumant actualisation, survie et
+  différé, **fourni en hypothèse** (aucune table de mortalité dans le domaine), porté comme
+  **chaîne décimale** pour rester décimal-safe (défaut **12,5**).
+
+Il est construit par la **factory `defaults()`** (défauts sourcés ; les sources
+documentaires de la méthode — note INSEE sur les engagements de retraite de l'État, Jaune
+budgétaire « Pensions », recommandation ANC 2013-R-02 — sont exposées par
+`ActuarialViewRule::sources()`). Les surcharges `withTauxAnnuite()` /
+`withFacteurActuariel()` renvoient une **nouvelle
+instance** et **marquent le champ comme modifié** ; `isModified(string $field): bool`
+indique si un champ a été surchargé (les autres restant « défaut ») et **rejette un champ
+inconnu** (`\InvalidArgumentException`). Le VO est **exclu de l'autowiring**
+(`config/services.yaml`, donnée pure) ; il est injecté à l'`ActuarialViewRule` via la
+factory `AssumptionsActuarielles::defaults()`.
+
+### Enfichabilité et câblage
+
+Ajouter une vue = déclarer un service implémentant `CostViewRule`, taggé
+`app.rule.cost_view` avec son `code` ; elle devient résolue et utilisée par la surcouche
+**sans toucher ni à `CostViewCalculator` ni au résolveur**. Cette enfichabilité est prouvée
+par une fixture de test (`tests/Fixtures/Rule/CostView/EnfichableCostViewRule.php`, code
+`X_TEST_VIEW`) taggée sous `when@test`. Dans `config/services.yaml` : les quatre vues
+taggées dans le bloc `services` principal (l'`ActuarialViewRule` recevant son VO
+d'hypothèses par factory) et `CostViewCalculator` exposé `public` sous `when@test`.
+
+### Garde-fou d'architecture et tests
+
+Frontière **domaine pure** (Deptrac + `DomainBoundaryTest`) : aucune table de mortalité
+embarquée, aucun `Doctrine`/`Entity`. Ces composants sont exercés par des **tests unitaires
+purs** (`tests/Domain/Cost/CostViewCalculatorTest.php`, `tests/Domain/Rule/CostView/`,
+PHPUnit sans conteneur ni base) : ports et règles fournis en classes anonymes,
+`AgentSituation` et VO d'hypothèses construits à la main. Comme le reste du domaine de coût,
+couvert par Infection (mutation sur `src/Domain`, MSI ≥ 85 %).
+
 ## Kernel et amorçage
 
 - `App\Kernel` utilise `MicroKernelTrait` ; la configuration est en YAML sous

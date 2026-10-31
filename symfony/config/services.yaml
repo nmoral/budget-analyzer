@@ -21,6 +21,7 @@ services:
             - '../src/Domain/Rule/ResolvedRules.php'
             - '../src/Domain/Cost/AgentSituation.php'
             - '../src/Domain/Cost/AnnualCost.php'
+            - '../src/Domain/Rule/CostView/AssumptionsActuarielles.php'
 
     # Port de domaine « taux daté » (#13) résolu vers l'adapter d'infrastructure
     # au-dessus des paramètres datés (#04) : toute injection de `DatedRateProvider`
@@ -57,6 +58,34 @@ services:
         tags: [{ name: 'app.rule.other_contributions', code: 'FPE' }]
     App\Domain\Rule\OtherContributions\FphOtherContributionsRule:
         tags: [{ name: 'app.rule.other_contributions', code: 'FPH' }]
+
+    # Vues de coût enfichables (#18), taggées dans leur famille avec leur code comme
+    # clé d'index du locator. La vue budgétaire (par défaut) valorise la retraite via
+    # la règle de régime existante (`RetirementRuleResolver`), identique au moteur de
+    # base ; ajouter une vue = ajouter un service taggé, sans toucher à la surcouche
+    # ni au résolveur.
+    App\Domain\Rule\CostView\BudgetViewRule:
+        tags: [{ name: 'app.rule.cost_view', code: 'BUDGETAIRE' }]
+    # Vues « taux datés » (#18) : lisent leur taux via le port `DatedRateProvider`
+    # (aliasé vers l'adapter d'infrastructure). Équivalent privé → clé fixe
+    # `taux_employeur_prive` ; équilibre technique → une clé par régime, dérivée du
+    # code de régime (`taux_equilibre_cas_civil`, `taux_equilibre_cnracl`). Les valeurs
+    # réelles (import CSV/infra) sont hors périmètre : la règle lève tant qu'elles
+    # manquent à la date.
+    App\Domain\Rule\CostView\PrivateEquivalentViewRule:
+        tags: [{ name: 'app.rule.cost_view', code: 'EQUIVALENT_PRIVE' }]
+    App\Domain\Rule\CostView\TechnicalBalanceViewRule:
+        tags: [{ name: 'app.rule.cost_view', code: 'EQUILIBRE_TECHNIQUE' }]
+    # Vue actuarielle (#18) : coût des services rendus, (TIB × taux d'annuité) ×
+    # facteur actuariel. Les hypothèses (VO de domaine, non service) sont injectées
+    # à leurs défauts sourcés via la factory `AssumptionsActuarielles::defaults()` ;
+    # l'édition par l'utilisateur est hors périmètre (#19/#20).
+    App\Domain\Rule\CostView\ActuarialViewRule:
+        arguments:
+            $assumptions: !service
+                class: App\Domain\Rule\CostView\AssumptionsActuarielles
+                factory: ['App\Domain\Rule\CostView\AssumptionsActuarielles', 'defaults']
+        tags: [{ name: 'app.rule.cost_view', code: 'ACTUARIELLE' }]
 
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du
@@ -103,6 +132,8 @@ when@test:
             tags: [{ name: 'app.rule.funder', code: 'ETAT_P140' }]
         App\Tests\Fixtures\Rule\CostView\AnnualCostViewRule:
             tags: [{ name: 'app.rule.cost_view', code: 'ANNEE_1' }]
+        App\Tests\Fixtures\Rule\CostView\EnfichableCostViewRule:
+            tags: [{ name: 'app.rule.cost_view', code: 'X_TEST_VIEW' }]
 
         # Repositories rendus publics en test pour pouvoir les récupérer depuis le
         # conteneur de test (sinon supprimés car inlined, faute de référence applicative
@@ -124,6 +155,9 @@ when@test:
             autowire: true
             public: true
         App\Domain\Cost\AnnualCostCalculator:
+            autowire: true
+            public: true
+        App\Domain\Cost\CostViewCalculator:
             autowire: true
             public: true
         App\Domain\Shared\PrimeRateProvider:

@@ -126,16 +126,18 @@ présentes aujourd'hui :
 
 - le calcul du **coût complet** d'un scénario de recrutement (volumes, étalement,
   cohorte, horizons) et plusieurs **règles métier réelles** (indemnitaire au sens du
-  régime de primes, financeur, vues de coût) — l'**ossature** du moteur est posée
+  régime de primes, financeur) — l'**ossature** du moteur est posée
   (issue #12, voir ci-dessous), les premières règles réelles de la famille retraite
   sont livrées (issue #13, voir « Règles de retraite » ci-dessous), le **coût
   employeur annuel d'un agent** est désormais calculé (issue #14, voir ci-dessous),
   l'**horizon « année 1 »** d'un recrutement (prorata, année pleine, vue scolaire) est
   disponible (issue #15, voir ci-dessous) et l'**horizon « régime permanent »**
   (coût moyen en population stationnaire × N postes) l'est aussi (issue #16, voir
-  ci-dessous) et l'**horizon « cohorte »** (série année par année du coût d'une
+  ci-dessous), l'**horizon « cohorte »** (série année par année du coût d'une
   cohorte de N agents avec avancement d'échelon) également (issue #17, voir
-  ci-dessous), mais les apports suivants arrivent à l'issue #18 ;
+  ci-dessous) et les **vues de coût** de la retraite (quatre méthodes de valorisation)
+  le sont désormais (issue #18, voir « Vues de coût de la retraite » ci-dessous), mais
+  les apports suivants restent à venir ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
@@ -248,10 +250,69 @@ technique). Si un taux manque à la date demandée, le système signale toujours
 explicite plutôt que de retourner une valeur par défaut.
 
 **Hors de ce périmètre** : les **contractuels** (formule propre, hors V1), les **vues de
-coût** alternatives de la retraite (#18), le **coût d'un scénario** complet (volumes,
+coût** alternatives de la retraite (traitées à part, voir « Vues de coût de la retraite »
+— #18), le **coût d'un scénario** complet (volumes,
 étalement, cohorte, horizons — #15 à #17) et l'**arrondi d'affichage** (#19/#20). Ce
 calcul n'est encore exposé ni par une API ni par un écran : il n'est exercé que par les
 tests.
+
+### Vues de coût de la retraite (quatre méthodes)
+
+Le simulateur valorise désormais la **composante retraite** du coût employeur annuel
+selon **quatre vues de coût** au choix, pour éclairer différentes questions métier.
+**Seule la composante retraite change** d'une vue à l'autre : les trois autres termes du
+coût annuel — traitement + primes, autres cotisations, RAFP — sont **identiques entre
+toutes les vues**, et le total est recomposé comme somme des quatre termes.
+
+La vue est un **paramètre de la simulation**, choisi au moment du calcul, et non une
+caractéristique de l'agent. La vue **budgétaire** est la vue **par défaut**.
+
+- **Budgétaire** (par défaut) — répond à « combien l'employeur verse-t-il réellement au
+  titre de la retraite cette année ? ». La retraite vaut le TIB multiplié par le **taux
+  de cotisation employeur du régime** de l'agent à la date (CAS civil ou CNRACL), soit
+  exactement la méthode du coût annuel de base : en vue budgétaire, le résultat est
+  **strictement égal** au coût employeur annuel décrit ci-dessus (non-régression).
+  Aucune hypothèse.
+- **Équivalent privé** — répond à « combien coûterait la retraite de cet agent s'il
+  relevait du régime du secteur privé ? ». La retraite est valorisée au **taux de
+  cotisation vieillesse employeur du secteur privé** appliqué au TIB, indépendamment du
+  régime public.
+- **Équilibre technique** — répond à « quel taux employeur équilibrerait les charges de
+  pension du régime de cet agent ? ». La retraite est valorisée au **taux d'équilibre
+  technique du régime** de l'agent, **propre à chaque régime** (un taux pour le CAS civil,
+  un pour la CNRACL).
+- **Actuarielle** — répond à « quel engagement de retraite l'employeur accumule-t-il pour
+  une année de service de cet agent ? ». La retraite est l'**engagement généré par une
+  année de service** (méthode des unités de crédit projetées, IAS 19 / norme comptable
+  n°13 de l'État) : `(TIB × taux d'annuité) × facteur actuariel`, où `TIB × taux
+  d'annuité` représente les droits acquis sur l'année et le **facteur actuariel** résume
+  actualisation, survie et différé.
+
+**Hypothèses de la vue actuarielle** : la vue actuarielle s'appuie sur des **hypothèses à
+valeurs par défaut sourcées** (taux d'annuité, facteur actuariel), **surchargeables**.
+Une hypothèse laissée au défaut et une hypothèse surchargée sont **distinguées** : la vue
+sait restituer les hypothèses qu'elle porte et lesquelles ont été modifiées. Les vues
+« taux » (équivalent privé, équilibre technique) lisent leur taux dans les **valeurs
+réglementaires datées** ; la vue budgétaire n'a aucune hypothèse.
+
+**Métadonnées de restitution** : chaque vue expose sa **définition**, la **question
+métier** à laquelle elle répond, ses **hypothèses** (vide pour la budgétaire) et ses
+**sources** documentaires, pour rendre lisible l'angle de lecture du chiffre.
+
+**Erreurs explicites, jamais de valeur par défaut** : une **vue inconnue** est **rejetée**
+par une erreur explicite (pas de vue par défaut silencieuse). Si une valeur réglementaire
+datée requise par une vue manque à la date demandée (taux équivalent privé, taux
+d'équilibre d'un régime), le système signale une erreur explicite plutôt que de retourner
+un résultat approché.
+
+**Hors de ce périmètre** : l'**édition des hypothèses par l'utilisateur** (saisie), la
+**fiche de résultat** et l'**URL de partage** (#19/#20) ; l'**import des vraies valeurs**
+des taux « équivalent privé » et « équilibre technique » (posées à la main tant que leur
+import n'est pas livré) ; la **sélection de plusieurs vues en une passe** (le calcul porte
+sur **une vue à la fois**, la boucle relève de l'appelant — #19) ; et la dérivation du
+facteur actuariel depuis une **table de mortalité** (il reste une hypothèse fournie).
+Comme le reste du moteur, ce calcul n'est exposé ni par une API ni par un écran : il n'est
+exercé que par les tests.
 
 ### Horizon « année 1 » d'un recrutement (prorata + année pleine + vue scolaire)
 
