@@ -800,12 +800,120 @@ repositories (`tests/Infrastructure/Persistence/ScenarioRepositoryTest`), domain
 ### Hors périmètre
 
 Non exposés par #19 : les horizons **régime permanent** et **cohorte** (adapter `Career`
-reconstruit depuis la grille — issue ultérieure) ; le **détail de calcul par montant**
-(formule/entrées/sources par montant — #20 ; les métadonnées de vue restent disponibles mais
-la trace par montant n'est pas structurée) ; le **ré-épinglage** d'un scénario (`PATCH`) et
+reconstruit depuis la grille — #66) ; le **détail de calcul par montant**
+(formule/entrées/sources par montant — livré par **#65**, voir « Transparence du résultat
+(#65) ») ; le **ré-épinglage** d'un scénario (`PATCH`) et
 l'édition de ses lignes ; le **hash de contenu** du jeu de paramètres (on s'appuie sur
 `versionId` + purge à l'import) ; le front, l'authentification et le listing/pagination des
 scénarios.
+
+## Transparence du résultat : mode `detail=full` (#65)
+
+Prolonge l'API résultat (#19) d'un **mode transparence** : `GET
+/api/scenarios/{id}/result?detail=full` justifie chaque chiffre (formule, valeurs
+d'entrée datées, sources, facteur de prorata). La contrainte structurante est de
+**préserver la pureté du domaine** (frontière Deptrac) : le domaine produit une **trace
+de calcul pure** (clés/valeurs/dates, **sans** connaître `Source` ni Doctrine), et
+l'infrastructure reconstitue les sources et sérialise la réponse. Sans le drapeau, la
+réponse est **octet pour octet** celle de #19.
+
+### Trace de calcul pure (domaine)
+
+Nouveaux value objects **purs** (aucune dépendance à `Source` ni à la persistance) :
+
+- `App\Domain\Shared\CostInput` — une **entrée datée réellement utilisée** par le
+  calcul : `key`, `value`, `unit`, `effectiveDate` (date d'effet = début de validité de
+  la valeur lue). `equals()` par valeur. C'est la seule description d'une valeur
+  d'entrée que le domaine émet ; la correspondance entrée → source est faite **hors**
+  du domaine à partir de `(key, effectiveDate)`.
+- `App\Domain\Shared\DatedRate` / `DatedAmount` — un `Rate`/`Amount` lu via un port,
+  **accompagné de son `CostInput`** : `rate()`/`amount()` sert au calcul, `input()` à la
+  trace. Les ports datés (`DatedRateProvider`, `DatedAmountProvider`) et leurs adapters
+  exposent désormais ces variantes « tracées » à côté du scalaire ; `PrimeRateObservation`
+  porte de même son `CostInput`.
+- `App\Domain\Cost\TermTrace` — trace d'**un terme** : sa `formula` (texte lisible, ex.
+  « TIB·r_retraite ») et la **liste des `CostInput`** utilisés.
+- `App\Domain\Cost\CostTrace` — une `TermTrace` par terme de la formule
+  (`treatmentAndPrimes`, `retirement`, `otherContributions`, `rafp`).
+- `App\Domain\Shared\RetirementValuation` — valorisation du terme retraite **par une vue
+  de coût** : `amount()` + `formula()` + liste de `CostInput`. `CostViewRule::retirementCost(...)`
+  renvoie désormais un `RetirementValuation` (et non plus un `Amount` nu), en **types
+  `Shared` uniquement** pour éviter un cycle de dépendances entre paquets de domaine.
+
+`AnnualCost` reçoit un paramètre constructeur **`?CostTrace $trace`** (nullable, défaut
+`null`) exposé par `AnnualCost::trace()` ; il vaut `null` pour les coûts assemblés sans
+trace (ex. horizons agrégés). `AnnualCostCalculator` assemble la trace à partir des
+`CostInput` remontés par les composants de la formule.
+
+### Facteur de prorata par fenêtre (C1.3)
+
+`App\Domain\Cost\Prorata` est un value object **pur** portant `months` / `over` (base
+12). Fabriques `Prorata::ofMonths(int)` (fenêtre proratisée) et `Prorata::full()`
+(12/12). `Year1Horizon` porte désormais **un `Prorata` par fenêtre** :
+`fullYearProrata()` (toujours 12/12), `year1Prorata()` et `schoolYearProrata()`
+(`?Prorata`, présent si et seulement si `schoolYear()` l'est). C'est ce qui rend chaque
+valeur **réconciliable** : `value = valeur_annuelle_du_terme × months / over`. La
+correction de la revue R1 (les fenêtres proratisées exposaient une `value` proratisée
+mais des `inputs`/`formula` annuels, donc non réconciliables) passe par l'exposition de
+ce facteur.
+
+### Capture des sources (infrastructure)
+
+`App\Infrastructure\Transparency\SourceCapture` est un **service à état, à portée de
+requête** : il indexe `Source` par clé composite `(key @ effectiveDate)`. Les adapters
+datés (`DatedRateProviderAdapter`, `DatedAmountProviderAdapter`,
+`PrimeRateProviderAdapter`) y **enregistrent** (`record()`) la source d'où vient chaque
+valeur lue ; la sérialisation la **relit** (`sourceFor()`). `reset()` vide le registre
+avant chaque calcul détaillé. C'est le pont qui maintient la frontière Deptrac : le
+domaine émet des clés/dates, l'infra retrouve les `Source`.
+
+### Sérialisation (`ScenarioResultCalculator`)
+
+`compute(Scenario, horizons, views, bool $detail = false)` reçoit un quatrième
+paramètre `$detail`. En mode détaillé :
+
+- il `reset()` la `SourceCapture` puis calcule normalement (les adapters alimentent la
+  capture) ;
+- chaque fenêtre sérialisée par `windowArray()`/`amountArray()` reçoit, à côté des quatre
+  termes + total (format historique **inchangé**), une clé **`detail`** qui déplie chaque
+  terme via `termDetail()` : `value`, `formula`, `inputs:[{key,value,unit,effectiveDate}]`,
+  `prorata:{months,over,window}` et `sources:[...]` ;
+- `sourcesFor()` résout les sources des `CostInput` d'un terme via la capture, **dédupliquées
+  par code** ; `sourceArray()` sérialise la source en clair (`code`, `publisher`, `label`,
+  `edition`, `locator`, `url`, `retrievedAt`) ;
+- `metaArray()` ajoute une section **`meta`** : par vue
+  `definition`/`question`/`assumptions`/`sources` (de méthode, texte libre) + les
+  **hypothèses structurelles** nommées (constante `STRUCTURAL_ASSUMPTIONS` : gel du point,
+  taux de primes moyen avec repli, population stationnaire).
+
+Sans `$detail`, aucune clé `detail`/`meta`/`prorata` n'est émise (non-régression
+octet-pour-octet, vérifiée en test).
+
+### Cache par mode `detail`
+
+`ScenarioResultCache::get(..., bool $detail = false)` et sa clé intègrent le mode :
+`detail=full` / `detail=none` entre dans le hash, de sorte que la réponse légère et la
+réponse détaillée **ne se servent ni ne se polluent** mutuellement. Le reste du contrat
+de cache (#19) est inchangé.
+
+### Migration `Source` et données
+
+Migration `Version20261031120000` : ajout de `source.edition` et `source.locator`
+(VARCHAR(255) **NOT NULL**). Pour ne pas casser une base déjà importée, les colonnes
+sont créées avec un défaut transitoire `''` puis le défaut est retiré ; un `app:import`
+réécrit les valeurs réelles. `data/sources.json` renseigne `edition`/`locator` pour les
+**11 sources** existantes, mappées à l'import. Aucun schéma Frictionless ni contrôle de
+structure n'est posé sur `data/sources.json` (référentiel curaté, cohérent avec #11).
+
+### Frontière, hors périmètre et tests
+
+Deptrac reste vert : `src/Domain` n'importe ni `Source` ni Doctrine (la trace est en
+types `Shared`/`Cost` purs). Hors périmètre #65 : le **front** (#20), l'exposition des
+horizons **régime permanent/cohorte** (#66), et la transformation des sources de méthode
+(`CostViewRule::sources()`, texte libre) en vraies entités `Source`. Tests :
+`tests/Infrastructure/Controller/ScenarioResultDetailApiTest` (réponse détaillée,
+réconciliation du prorata, non-régression sans flag), `tests/Domain/Shared/CostInputTest`,
+`tests/Support/Trace` (helpers), plus les extensions des tests de coût et d'import.
 
 ## Kernel et amorçage
 
@@ -840,7 +948,10 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
 
 - **Source** — origine documentaire d'une valeur réglementaire : `code` (clé métier
   unique, slug référencé par la colonne `source` des CSV, ex. `decret-2023-519`, résolu
-  à l'import #11), `label`, `publisher`, `url`, `retrievedAt`, `fileHash`.
+  à l'import #11), `label`, `publisher`, `edition` (édition/année du document, NOT NULL,
+  #65), `locator` (localisation précise — page/tableau/article, NOT NULL, #65), `url`,
+  `retrievedAt`, `fileHash`. `edition` et `locator` rendent la source « en clair
+  complète » exposée par `detail=full` (voir « Transparence du résultat (#65) »).
 - **Corps** — `code` (unique), `label`, `versant`, `category` (A/B/C).
 - **Grille** — version d'une grille indiciaire : `body` (FK Corps), `grade`, `version`,
   `startDate`, `endDate` (nullable), `source` (FK), `parameterSet` (FK). Valeur datée.
@@ -1006,8 +1117,9 @@ Sous `src/Infrastructure/Import/` :
   `data/manifests/<fichier>.json`. Toute divergence (ou brut/manifeste manquant) lève
   `ManifestMismatchException` (décision Q4).
 - **`SourceReferential`** / **`CorpsReferential`** : chargent les référentiels curatés
-  `data/sources.json` (slug → `label`/`publisher`/`url`/`retrievedAt`/`fileHash`) et
-  `data/corps.json` (code → `label`/`versant`/`category`).
+  `data/sources.json` (slug → `label`/`publisher`/`edition`/`locator`/`url`/`retrievedAt`/`fileHash`,
+  `edition` et `locator` ajoutés en #65) et `data/corps.json` (code →
+  `label`/`versant`/`category`).
 
 ### Périmètre, mapping et ordre de chargement
 

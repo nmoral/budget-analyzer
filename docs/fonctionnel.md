@@ -82,7 +82,10 @@ suivantes.
 **Objets métier représentés** :
 
 - **Source** : origine documentaire de toute valeur réglementaire (intitulé, éditeur,
-  URL, date de récupération, empreinte du fichier).
+  **édition/année**, **localisation** précise — `locator` : page, tableau, article —,
+  URL, date de récupération, empreinte du fichier). L'édition et la localisation sont
+  **requises** : elles rendent la source « en clair complète » pour la transparence du
+  résultat (voir « API / scénarios et résultats »).
 - **Corps** : cadre statutaire (code, libellé, versant, catégorie A/B/C).
 - **Grille** et **Échelon** : grille indiciaire d'un corps pour un grade, dans une
   version donnée, et ses échelons (rang, indice brut, indice majoré, durée en mois).
@@ -181,10 +184,40 @@ résultat diffère en conséquence ; il n'y a **jamais de mélange** entre versi
 **nouvel import** des paramètres, les résultats précédents sont **recalculés** contre l'état
 courant (jamais de résultat périmé).
 
+**Transparence du résultat (`?detail=full`)** : on peut demander la **justification de
+chaque chiffre** en ajoutant le paramètre `detail=full` à la lecture du résultat
+(`GET /api/scenarios/{id}/result?detail=full`). **Sans ce drapeau, la réponse reste
+identique à l'actuelle** (les quatre postes et leur total, sans justification) ; **avec**,
+chaque fenêtre (année pleine, année 1, année scolaire) de chaque ligne et de chaque vue
+porte, à côté de ses quatre termes, un bloc **`detail`** qui déplie **chacun des quatre
+termes** :
+
+- la **valeur** du terme pour cette fenêtre (la valeur proratisée, le cas échéant) ;
+- la **formule** en texte lisible (ex. retraite budgétaire : `TIB·r_retraite`) ;
+- les **valeurs d'entrée datées** réellement utilisées — pour chacune : la clé, la valeur,
+  l'unité et la **date d'effet** (ex. `taux_cas_civil = 82.28 PCT_TIB`, effet `2026-01-01`) ;
+- le **facteur de prorata** de la fenêtre (`months` / `over` et le nom de la fenêtre), qui
+  rend la valeur **réconciliable** : `valeur = valeur annuelle du terme × months / over`.
+  L'année pleine a un prorata de **12/12** (aucune proratisation) ; l'année 1 compte les
+  mois du recrutement à décembre ; l'année scolaire, du recrutement à août ;
+- les **sources en clair complètes** de ces entrées (éditeur, titre, édition/année,
+  localisation `locator`, URL, date de récupération), dédupliquées.
+
+La réponse détaillée ajoute aussi une section **`meta`** : par vue, sa **définition**, la
+**question métier**, ses **hypothèses** et ses **sources de méthode** (texte libre,
+distinctes des sources de valeurs) ; plus les **hypothèses structurelles** appliquées par
+le moteur, **nommées** (gel de la valeur du point d'indice, taux de primes moyen par corps
+avec repli, population stationnaire pour le régime permanent).
+
+Les codes de réponse (200 sans détail, 422 sélection invalide, 404 scénario inconnu) sont
+**inchangés**, et la réponse légère et la réponse détaillée sont **mises en cache
+séparément** (une clé par mode `detail`).
+
 **Hors de ce périmètre** : les horizons **régime permanent** et **cohorte** (non exposés
-par l'API, #20), le **détail de calcul par montant** (formule, entrées et sources de chaque
-montant — #20), le **ré-épinglage** d'un scénario vers une autre version et l'**édition des
-lignes** après création, le **front** et l'**authentification**.
+par l'API, #66), le **ré-épinglage** d'un scénario vers une autre version et l'**édition des
+lignes** après création, le **front** (#20) et l'**authentification**. Les **sources de
+méthode** d'une vue restent exposées en **texte libre** (leur conversion en vraies sources
+documentaires est hors de ce périmètre).
 
 ## Ce qui n'est pas encore disponible
 
@@ -205,10 +238,11 @@ présentes aujourd'hui :
   ci-dessous) et les **vues de coût** de la retraite (quatre méthodes de valorisation)
   le sont désormais (issue #18, voir « Vues de coût de la retraite » ci-dessous) et
   l'**API JSON** des scénarios et de leur résultat « année 1 » est livrée (issue #19,
-  voir « API / scénarios et résultats » ci-dessous), mais les apports suivants restent
-  à venir ;
-- l'**exposition par l'API des autres horizons** (régime permanent, cohorte) et le
-  **détail de calcul par montant** — issue #20 ;
+  voir « API / scénarios et résultats » ci-dessous), enrichie du **détail de calcul par
+  montant** (mode `?detail=full` : formule, entrées datées, prorata et sources de chaque
+  terme — issue #65, voir « API / scénarios et résultats »), mais les apports suivants
+  restent à venir ;
+- l'**exposition par l'API des autres horizons** (régime permanent, cohorte) — issue #66 ;
 - le front / les pages Twig — issue #20.
 
 La liste ci-dessus décrit des intentions tracées par leurs issues respectives ; leur
