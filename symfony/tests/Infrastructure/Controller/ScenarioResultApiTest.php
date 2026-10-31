@@ -196,7 +196,13 @@ final class ScenarioResultApiTest extends WebTestCase
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=foobar');
 
-        self::assertSame(422, $this->client->getResponse()->getStatusCode());
+        $response = $this->client->getResponse();
+        self::assertSame(422, $response->getStatusCode());
+        // C3.2 : message d'horizon inconnu, citant l'horizon fautif.
+        /** @var array{error: string} $body */
+        $body = json_decode((string) $response->getContent(), true);
+        self::assertStringContainsString('Horizon inconnu', $body['error']);
+        self::assertStringContainsString('foobar', $body['error']);
     }
 
     public function testResultForUnknownScenarioReturns404(): void
