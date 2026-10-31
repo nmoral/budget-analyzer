@@ -28,7 +28,8 @@ final class ScenarioResultCache
      * @param list<string> $horizons
      * @param list<string> $views
      *
-     * @throws InvalidSelectionException si une vue ou un horizon demandé est inconnu
+     * @throws InvalidSelectionException  si une vue ou un horizon demandé est inconnu
+     * @throws UncomputableViewException si une vue valide n'est pas valorisable (paramètre daté manquant) ; l'erreur n'est pas mise en cache (levée avant la sauvegarde)
      */
     public function get(Scenario $scenario, array $horizons, array $views): CachedScenarioResult
     {

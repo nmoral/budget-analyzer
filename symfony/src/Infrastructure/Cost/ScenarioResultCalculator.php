@@ -11,6 +11,9 @@ use App\Domain\Cost\Year1HorizonCalculator;
 use App\Domain\Rule\CostView\CostViewRuleResolver;
 use App\Domain\Rule\UnknownRuleCodeException;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\MissingDatedAmountException;
+use App\Domain\Shared\MissingDatedRateException;
+use App\Domain\Shared\MissingPrimeRateException;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Repository\ScenarioLineRepository;
@@ -45,7 +48,8 @@ final class ScenarioResultCalculator
      *
      * @return array<string, mixed>
      *
-     * @throws InvalidSelectionException si une vue ou un horizon demandé est inconnu
+     * @throws InvalidSelectionException  si une vue ou un horizon demandé est inconnu
+     * @throws UncomputableViewException si une vue valide n'est pas valorisable (paramètre daté manquant)
      */
     public function compute(Scenario $scenario, array $horizons, array $views): array
     {
@@ -66,11 +70,15 @@ final class ScenarioResultCalculator
 
             $byView = [];
             foreach ($views as $view) {
-                $horizon = $this->scope->within($set, fn (): Year1Horizon => $this->year1->computeFrom(
-                    $this->viewCalculator->compute($situation, $recruitment, $view),
-                    $recruitment,
-                    $calendar,
-                ));
+                try {
+                    $horizon = $this->scope->within($set, fn (): Year1Horizon => $this->year1->computeFrom(
+                        $this->viewCalculator->compute($situation, $recruitment, $view),
+                        $recruitment,
+                        $calendar,
+                    ));
+                } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
+                    throw UncomputableViewException::forView($view, $exception);
+                }
                 $byView[$view] = ['year1' => $this->windowArray($horizon)];
                 $weightedByView[$view][] = [$horizon, $line->volume];
             }

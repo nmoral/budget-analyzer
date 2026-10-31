@@ -124,12 +124,20 @@ trait ScenarioFixtureTrait
      * moteur) et tous les paramètres datés nécessaires au calcul de coût, rattachés
      * au jeu `$set` : point d'indice, taux CAS civil, autres cotisations FPE, RAFP,
      * taux employeur privé (vue EQUIVALENT_PRIVE), et un taux de primes pour le corps.
+     *
+     * `$omitKeys` permet de volontairement ne PAS seeder certains paramètres datés (par
+     * clé), et `$omitPrimeRate` d'omettre le taux de primes du corps : utile pour
+     * reproduire un jeu sous-paramétré (vue valide mais non valorisable).
+     *
+     * @param list<string> $omitKeys
      */
     private function persistComputableProfile(
         EntityManagerInterface $em,
         ParameterSet $set,
         string $referenceCalendar = 'scolaire',
         string $corpsCode = 'PE',
+        array $omitKeys = [],
+        bool $omitPrimeRate = false,
     ): Profile {
         $corps = new Corps();
         $corps->code = $corpsCode;
@@ -175,7 +183,7 @@ trait ScenarioFixtureTrait
         $funder->label = 'État';
         $em->persist($funder);
 
-        $this->persistEngineParameters($em, $set, $corps);
+        $this->persistEngineParameters($em, $set, $corps, omitKeys: $omitKeys, omitPrimeRate: $omitPrimeRate);
 
         $profile = new Profile();
         $profile->body = $corps;
@@ -196,12 +204,19 @@ trait ScenarioFixtureTrait
      * et le jeu `$set` : point d'indice, taux CAS civil (`$casCivilPercentage`, variable
      * pour tester l'invalidation par version), autres cotisations FPE, RAFP, taux
      * employeur privé. Permet d'attacher un second jeu de paramètres au même corps.
+     *
+     * `$omitKeys` liste des clés datées à NE PAS seeder, `$omitPrimeRate` omet le taux
+     * de primes : pour reproduire un jeu sous-paramétré.
+     *
+     * @param list<string> $omitKeys
      */
     private function persistEngineParameters(
         EntityManagerInterface $em,
         ParameterSet $set,
         Corps $corps,
         string $casCivilPercentage = '82.28',
+        array $omitKeys = [],
+        bool $omitPrimeRate = false,
     ): void {
         $source = new Source();
         $source->code = 'SRC-engine-' . $set->versionId;
@@ -212,11 +227,23 @@ trait ScenarioFixtureTrait
         $source->fileHash = 'hash-engine-' . $set->versionId;
         $em->persist($source);
 
-        $this->persistDatedParameter($em, $set, $source, 'point_indice', '59.0734');
-        $this->persistDatedParameter($em, $set, $source, 'taux_cas_civil', $casCivilPercentage);
-        $this->persistDatedParameter($em, $set, $source, 'taux_autres_cotisations_fpe', '16.07');
-        $this->persistDatedParameter($em, $set, $source, 'taux_rafp', '5');
-        $this->persistDatedParameter($em, $set, $source, 'taux_employeur_prive', '28');
+        $datedParameters = [
+            'point_indice' => '59.0734',
+            'taux_cas_civil' => $casCivilPercentage,
+            'taux_autres_cotisations_fpe' => '16.07',
+            'taux_rafp' => '5',
+            'taux_employeur_prive' => '28',
+        ];
+        foreach ($datedParameters as $key => $value) {
+            if (\in_array($key, $omitKeys, true)) {
+                continue;
+            }
+            $this->persistDatedParameter($em, $set, $source, $key, $value);
+        }
+
+        if ($omitPrimeRate) {
+            return;
+        }
 
         $prime = new PrimeRate();
         $prime->body = $corps;

@@ -6,6 +6,7 @@ namespace App\Infrastructure\Controller;
 
 use App\Infrastructure\Cost\InvalidSelectionException;
 use App\Infrastructure\Cost\ScenarioResultCache;
+use App\Infrastructure\Cost\UncomputableViewException;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\ScenarioLine;
 use App\Infrastructure\Repository\ParameterSetRepository;
@@ -112,7 +113,7 @@ final class ScenarioController
 
         try {
             $cached = $this->resultCache->get($scenario, $horizons, $views);
-        } catch (InvalidSelectionException $exception) {
+        } catch (InvalidSelectionException|UncomputableViewException $exception) {
             return $this->error($exception->getMessage(), 422);
         }
 

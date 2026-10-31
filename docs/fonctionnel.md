@@ -161,9 +161,16 @@ leur total, en pleine précision (sans arrondi d'affichage à ce stade).
 La **sélection** se fait au moment de la lecture du résultat : on choisit les **horizons**
 et les **vues** voulus ; à défaut, le résultat porte sur l'horizon **année 1** valorisé en
 vue **budgétaire**. Une **vue inconnue** ou un **horizon inconnu** (seul « année 1 » est
-disponible aujourd'hui) font **rejeter** la demande. Une vue ou un horizon **répété** dans
-la demande est **compté une seule fois** (l'agrégat n'est jamais doublé). L'**étalement sur
-N années** d'une ligne est **stocké mais ignoré** par l'horizon année 1.
+disponible aujourd'hui) font **rejeter** la demande. Une **vue valide** dont le jeu de
+paramètres épinglé **ne contient pas** un taux, un montant ou un taux de primes **requis**
+pour la date demandée fait elle aussi **rejeter** la demande, par une **erreur maîtrisée**
+qui **nomme la vue et le paramètre manquant** (avec sa date) — jamais une erreur serveur
+opaque. En **sélection mixte** (une vue calculable, une vue non valorisable), c'est **tout
+ou rien** : toute la demande est rejetée en nommant la vue fautive, sans résultat partiel ;
+cette erreur n'est **pas mémorisée**, de sorte qu'après import du paramètre manquant le
+résultat se calcule. Une vue ou un horizon **répété** dans la demande est **compté une
+seule fois** (l'agrégat n'est jamais doublé). L'**étalement sur N années** d'une ligne est
+**stocké mais ignoré** par l'horizon année 1.
 
 **Version épinglée, résultat rejouable** : le résultat est toujours calculé **contre la
 version des paramètres épinglée au scénario**, pas « le dernier jeu importé ». La réponse

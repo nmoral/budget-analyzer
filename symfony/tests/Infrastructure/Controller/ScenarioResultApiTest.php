@@ -206,6 +206,150 @@ final class ScenarioResultApiTest extends WebTestCase
         self::assertSame(404, $this->client->getResponse()->getStatusCode());
     }
 
+    /**
+     * C1.1 (#58) : vue EQUILIBRE_TECHNIQUE valide mais jeu sans `taux_equilibre_cas_civil`
+     * (non seedé par les fixtures) → 422 maîtrisé (jamais 500), message nommant la vue,
+     * la clé de paramètre manquante et la date couverte (MissingDatedRateException).
+     */
+    public function testUnderParameterizedTechnicalBalanceReturns422(): void
+    {
+        $profile = $this->seedComputable();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUILIBRE_TECHNIQUE');
+        $response = $this->client->getResponse();
+
+        self::assertSame(422, $response->getStatusCode());
+        /** @var array{error: string} $body */
+        $body = json_decode((string) $response->getContent(), true);
+        self::assertStringContainsString('EQUILIBRE_TECHNIQUE', $body['error']);
+        self::assertStringContainsString('taux_equilibre_cas_civil', $body['error']);
+        self::assertStringContainsString(self::RECRUITMENT, $body['error']);
+    }
+
+    /**
+     * C1.2 (#58) : vue EQUIVALENT_PRIVE valide mais jeu sans `taux_employeur_prive`
+     * → 422, message nommant la vue et la clé manquante (MissingDatedRateException).
+     */
+    public function testUnderParameterizedPrivateEquivalentReturns422(): void
+    {
+        $set = $this->persistParameterSet($this->em, 'ver-no-prive');
+        $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['taux_employeur_prive']);
+        $this->em->flush();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUIVALENT_PRIVE');
+        $response = $this->client->getResponse();
+
+        self::assertSame(422, $response->getStatusCode());
+        /** @var array{error: string} $body */
+        $body = json_decode((string) $response->getContent(), true);
+        self::assertStringContainsString('EQUIVALENT_PRIVE', $body['error']);
+        self::assertStringContainsString('taux_employeur_prive', $body['error']);
+    }
+
+    /**
+     * C1 (#58) : couverture de MissingDatedAmountException — jeu sans `point_indice`
+     * (montant daté) → même vue BUDGETAIRE non valorisable → 422 nommant vue et clé.
+     */
+    public function testUnderParameterizedMissingAmountReturns422(): void
+    {
+        $set = $this->persistParameterSet($this->em, 'ver-no-point');
+        $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['point_indice']);
+        $this->em->flush();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
+        $response = $this->client->getResponse();
+
+        self::assertSame(422, $response->getStatusCode());
+        /** @var array{error: string} $body */
+        $body = json_decode((string) $response->getContent(), true);
+        self::assertStringContainsString('BUDGETAIRE', $body['error']);
+        self::assertStringContainsString('point_indice', $body['error']);
+    }
+
+    /**
+     * C1 (#58) : couverture de MissingPrimeRateException — jeu sans taux de primes du
+     * corps → vue BUDGETAIRE non valorisable → 422 nommant la vue (jamais 500).
+     */
+    public function testUnderParameterizedMissingPrimeRateReturns422(): void
+    {
+        $set = $this->persistParameterSet($this->em, 'ver-no-prime');
+        $profile = $this->persistComputableProfile($this->em, $set, omitPrimeRate: true);
+        $this->em->flush();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
+        $response = $this->client->getResponse();
+
+        self::assertSame(422, $response->getStatusCode());
+        /** @var array{error: string} $body */
+        $body = json_decode((string) $response->getContent(), true);
+        self::assertStringContainsString('BUDGETAIRE', $body['error']);
+    }
+
+    /**
+     * C2.1 (#58) : sélection mixte (BUDGETAIRE calculable + EQUILIBRE_TECHNIQUE non) →
+     * tout-ou-rien : 422 global nommant la vue fautive ; BUDGETAIRE seul → 200.
+     */
+    public function testMixedSelectionFailsGloballyNamingFaultyView(): void
+    {
+        $profile = $this->seedComputable();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE,EQUILIBRE_TECHNIQUE');
+        $mixed = $this->client->getResponse();
+        self::assertSame(422, $mixed->getStatusCode());
+        /** @var array{error: string} $body */
+        $body = json_decode((string) $mixed->getContent(), true);
+        self::assertStringContainsString('EQUILIBRE_TECHNIQUE', $body['error']);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+    }
+
+    /**
+     * C2.2 (#58) : l'erreur de vue sous-paramétrée n'est pas mise en cache (cache non
+     * empoisonné) : 2 appels identiques → 2× 422 ; une vue calculable ultérieure → 200.
+     */
+    public function testUnderParameterizedErrorIsNotCached(): void
+    {
+        $profile = $this->seedComputable();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUILIBRE_TECHNIQUE');
+        $first = $this->client->getResponse();
+        self::assertSame(422, $first->getStatusCode());
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUILIBRE_TECHNIQUE');
+        $second = $this->client->getResponse();
+        self::assertSame(422, $second->getStatusCode());
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
+        $computable = $this->client->getResponse();
+        self::assertSame(200, $computable->getStatusCode());
+    }
+
+    /**
+     * C3.1 (#58) : non-régression du contrat d'erreur — vue paramétrée → 200 ; vue
+     * inconnue → 422 (InvalidSelectionException inchangé) ; scénario inconnu → 404.
+     */
+    public function testNonRegressionStatusCodes(): void
+    {
+        $profile = $this->seedComputable();
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=INCONNU');
+        self::assertSame(422, $this->client->getResponse()->getStatusCode());
+
+        $this->client->request('GET', '/api/scenarios/999999/result');
+        self::assertSame(404, $this->client->getResponse()->getStatusCode());
+    }
+
     private function seedComputable(): Profile
     {
         $set = $this->persistParameterSet($this->em, 'ver-result');

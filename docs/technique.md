@@ -652,7 +652,14 @@ plus bas) et la **frontière Deptrac** est préservée.
   profileRef, volume, recruitmentDate, spreadYears}]}` ; scénario inconnu → **`404`**.
 - **`GET /api/scenarios/{id}/result`** → `200` avec le résultat (structure ci-dessous) ;
   scénario inconnu → `404` ; vue ou horizon inconnu → `422` (`InvalidSelectionException`).
-  En-tête **`X-Cache: MISS`** (calcul) ou **`HIT`** (servi du cache).
+  Une vue **valide mais non valorisable** avec le jeu épinglé — un paramètre daté requis
+  (taux, montant ou prime) manque pour la date demandée — → **`422`** `{error}` nommant la
+  vue et la clé/corps manquant (+ date), **jamais `500`** (#58). La chaîne de calcul
+  enveloppe les exceptions de domaine `MissingDated{Rate,Amount}Exception` /
+  `MissingPrimeRateException` dans `UncomputableViewException` (infra), mappée en `422` par
+  le contrôleur ; l'erreur est levée **avant** la mise en cache (cache non empoisonné).
+  Sélection mixte (vue calculable + vue non valorisable) → **tout-ou-rien** : `422` global
+  nommant la vue fautive. En-tête **`X-Cache: MISS`** (calcul) ou **`HIT`** (servi du cache).
 
 Le **mapping JSON est manuel** (VO/entité → tableau → `JsonResponse`, style
 `HealthController`) : **pas de `symfony/serializer`** (décision Q3).
