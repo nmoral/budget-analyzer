@@ -59,6 +59,13 @@ services:
     # non-fallback prioritaire, scopée au jeu de paramètres), avec drapeau fallback.
     App\Domain\Shared\PrimeRateProvider: '@App\Infrastructure\Prime\PrimeRateProviderAdapter'
 
+    # Factory infra `Profile(+Grille) → Career` (#66, J1) : la durée de l'échelon
+    # terminal (vide en base) est injectée ici au câblage, donc tunable, et vaut par
+    # défaut la constante de la factory (60 mois, cf. docs/fonctionnel.md).
+    App\Infrastructure\Cost\CareerFactory:
+        arguments:
+            $terminalDurationMonths: !php/const App\Infrastructure\Cost\CareerFactory::DEFAULT_TERMINAL_DURATION_MONTHS
+
     # Règles de retraite réelles (#13), taggées dans leur famille avec leur code
     # métier comme clé d'index du locator. Chacune connaît sa clé de paramètre daté
     # (`taux_cas_civil` / `taux_cnracl`) et reçoit le port `DatedRateProvider`
