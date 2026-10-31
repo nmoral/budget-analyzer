@@ -9,11 +9,8 @@ simulateur avec ses règles de sélection des valeurs réglementaires datées, u
 **commande d'import** qui peuple ce modèle depuis le dépôt de données, les **règles
 de calcul** du coût employeur (famille retraite, coût annuel, horizons, vues de coût)
 et une **API JSON** qui expose la création et la lecture de scénarios ainsi que leur
-**résultat de simulation** sur l'horizon « année 1 » (voir « API / scénarios et
-résultats »). Les autres capacités du moteur (horizons régime permanent et cohorte,
-vues de coût au-delà de ce qu'expose le résultat année 1) ne sont pas encore
-accessibles par l'API et ne sont exercées que par les tests ; aucun écran n'est
-encore exposé.
+**résultat de simulation** sur les horizons « année 1 », « régime permanent » et
+« cohorte » (voir « API / scénarios et résultats »). Aucun écran n'est encore exposé.
 
 ## Ce qui est disponible
 
@@ -146,7 +143,10 @@ paramètres** effectivement épinglée.
 lignes. Un scénario **inconnu** est signalé comme introuvable.
 
 **Lire le résultat d'un scénario** : on obtient, **par ligne** et **par vue de coût
-demandée**, le coût de l'horizon « année 1 » du recrutement, décomposé en trois fenêtres :
+demandée**, le coût de chaque **horizon demandé** du recrutement. Trois horizons sont
+désormais sélectionnables : **année 1** (par défaut), **régime permanent** et **cohorte**.
+
+L'horizon **année 1** est décomposé en trois fenêtres :
 
 - **année pleine** : le coût employeur annuel non proraté, en regard ;
 - **année 1** : le coût de l'année civile du recrutement, proraté au **nombre de mois
@@ -154,17 +154,33 @@ demandée**, le coût de l'horizon « année 1 » du recrutement, décomposé en
 - **année scolaire** : proposée **uniquement pour les profils à calendrier scolaire**
   (fenêtre 1er septembre → 31 août), absente sinon.
 
-Chaque fenêtre est valorisée selon les **vues de coût** choisies (voir « Vues de coût de
-la retraite ») : la vue **budgétaire** sert de référence et est la vue par **défaut**. Le
-résultat fournit en plus un **agrégat** qui additionne, pour chaque vue et chaque fenêtre,
-le coût de **chaque ligne multiplié par son volume** (Σ ligne × volume). Chaque coût est
-restitué en ses quatre termes (traitement + primes, retraite, autres cotisations, RAFP) et
-leur total, en pleine précision (sans arrondi d'affichage à ce stade).
+L'horizon **régime permanent** donne le **coût annuel moyen d'un agent** du corps en
+population stationnaire (voir « Horizon régime permanent » plus bas) : un seul montant par
+vue, décomposé en ses quatre termes et leur total. L'horizon **cohorte** donne la **série
+année par année** du coût d'un agent sur **toute sa carrière** (voir « Horizon cohorte »
+plus bas) : une liste de montants — l'année _k_ couvre les mois [(k−1)·12, k·12) depuis
+l'entrée — accompagnée du **cumul** (somme de toutes les années, terme par terme). Permanent
+comme cohorte sont calculés **par agent** (volume d'une ligne appliqué uniquement à
+l'agrégat, voir ci-dessous), à la **date de recrutement** de la ligne.
+
+Chaque fenêtre ou montant est valorisé selon les **vues de coût** choisies (voir « Vues de
+coût de la retraite ») : la vue **budgétaire** sert de référence et est la vue par
+**défaut**. Pour le régime permanent et la cohorte comme pour l'année 1, c'est **seul le
+terme retraite qui suit la vue** (view-aware) ; les trois autres termes restent le coût de
+base, identique entre vues. Le résultat fournit en plus un **agrégat** qui additionne, pour
+chaque vue, le coût de **chaque ligne multiplié par son volume** (Σ ligne × volume) : par
+fenêtre pour l'année 1, terme par terme pour le régime permanent, et **aligné par index
+d'année** pour la cohorte — la série agrégée a la longueur de la carrière la plus longue,
+une ligne à la carrière plus courte ne contribuant **pas au-delà de sa propre carrière**
+(elle y compte 0). Chaque coût est restitué en ses quatre termes (traitement + primes,
+retraite, autres cotisations, RAFP) et leur total, en pleine précision (sans arrondi
+d'affichage à ce stade).
 
 La **sélection** se fait au moment de la lecture du résultat : on choisit les **horizons**
-et les **vues** voulus ; à défaut, le résultat porte sur l'horizon **année 1** valorisé en
-vue **budgétaire**. Une **vue inconnue** ou un **horizon inconnu** (seul « année 1 » est
-disponible aujourd'hui) font **rejeter** la demande. Une **vue valide** dont le jeu de
+(`year1`, `permanent`, `cohorte`, combinables) et les **vues** voulus ; à défaut, le
+résultat porte sur l'horizon **année 1** valorisé en vue **budgétaire**. Une **vue
+inconnue** ou un **horizon inconnu** font **rejeter** la demande. Une **vue valide** dont le
+jeu de
 paramètres épinglé **ne contient pas** un taux, un montant ou un taux de primes **requis**
 pour la date demandée fait elle aussi **rejeter** la demande, par une **erreur maîtrisée**
 qui **nomme la vue et le paramètre manquant** (avec sa date) — jamais une erreur serveur
@@ -190,7 +206,12 @@ chaque chiffre** en ajoutant le paramètre `detail=full` à la lecture du résul
 identique à l'actuelle** (les quatre postes et leur total, sans justification) ; **avec**,
 chaque fenêtre (année pleine, année 1, année scolaire) de chaque ligne et de chaque vue
 porte, à côté de ses quatre termes, un bloc **`detail`** qui déplie **chacun des quatre
-termes** :
+termes**.
+
+Le dépliage `detail=full` ne concerne **que l'horizon année 1** : les horizons **régime
+permanent** et **cohorte**, qui sont des **moyennes ou des sommes sans trace de calcul**,
+sont restitués sans bloc `detail` même lorsque `detail=full` est demandé (limite assumée).
+Les quatre termes de l'année 1 se déplient ainsi :
 
 - la **valeur** du terme pour cette fenêtre (la valeur proratisée, le cas échéant) ;
 - la **formule** en texte lisible (ex. retraite budgétaire : `TIB·r_retraite`) ;
@@ -213,11 +234,12 @@ Les codes de réponse (200 sans détail, 422 sélection invalide, 404 scénario 
 **inchangés**, et la réponse légère et la réponse détaillée sont **mises en cache
 séparément** (une clé par mode `detail`).
 
-**Hors de ce périmètre** : les horizons **régime permanent** et **cohorte** (non exposés
-par l'API, #66), le **ré-épinglage** d'un scénario vers une autre version et l'**édition des
-lignes** après création, le **front** (#20) et l'**authentification**. Les **sources de
-méthode** d'une vue restent exposées en **texte libre** (leur conversion en vraies sources
-documentaires est hors de ce périmètre).
+**Hors de ce périmètre** : le **ré-épinglage** d'un scénario vers une autre version et
+l'**édition des lignes** après création, le **front** (#20) et l'**authentification**. Les
+**sources de méthode** d'une vue restent exposées en **texte libre** (leur conversion en
+vraies sources documentaires est hors de ce périmètre). Le dépliage `detail=full` reste
+**limité à l'année 1** (permanent et cohorte sans trace), et la cohorte expose **toute la
+carrière** sans paramètre de borne.
 
 ## Ce qui n'est pas encore disponible
 
@@ -240,9 +262,9 @@ présentes aujourd'hui :
   l'**API JSON** des scénarios et de leur résultat « année 1 » est livrée (issue #19,
   voir « API / scénarios et résultats » ci-dessous), enrichie du **détail de calcul par
   montant** (mode `?detail=full` : formule, entrées datées, prorata et sources de chaque
-  terme — issue #65, voir « API / scénarios et résultats »), mais les apports suivants
-  restent à venir ;
-- l'**exposition par l'API des autres horizons** (régime permanent, cohorte) — issue #66 ;
+  terme — issue #65, voir « API / scénarios et résultats ») et de l'**exposition par
+  l'API des horizons régime permanent et cohorte** (issue #66, voir « API / scénarios et
+  résultats »), mais les apports suivants restent à venir ;
 - le front / les pages Twig — issue #20.
 
 La liste ci-dessus décrit des intentions tracées par leurs issues respectives ; leur
@@ -477,19 +499,27 @@ la durée de chaque échelon**, et le coût du corps est ce coût moyen multipli
 
 La **carrière** (la suite des échelons avec leur durée) et le **nombre de postes** N sont
 des **entrées** de ce calcul. Chaque échelon doit porter une durée strictement positive, y
-compris l'**échelon terminal** dont la durée est **fournie** (le régime permanent n'a de
-sens que si l'on sait combien de temps les agents restent au sommet de la grille). Une
-carrière vide, une durée nulle ou négative, ou un effectif inférieur à 1 sont **rejetés**
-par une erreur explicite. Le calcul est **reproductible** (à carrière et date identiques,
-résultat identique) et ne comporte **aucun arrondi d'affichage** à ce stade (#19/#20).
+compris l'**échelon terminal** (le régime permanent n'a de sens que si l'on sait combien de
+temps les agents restent au sommet de la grille). Une carrière vide, une durée nulle ou
+négative, ou un effectif inférieur à 1 sont **rejetés** par une erreur explicite. Le calcul
+est **reproductible** (à carrière et date identiques, résultat identique) et ne comporte
+**aucun arrondi d'affichage** à ce stade (#19/#20).
 
-**Hors de ce périmètre** : la construction automatique de la carrière à partir d'une
-grille persistée (charger les échelons et leurs durées, fournir la durée du terminal,
-dériver la situation de chaque agent), reportée à une issue ultérieure ; la carrière est
-ici composée à la main. Restent aussi hors périmètre le **calibrage** contre le coût moyen
-du PAP (#22), l'**autre horizon** cohorte (#17, voir ci-dessous), les **vues de coût**
-enfichables (#18) et l'**arrondi d'affichage** (#19/#20). Comme les autres horizons, ce
-calcul n'est exposé ni par une API ni par un écran : il n'est exercé que par les tests.
+**Durée de l'échelon terminal (hypothèse métier, #66)** : dans les grilles importées, le
+**dernier échelon** (terminal) n'a **pas de durée** en base (l'agent y reste
+indéfiniment). Or la moyenne pondérée du régime permanent a besoin d'une durée pour chaque
+échelon. Quand la carrière est construite automatiquement depuis la grille (exposition par
+l'API, #66), le terminal reçoit donc une **durée fixe de 60 mois** : c'est une **hypothèse
+de modélisation** assumée, qui fait entrer le terminal dans la moyenne `Σ(terme × durée) /
+Σ(durées)` comme tout autre échelon (par exemple, 2 échelons de 12 mois + terminal
+60 mois ⇒ pondération 12 / 12 / 60). Cette durée est **réglable** (constante fixée au
+câblage), susceptible d'être affinée ultérieurement. L'horizon **cohorte n'est pas
+concerné** : il ignore la durée du terminal (une fois le terminal atteint, les années
+suivantes sont constantes).
+
+**Hors de ce périmètre** : le **calibrage** contre le coût moyen du PAP (#22), les **vues
+de coût** enfichables au-delà du view-aware du terme retraite (#18) et l'**arrondi
+d'affichage** (#19/#20).
 
 ### Horizon « cohorte » d'un recrutement (série annuelle, avancement d'échelon)
 
@@ -536,10 +566,12 @@ l'entrée, #18), pas de **départs ni d'attrition** (l'effectif reste constant, 
 restent au terminal), pas de **prorata de la première année** (années pleines depuis
 l'entrée ; le prorata de la date de recrutement est l'horizon « année 1 », #15).
 
-**Hors de ce périmètre** : la construction automatique de la carrière à partir d'une grille
-persistée (charger les échelons et leurs durées, dériver la situation de chaque agent et la
-durée terminale), reportée à une issue ultérieure ; la carrière, l'horizon et N sont ici
-composés à la main. Restent aussi hors périmètre la **revalorisation annuelle** et les
-**départs / attrition** (#18 et ultérieurs), les **vues de coût** enfichables (#18) et
-l'**arrondi d'affichage** (#19/#20). Comme les autres horizons, ce calcul n'est exposé ni
-par une API ni par un écran : il n'est exercé que par les tests.
+Depuis #66, la carrière est **construite automatiquement depuis la grille du profil**
+(voir « API / scénarios et résultats ») lorsque l'horizon cohorte est demandé via l'API ;
+le calcul reste par ailleurs exercé par les tests avec une carrière composée à la main.
+L'exposition par l'API se fait toujours en **mode « carrière complète »** (pas de paramètre
+de borne d'horizon).
+
+**Hors de ce périmètre** : la **revalorisation annuelle** et les **départs / attrition**
+(#18 et ultérieurs), les **vues de coût** enfichables au-delà du view-aware du terme
+retraite (#18) et l'**arrondi d'affichage** (#19/#20).
