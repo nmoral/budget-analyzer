@@ -32,6 +32,7 @@ use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\PrimeRateObservation;
 use App\Domain\Shared\PrimeRateProvider;
 use App\Domain\Shared\Rate;
+use App\Domain\Shared\RetirementValuation;
 use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
@@ -218,9 +219,9 @@ final class CostViewCalculatorTest extends TestCase
                 return 'X_TEST_VIEW';
             }
 
-            public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+            public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
             {
-                return $tib->multipliedByRate(Rate::fromPercentage('10'));
+                return new RetirementValuation($tib->multipliedByRate(Rate::fromPercentage('10')), 'TIB·10%', []);
             }
 
             public function definition(): string

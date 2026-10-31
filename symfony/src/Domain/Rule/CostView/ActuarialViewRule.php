@@ -6,6 +6,7 @@ namespace App\Domain\Rule\CostView;
 
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\Rate;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Vue actuarielle (#18) : valorise la retraite comme le coût des services rendus sur
@@ -32,11 +33,14 @@ final class ActuarialViewRule implements CostViewRule
         return 'ACTUARIELLE';
     }
 
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
     {
         $annualRights = $tib->multipliedByRate($this->assumptions->tauxAnnuite());
+        $amount = $annualRights->multipliedByRate(Rate::fromRatio($this->assumptions->facteurActuariel()));
 
-        return $annualRights->multipliedByRate(Rate::fromRatio($this->assumptions->facteurActuariel()));
+        // Pas d'entrée datée sourcée : la valorisation repose sur des hypothèses
+        // structurelles (taux d'annuité, facteur actuariel) exposées via assumptions().
+        return new RetirementValuation($amount, '(TIB × taux d\'annuité) × facteur actuariel', []);
     }
 
     public function definition(): string

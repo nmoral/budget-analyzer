@@ -34,7 +34,9 @@ final class BudgetViewRuleTest extends TestCase
 
         $retirement = $this->rule()->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('19199.209440', $retirement->toString());
+        self::assertSame('19199.209440', $retirement->amount()->toString());
+        self::assertSame('TIB·r_retraite', $retirement->formula());
+        self::assertCount(1, $retirement->inputs());
     }
 
     public function testAssumptionsAreEmpty(): void

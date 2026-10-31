@@ -6,6 +6,7 @@ namespace App\Domain\Rule\CostView;
 
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Vue budgétaire (#18, vue par défaut) : valorise la retraite comme la dépense
@@ -28,11 +29,16 @@ final class BudgetViewRule implements CostViewRule
         return 'BUDGETAIRE';
     }
 
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
     {
         $regime = $this->retirementRules->resolve($retirementRegimeCode);
+        $rate = $regime->employerRate($date);
 
-        return $tib->multipliedByRate($regime->employerRate($date)->rate());
+        return new RetirementValuation(
+            $tib->multipliedByRate($rate->rate()),
+            'TIB·r_retraite',
+            [$rate->input()],
+        );
     }
 
     public function definition(): string

@@ -6,6 +6,7 @@ namespace App\Domain\Rule\CostView;
 
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\DatedRateProvider;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Vue équilibre technique (#18) : valorise la retraite au taux employeur qui
@@ -29,11 +30,16 @@ final class TechnicalBalanceViewRule implements CostViewRule
         return 'EQUILIBRE_TECHNIQUE';
     }
 
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
     {
         $key = self::KEY_PREFIX . strtolower($retirementRegimeCode);
+        $rate = $this->rates->rateAt($key, $date);
 
-        return $tib->multipliedByRate($this->rates->rateAt($key, $date)->rate());
+        return new RetirementValuation(
+            $tib->multipliedByRate($rate->rate()),
+            'TIB·' . $key,
+            [$rate->input()],
+        );
     }
 
     public function definition(): string

@@ -6,6 +6,7 @@ namespace App\Domain\Rule\CostView;
 
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\DatedRateProvider;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Vue équivalent privé (#18) : valorise la retraite comme si l'agent relevait du
@@ -27,9 +28,15 @@ final class PrivateEquivalentViewRule implements CostViewRule
         return 'EQUIVALENT_PRIVE';
     }
 
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
     {
-        return $tib->multipliedByRate($this->rates->rateAt(self::RATE_KEY, $date)->rate());
+        $rate = $this->rates->rateAt(self::RATE_KEY, $date);
+
+        return new RetirementValuation(
+            $tib->multipliedByRate($rate->rate()),
+            'TIB·taux_employeur_prive',
+            [$rate->input()],
+        );
     }
 
     public function definition(): string

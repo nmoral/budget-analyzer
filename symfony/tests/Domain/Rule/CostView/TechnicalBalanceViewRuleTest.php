@@ -32,7 +32,8 @@ final class TechnicalBalanceViewRuleTest extends TestCase
 
         $retirement = $this->rule()->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('17500.494750', $retirement->toString());
+        self::assertSame('17500.494750', $retirement->amount()->toString());
+        self::assertSame('TIB·taux_equilibre_cas_civil', $retirement->formula());
     }
 
     public function testRetirementCostForCnraclUsesItsKey(): void
@@ -42,7 +43,7 @@ final class TechnicalBalanceViewRuleTest extends TestCase
 
         $retirement = $this->rule()->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CNRACL');
 
-        self::assertSame('9800.277060', $retirement->toString());
+        self::assertSame('9800.277060', $retirement->amount()->toString());
     }
 
     public function testUnknownRegimeHasNoEquilibriumKeyAndThrows(): void

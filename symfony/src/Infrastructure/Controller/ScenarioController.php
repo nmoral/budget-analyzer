@@ -110,9 +110,10 @@ final class ScenarioController
 
         $horizons = $this->selection($request->query->getString('horizons'), 'year1');
         $views = $this->selection($request->query->getString('views'), 'BUDGETAIRE');
+        $detail = $request->query->getString('detail') === 'full';
 
         try {
-            $cached = $this->resultCache->get($scenario, $horizons, $views);
+            $cached = $this->resultCache->get($scenario, $horizons, $views, $detail);
         } catch (InvalidSelectionException|UncomputableViewException $exception) {
             return $this->error($exception->getMessage(), 422);
         }

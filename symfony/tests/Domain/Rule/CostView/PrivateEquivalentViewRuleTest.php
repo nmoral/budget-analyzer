@@ -32,7 +32,8 @@ final class PrivateEquivalentViewRuleTest extends TestCase
         $retirement = $this->rule($this->rateProvider())
             ->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('6533.518040', $retirement->toString());
+        self::assertSame('6533.518040', $retirement->amount()->toString());
+        self::assertSame('TIB·taux_employeur_prive', $retirement->formula());
     }
 
     public function testRetirementCostIgnoresRegimeCodeAndReadsThePrivateKey(): void
@@ -44,7 +45,7 @@ final class PrivateEquivalentViewRuleTest extends TestCase
         $forCasCivil = $rule->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
         $forCnracl = $rule->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CNRACL');
 
-        self::assertTrue($forCasCivil->equals($forCnracl));
+        self::assertTrue($forCasCivil->amount()->equals($forCnracl->amount()));
     }
 
     public function testMetadata(): void
