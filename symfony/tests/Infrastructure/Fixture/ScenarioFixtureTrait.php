@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Infrastructure\Fixture;
 
 use App\Infrastructure\Entity\Corps;
+use App\Infrastructure\Entity\DatedParameter;
 use App\Infrastructure\Entity\Echelon;
 use App\Infrastructure\Entity\Funder;
 use App\Infrastructure\Entity\Grille;
 use App\Infrastructure\Entity\ParameterSet;
+use App\Infrastructure\Entity\PrimeRate;
 use App\Infrastructure\Entity\Profile;
 use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Source;
@@ -115,5 +117,107 @@ trait ScenarioFixtureTrait
         $em->persist($profile);
 
         return $profile;
+    }
+
+    /**
+     * Profil PE/FPE/IM395/CAS_CIVIL avec codes métier EXACTS (résolubles par le
+     * moteur) et tous les paramètres datés nécessaires au calcul de coût, rattachés
+     * au jeu `$set` : point d'indice, taux CAS civil, autres cotisations FPE, RAFP,
+     * taux employeur privé (vue EQUIVALENT_PRIVE), et un taux de primes pour le corps.
+     */
+    private function persistComputableProfile(
+        EntityManagerInterface $em,
+        ParameterSet $set,
+        string $referenceCalendar = 'scolaire',
+    ): Profile {
+        $corps = new Corps();
+        $corps->code = 'PE';
+        $corps->label = 'Professeur des écoles';
+        $corps->versant = 'FPE';
+        $corps->category = 'A';
+        $em->persist($corps);
+
+        $source = new Source();
+        $source->code = 'SRC-compute';
+        $source->label = 'Source calcul';
+        $source->publisher = 'Éditeur';
+        $source->url = 'https://example.test/compute';
+        $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
+        $source->fileHash = 'hash-compute';
+        $em->persist($source);
+
+        $grille = new Grille();
+        $grille->body = $corps;
+        $grille->grade = 'classe normale';
+        $grille->version = '2024';
+        $grille->startDate = new \DateTimeImmutable('2020-01-01');
+        $grille->endDate = null;
+        $grille->source = $source;
+        $grille->parameterSet = $set;
+        $em->persist($grille);
+
+        $echelon = new Echelon();
+        $echelon->grille = $grille;
+        $echelon->rank = 1;
+        $echelon->grossIndex = 390;
+        $echelon->increasedIndex = 395;
+        $echelon->durationMonths = 12;
+        $em->persist($echelon);
+
+        $scheme = new RetirementScheme();
+        $scheme->code = 'CAS_CIVIL';
+        $scheme->label = 'CAS civil';
+        $em->persist($scheme);
+
+        $funder = new Funder();
+        $funder->code = 'ETAT';
+        $funder->label = 'État';
+        $em->persist($funder);
+
+        $this->persistDatedParameter($em, $set, $source, 'point_indice', '59.0734');
+        $this->persistDatedParameter($em, $set, $source, 'taux_cas_civil', '82.28');
+        $this->persistDatedParameter($em, $set, $source, 'taux_autres_cotisations_fpe', '16.07');
+        $this->persistDatedParameter($em, $set, $source, 'taux_rafp', '5');
+        $this->persistDatedParameter($em, $set, $source, 'taux_employeur_prive', '28');
+
+        $prime = new PrimeRate();
+        $prime->body = $corps;
+        $prime->value = '0.21';
+        $prime->observationYear = 2026;
+        $prime->fallback = false;
+        $prime->source = $source;
+        $prime->parameterSet = $set;
+        $em->persist($prime);
+
+        $profile = new Profile();
+        $profile->body = $corps;
+        $profile->grade = 'classe normale';
+        $profile->entryEchelon = $echelon;
+        $profile->retirementScheme = $scheme;
+        $profile->indemnitaryScheme = null;
+        $profile->funder = $funder;
+        $profile->status = 'titulaire';
+        $profile->referenceCalendar = $referenceCalendar;
+        $em->persist($profile);
+
+        return $profile;
+    }
+
+    private function persistDatedParameter(
+        EntityManagerInterface $em,
+        ParameterSet $set,
+        Source $source,
+        string $key,
+        string $value,
+    ): void {
+        $param = new DatedParameter();
+        $param->key = $key;
+        $param->value = $value;
+        $param->unit = 'UNIT';
+        $param->startDate = new \DateTimeImmutable('2020-01-01');
+        $param->endDate = null;
+        $param->source = $source;
+        $param->parameterSet = $set;
+        $em->persist($param);
     }
 }

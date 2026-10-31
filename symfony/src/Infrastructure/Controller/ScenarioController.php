@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Controller;
 
+use App\Infrastructure\Cost\InvalidSelectionException;
+use App\Infrastructure\Cost\ScenarioResultCalculator;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\ScenarioLine;
 use App\Infrastructure\Repository\ParameterSetRepository;
@@ -26,6 +28,7 @@ final class ScenarioController
         private readonly ScenarioLineRepository $lines,
         private readonly ProfileRepository $profiles,
         private readonly ParameterSetRepository $parameterSets,
+        private readonly ScenarioResultCalculator $resultCalculator,
     ) {
     }
 
@@ -96,6 +99,24 @@ final class ScenarioController
         return new JsonResponse($this->toArray($scenario, $this->lines->forScenario($scenario)));
     }
 
+    #[Route('/api/scenarios/{id}/result', name: 'api_scenarios_result', methods: ['GET'], requirements: ['id' => '\d+'])]
+    public function result(int $id, Request $request): JsonResponse
+    {
+        $scenario = $this->scenarios->find($id);
+        if ($scenario === null) {
+            return $this->error('Scénario introuvable.', 404);
+        }
+
+        $horizons = $this->selection($request->query->getString('horizons'), 'year1');
+        $views = $this->selection($request->query->getString('views'), 'BUDGETAIRE');
+
+        try {
+            return new JsonResponse($this->resultCalculator->compute($scenario, $horizons, $views));
+        } catch (InvalidSelectionException $exception) {
+            return $this->error($exception->getMessage(), 422);
+        }
+    }
+
     /**
      * @param array<array-key, mixed> $lineRaw
      */
@@ -159,6 +180,22 @@ final class ScenarioController
                 'spreadYears' => $line->spreadYears,
             ], $lines),
         ];
+    }
+
+    /**
+     * Liste de codes depuis un paramètre `?a,b,c` : valeurs triées dans l'ordre fourni,
+     * vides ignorées ; sélection vide → `[$default]`.
+     *
+     * @return list<string>
+     */
+    private function selection(string $raw, string $default): array
+    {
+        $items = array_values(array_filter(
+            array_map('trim', explode(',', $raw)),
+            static fn (string $item): bool => $item !== '',
+        ));
+
+        return $items === [] ? [$default] : $items;
     }
 
     private function error(string $message, int $status): JsonResponse

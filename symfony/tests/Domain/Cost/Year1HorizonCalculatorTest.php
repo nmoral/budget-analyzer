@@ -118,6 +118,54 @@ final class Year1HorizonCalculatorTest extends TestCase
         self::assertCostEquals($this->prorated($horizon->fullYear(), 10), $schoolYear);
     }
 
+    public function testComputeFromExposesTheProvidedFullYearUnchanged(): void
+    {
+        // J2 : computeFrom applique le prorata à un AnnualCost déjà valorisé (par une
+        // vue) ; fullYear() est exactement l'AnnualCost fourni, non proraté.
+        $full = $this->sampleCost();
+
+        $horizon = (new Year1HorizonCalculator($this->annualCostCalculator()))
+            ->computeFrom($full, new \DateTimeImmutable('2026-11-01'), ReferenceCalendar::CIVIL);
+
+        self::assertCostEquals($full, $horizon->fullYear());
+    }
+
+    public function testComputeFromProratesYear1FromTheProvidedCost(): void
+    {
+        // J2 : recrut. 1er nov → year1 = coût fourni × 2/12 (nov, déc), calendrier civil
+        // → schoolYear null.
+        $full = $this->sampleCost();
+
+        $horizon = (new Year1HorizonCalculator($this->annualCostCalculator()))
+            ->computeFrom($full, new \DateTimeImmutable('2026-11-01'), ReferenceCalendar::CIVIL);
+
+        self::assertCostEquals($this->prorated($full, 2), $horizon->year1());
+        self::assertNull($horizon->schoolYear());
+    }
+
+    public function testComputeFromAddsSchoolYearFromTheProvidedCost(): void
+    {
+        // J2 : scolaire, recrut. 1er nov → schoolYear = coût fourni × 10/12 (nov→août).
+        $full = $this->sampleCost();
+
+        $horizon = (new Year1HorizonCalculator($this->annualCostCalculator()))
+            ->computeFrom($full, new \DateTimeImmutable('2026-11-01'), ReferenceCalendar::SCOLAIRE);
+
+        $schoolYear = $horizon->schoolYear();
+        self::assertNotNull($schoolYear);
+        self::assertCostEquals($this->prorated($full, 10), $schoolYear);
+    }
+
+    private function sampleCost(): AnnualCost
+    {
+        return new AnnualCost(
+            Amount::fromString('1200'),
+            Amount::fromString('600'),
+            Amount::fromString('300'),
+            Amount::fromString('120'),
+        );
+    }
+
     private function compute(\DateTimeImmutable $recruitment, ReferenceCalendar $calendar): \App\Domain\Cost\Year1Horizon
     {
         return (new Year1HorizonCalculator($this->annualCostCalculator()))

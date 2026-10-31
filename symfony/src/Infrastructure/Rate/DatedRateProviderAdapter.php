@@ -7,6 +7,7 @@ namespace App\Infrastructure\Rate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Repository\DatedParameterRepository;
 
 /**
@@ -19,12 +20,13 @@ final class DatedRateProviderAdapter implements DatedRateProvider
 {
     public function __construct(
         private readonly DatedParameterRepository $datedParameters,
+        private readonly ParameterSetScope $scope,
     ) {
     }
 
     public function rateAt(string $key, \DateTimeImmutable $date): Rate
     {
-        $parameter = $this->datedParameters->valueInEffectAt($key, $date);
+        $parameter = $this->datedParameters->valueInEffectAt($key, $date, $this->scope->current());
 
         if ($parameter === null) {
             throw MissingDatedRateException::forKeyAndDate($key, $date);

@@ -26,8 +26,21 @@ final class Year1HorizonCalculator
         \DateTimeImmutable $recruitment,
         ReferenceCalendar $calendar,
     ): Year1Horizon {
-        $fullYear = $this->annualCost->compute($situation, $recruitment);
+        return $this->computeFrom($this->annualCost->compute($situation, $recruitment), $recruitment, $calendar);
+    }
 
+    /**
+     * Applique le prorata « année 1 » à un coût annuel plein DÉJÀ valorisé (par une
+     * vue de coût, #18) : le coût fourni est exposé tel quel en `fullYear`, l'année 1
+     * le proratise du recrutement à décembre inclus, et la vue scolaire (sept → août)
+     * est ajoutée pour un calendrier scolaire. Évite de dupliquer le prorata en
+     * infrastructure.
+     */
+    public function computeFrom(
+        AnnualCost $fullYear,
+        \DateTimeImmutable $recruitment,
+        ReferenceCalendar $calendar,
+    ): Year1Horizon {
         $year1 = $this->proratedToMonth($fullYear, $recruitment, self::DECEMBER);
 
         $schoolYear = $calendar === ReferenceCalendar::SCOLAIRE

@@ -7,6 +7,7 @@ namespace App\Infrastructure\Amount;
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\DatedAmountProvider;
 use App\Domain\Shared\MissingDatedAmountException;
+use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Repository\DatedParameterRepository;
 
 /**
@@ -18,12 +19,13 @@ final class DatedAmountProviderAdapter implements DatedAmountProvider
 {
     public function __construct(
         private readonly DatedParameterRepository $datedParameters,
+        private readonly ParameterSetScope $scope,
     ) {
     }
 
     public function amountAt(string $key, \DateTimeImmutable $date): Amount
     {
-        $parameter = $this->datedParameters->valueInEffectAt($key, $date);
+        $parameter = $this->datedParameters->valueInEffectAt($key, $date, $this->scope->current());
 
         if ($parameter === null) {
             throw MissingDatedAmountException::forKeyAndDate($key, $date);

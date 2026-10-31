@@ -7,6 +7,7 @@ namespace App\Tests\Infrastructure\Persistence;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
 use App\Infrastructure\Entity\ParameterSet;
+use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Rate\DatedRateProviderAdapter;
 use App\Infrastructure\Repository\DatedParameterRepository;
 
@@ -121,7 +122,7 @@ final class DatedRateProviderAdapterTest extends IntegrationTestCase
 
     private function adapter(): DatedRateProviderAdapter
     {
-        return new DatedRateProviderAdapter($this->repository());
+        return new DatedRateProviderAdapter($this->repository(), new ParameterSetScope());
     }
 
     private function repository(): DatedParameterRepository
