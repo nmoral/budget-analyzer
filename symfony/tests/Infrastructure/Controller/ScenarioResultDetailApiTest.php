@@ -65,6 +65,7 @@ final class ScenarioResultDetailApiTest extends WebTestCase
 
         self::assertStringNotContainsString('"detail"', $raw);
         self::assertStringNotContainsString('"meta"', $raw);
+        self::assertStringNotContainsString('"prorata"', $raw);
 
         /** @var array{lines: list<array{results: array<string, array{year1: array{fullYear: array<string, mixed>}}>}>} $body */
         $body = json_decode($raw, true);
@@ -186,6 +187,92 @@ final class ScenarioResultDetailApiTest extends WebTestCase
         return $value;
     }
 
+    /**
+     * C1.3 : fenêtres proratisées réconciliables. Recrutement en novembre (calendrier
+     * scolaire) → year1 = 2 mois (nov→déc), schoolYear = 10 mois (nov→août). Chaque terme
+     * déplié porte un `prorata` {months, over, window} tel que
+     * value = valeur_annuelle_du_terme × months/over, vérifié sur year1 ET schoolYear.
+     */
+    public function testProratedWindowsExposeReconcilableProrataFactor(): void
+    {
+        $id = $this->scenarioRecruitedAt('2026-11-01');
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE&detail=full');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        /** @var array{lines: list<array{results: array<string, array{year1: array<string, array<string, mixed>>}>}>} $body */
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        $group = $body['lines'][0]['results']['BUDGETAIRE']['year1'];
+        /** @var array<string, array<string, array<string, mixed>>> $fullDetail */
+        $fullDetail = $group['fullYear']['detail'];
+
+        $terms = ['treatmentAndPrimes', 'retirement', 'otherContributions', 'rafp'];
+
+        // fullYear : prorata 12/12 (facteur 1) → value = valeur annuelle.
+        foreach ($terms as $term) {
+            $prorata = $fullDetail[$term]['prorata'];
+            self::assertSame(['months' => 12, 'over' => 12, 'window' => 'fullYear'], $prorata);
+            self::assertSame($group['fullYear'][$term], $fullDetail[$term]['value']);
+        }
+
+        $this->assertWindowReconciliable($group, $fullDetail, 'year1', 2, $terms);
+        $this->assertWindowReconciliable($group, $fullDetail, 'schoolYear', 10, $terms);
+    }
+
+    /**
+     * Vérifie qu'une fenêtre proratisée est réconciliable : pour chaque terme, le bloc
+     * `prorata` expose {months, over:12, window} et value = valeur_annuelle × months/12.
+     *
+     * @param array<string, array<string, mixed>>               $group      les 3 fenêtres
+     * @param array<string, array<string, array<string, mixed>>> $fullDetail dépliage annuel
+     * @param list<string>                                        $terms
+     */
+    private function assertWindowReconciliable(array $group, array $fullDetail, string $window, int $months, array $terms): void
+    {
+        self::assertArrayHasKey($window, $group, sprintf('fenêtre %s absente', $window));
+        /** @var array<string, array<string, mixed>> $windowData */
+        $windowData = $group[$window];
+        /** @var array<string, array<string, mixed>> $detail */
+        $detail = $windowData['detail'];
+
+        foreach ($terms as $term) {
+            $prorata = $detail[$term]['prorata'];
+            self::assertSame(
+                ['months' => $months, 'over' => 12, 'window' => $window],
+                $prorata,
+                sprintf('prorata du terme %s de %s', $term, $window),
+            );
+
+            $annual = $this->num($fullDetail[$term]['value']);
+            $expected = $this->prorated($annual, $months);
+            self::assertSame(
+                $this->num($detail[$term]['value']),
+                $expected,
+                sprintf('value %s de %s non réconciliable', $term, $window),
+            );
+            // Cohérence : la value du bloc detail est bien celle de la fenêtre.
+            self::assertSame($windowData[$term], $detail[$term]['value']);
+        }
+    }
+
+    /**
+     * Reproduit `Amount::proratedByMonths` : (annuel × mois) / 12, arrondi half-up à 6.
+     *
+     * @param numeric-string $annual
+     *
+     * @return numeric-string
+     */
+    private function prorated(string $annual, int $months): string
+    {
+        $numerator = bcmul($annual, (string) $months, 6);
+        $quotient = bcdiv($numerator, '12', 8);
+
+        /** @var numeric-string $rounded */
+        $rounded = bcadd(bcround($quotient, 6), '0', 6);
+
+        return $rounded;
+    }
+
     /** C4 : codes d'erreur inchangés avec le flag (404 scénario inconnu, 422 vue inconnue). */
     public function testErrorStatusCodesUnchangedWithFlag(): void
     {
@@ -200,6 +287,11 @@ final class ScenarioResultDetailApiTest extends WebTestCase
 
     private function scenario(): int
     {
+        return $this->scenarioRecruitedAt(self::RECRUITMENT);
+    }
+
+    private function scenarioRecruitedAt(string $recruitmentDate): int
+    {
         $set = $this->persistParameterSet($this->em, 'ver-detail');
         $profile = $this->persistComputableProfile($this->em, $set);
         $this->em->flush();
@@ -210,7 +302,7 @@ final class ScenarioResultDetailApiTest extends WebTestCase
             server: ['CONTENT_TYPE' => 'application/json'],
             content: (string) json_encode([
                 'title' => 'Transparence',
-                'lines' => [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]],
+                'lines' => [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => $recruitmentDate]],
             ]),
         );
         self::assertSame(201, $this->client->getResponse()->getStatusCode());

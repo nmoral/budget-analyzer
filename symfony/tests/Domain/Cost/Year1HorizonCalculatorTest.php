@@ -159,6 +159,43 @@ final class Year1HorizonCalculatorTest extends TestCase
         self::assertCostEquals($this->prorated($full, 10), $schoolYear);
     }
 
+    public function testFullYearExposesAProrataOfTwelveOverTwelve(): void
+    {
+        // C1.3 : l'année pleine n'est pas proratisée → prorata 12/12 (facteur 1).
+        $horizon = $this->compute(new \DateTimeImmutable(self::RECRUITMENT), ReferenceCalendar::CIVIL);
+
+        self::assertSame(12, $horizon->fullYearProrata()->months());
+        self::assertSame(12, $horizon->fullYearProrata()->over());
+    }
+
+    public function testYear1ExposesItsProrataFactorUntilDecember(): void
+    {
+        // C1.3 : recrut. 1er sept → year1 proratisé 4/12 (sept→déc), facteur exposé.
+        $horizon = $this->compute(new \DateTimeImmutable(self::RECRUITMENT), ReferenceCalendar::CIVIL);
+
+        self::assertSame(4, $horizon->year1Prorata()->months());
+        self::assertSame(12, $horizon->year1Prorata()->over());
+    }
+
+    public function testSchoolYearExposesItsProrataFactorUntilAugust(): void
+    {
+        // C1.3 : scolaire, recrut. 1er nov → schoolYear proratisé 10/12 (nov→août).
+        $horizon = $this->compute(new \DateTimeImmutable('2026-11-01'), ReferenceCalendar::SCOLAIRE);
+
+        $prorata = $horizon->schoolYearProrata();
+        self::assertNotNull($prorata);
+        self::assertSame(10, $prorata->months());
+        self::assertSame(12, $prorata->over());
+    }
+
+    public function testSchoolYearProrataIsNullForCivilCalendar(): void
+    {
+        // C1.3 : calendrier civil → pas de fenêtre scolaire, donc pas de prorata scolaire.
+        $horizon = $this->compute(new \DateTimeImmutable(self::RECRUITMENT), ReferenceCalendar::CIVIL);
+
+        self::assertNull($horizon->schoolYearProrata());
+    }
+
     private function sampleCost(): AnnualCost
     {
         return new AnnualCost(

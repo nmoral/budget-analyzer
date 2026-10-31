@@ -41,19 +41,28 @@ final class Year1HorizonCalculator
         \DateTimeImmutable $recruitment,
         ReferenceCalendar $calendar,
     ): Year1Horizon {
-        $year1 = $this->proratedToMonth($fullYear, $recruitment, self::DECEMBER);
+        $year1Months = CalendarMonths::countUntil($recruitment, self::DECEMBER);
+        $year1 = $this->proratedToMonth($fullYear, $year1Months);
 
-        $schoolYear = $calendar === ReferenceCalendar::SCOLAIRE
-            ? $this->proratedToMonth($fullYear, $recruitment, self::AUGUST)
-            : null;
+        $schoolYear = null;
+        $schoolYearProrata = null;
+        if ($calendar === ReferenceCalendar::SCOLAIRE) {
+            $schoolYearMonths = CalendarMonths::countUntil($recruitment, self::AUGUST);
+            $schoolYear = $this->proratedToMonth($fullYear, $schoolYearMonths);
+            $schoolYearProrata = Prorata::ofMonths($schoolYearMonths);
+        }
 
-        return new Year1Horizon($fullYear, $year1, $schoolYear);
+        return new Year1Horizon(
+            $fullYear,
+            $year1,
+            Prorata::ofMonths($year1Months),
+            $schoolYear,
+            $schoolYearProrata,
+        );
     }
 
-    private function proratedToMonth(AnnualCost $cost, \DateTimeImmutable $recruitment, int $endMonth): AnnualCost
+    private function proratedToMonth(AnnualCost $cost, int $months): AnnualCost
     {
-        $months = CalendarMonths::countUntil($recruitment, $endMonth);
-
         return new AnnualCost(
             $cost->treatmentAndPrimes()->proratedByMonths($months),
             $cost->retirement()->proratedByMonths($months),

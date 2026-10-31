@@ -7,6 +7,7 @@ namespace App\Infrastructure\Cost;
 use App\Domain\Cost\AnnualCost;
 use App\Domain\Cost\CostTrace;
 use App\Domain\Cost\CostViewCalculator;
+use App\Domain\Cost\Prorata;
 use App\Domain\Cost\TermTrace;
 use App\Domain\Cost\Year1Horizon;
 use App\Domain\Cost\Year1HorizonCalculator;
@@ -199,11 +200,26 @@ final class ScenarioResultCalculator
     private function windowArray(Year1Horizon $horizon, ?CostTrace $trace = null): array
     {
         $schoolYear = $horizon->schoolYear();
+        $schoolYearWindow = null;
+        if ($schoolYear !== null) {
+            $schoolYearProrata = $horizon->schoolYearProrata()
+                ?? throw new \LogicException('Fenêtre scolaire présente sans prorata.');
+            $schoolYearWindow = $this->amountArray(
+                $schoolYear,
+                $this->detailFor($schoolYear, $trace, 'schoolYear', $schoolYearProrata),
+            );
+        }
 
         return [
-            'fullYear' => $this->amountArray($horizon->fullYear(), $trace),
-            'year1' => $this->amountArray($horizon->year1(), $trace),
-            'schoolYear' => $schoolYear === null ? null : $this->amountArray($schoolYear, $trace),
+            'fullYear' => $this->amountArray(
+                $horizon->fullYear(),
+                $this->detailFor($horizon->fullYear(), $trace, 'fullYear', $horizon->fullYearProrata()),
+            ),
+            'year1' => $this->amountArray(
+                $horizon->year1(),
+                $this->detailFor($horizon->year1(), $trace, 'year1', $horizon->year1Prorata()),
+            ),
+            'schoolYear' => $schoolYearWindow,
         ];
     }
 
@@ -263,13 +279,15 @@ final class ScenarioResultCalculator
     }
 
     /**
-     * Valeurs des 4 termes + total (format historique, inchangé sans `$trace`). Avec
-     * une trace (mode `detail=full`), ajoute une clé `detail` parallèle qui déplie
-     * chacun des 4 termes : valeur, formule, entrées datées et sources en clair.
+     * Valeurs des 4 termes + total (format historique, inchangé sans `$detail`). Avec
+     * un dépliage (mode `detail=full`), ajoute une clé `detail` parallèle qui déplie
+     * chacun des 4 termes : valeur, formule, entrées datées, prorata et sources en clair.
+     *
+     * @param array<string, mixed>|null $detail
      *
      * @return array<string, mixed>
      */
-    private function amountArray(AnnualCost $cost, ?CostTrace $trace = null): array
+    private function amountArray(AnnualCost $cost, ?array $detail = null): array
     {
         $array = [
             'treatmentAndPrimes' => $cost->treatmentAndPrimes()->toString(),
@@ -279,26 +297,43 @@ final class ScenarioResultCalculator
             'total' => $cost->total()->toString(),
         ];
 
-        if ($trace !== null) {
-            $array['detail'] = [
-                'treatmentAndPrimes' => $this->termDetail($cost->treatmentAndPrimes(), $trace->treatmentAndPrimes()),
-                'retirement' => $this->termDetail($cost->retirement(), $trace->retirement()),
-                'otherContributions' => $this->termDetail($cost->otherContributions(), $trace->otherContributions()),
-                'rafp' => $this->termDetail($cost->rafp(), $trace->rafp()),
-            ];
+        if ($detail !== null) {
+            $array['detail'] = $detail;
         }
 
         return $array;
     }
 
     /**
-     * Dépliage d'un terme (C1.1/C2.1) : sa valeur, sa formule lisible, les entrées
-     * datées utilisées et leurs sources en clair complètes (éditeur, titre, édition,
-     * locator, url, date de récupération), résolues depuis la capture infra.
+     * Dépliage des 4 termes d'une fenêtre (C1.1/C1.3), ou `null` hors mode détaillé.
+     * La formule et les entrées proviennent de la trace annuelle ; le `$prorata` de la
+     * fenêtre rend chaque `value` réconciliable (value = valeur_annuelle × months/over).
+     *
+     * @return array<string, mixed>|null
+     */
+    private function detailFor(AnnualCost $cost, ?CostTrace $trace, string $window, Prorata $prorata): ?array
+    {
+        if ($trace === null) {
+            return null;
+        }
+
+        return [
+            'treatmentAndPrimes' => $this->termDetail($cost->treatmentAndPrimes(), $trace->treatmentAndPrimes(), $window, $prorata),
+            'retirement' => $this->termDetail($cost->retirement(), $trace->retirement(), $window, $prorata),
+            'otherContributions' => $this->termDetail($cost->otherContributions(), $trace->otherContributions(), $window, $prorata),
+            'rafp' => $this->termDetail($cost->rafp(), $trace->rafp(), $window, $prorata),
+        ];
+    }
+
+    /**
+     * Dépliage d'un terme (C1.1/C2.1/C1.3) : sa valeur (celle de la fenêtre, éventuellement
+     * proratisée), sa formule lisible, les entrées datées utilisées, le facteur de prorata
+     * de la fenêtre (months/over + fenêtre) qui rend la valeur réconciliable, et les sources
+     * en clair complètes (éditeur, titre, édition, locator, url, date de récupération).
      *
      * @return array<string, mixed>
      */
-    private function termDetail(Amount $value, TermTrace $term): array
+    private function termDetail(Amount $value, TermTrace $term, string $window, Prorata $prorata): array
     {
         return [
             'value' => $value->toString(),
@@ -312,6 +347,11 @@ final class ScenarioResultCalculator
                 ],
                 $term->inputs(),
             ),
+            'prorata' => [
+                'months' => $prorata->months(),
+                'over' => $prorata->over(),
+                'window' => $window,
+            ],
             'sources' => $this->sourcesFor($term->inputs()),
         ];
     }
