@@ -13,6 +13,7 @@ use App\Domain\Cost\IndexedSalaryCalculator;
 use App\Domain\Cost\PermanentRegimeCalculator;
 use App\Domain\Cost\PopulationAssumption;
 use App\Domain\Cost\RafpContributionCalculator;
+use App\Domain\Cost\StepCostCalculator;
 use App\Domain\Rule\OtherContributions\OtherContributionsRule;
 use App\Domain\Rule\OtherContributions\OtherContributionsRuleResolver;
 use App\Domain\Rule\Retirement\RetirementRule;
@@ -124,6 +125,34 @@ final class PermanentRegimeCalculatorTest extends TestCase
         self::assertSame(PopulationAssumption::STATIONARY, $cost->assumption());
     }
 
+    public function testAverageUsesTheProvidedStepCostStrategy(): void
+    {
+        // C1.2 : quand une stratégie de coût d'échelon est fournie, la moyenne pondérée
+        // est calculée sur SES coûts (ici fictifs : chaque terme = indice majoré), pas
+        // sur le coût de base. La pondération par durée (12/48) reste appliquée.
+        $date = new \DateTimeImmutable(self::DATE);
+        $career = $this->career([395 => 12, 634 => 48]);
+
+        $average = (new PermanentRegimeCalculator($this->annualCostCalculator()))
+            ->compute($career, $date, 1, $this->indexValuedStrategy())
+            ->averagePerAgent();
+
+        // (395·12 + 634·48) / 60 = 586.2, terme par terme.
+        $expected = Amount::fromString('395')->multipliedByIndex(12)
+            ->plus(Amount::fromString('634')->multipliedByIndex(48))
+            ->dividedBy(60);
+        self::assertTrue($expected->equals($average->treatmentAndPrimes()), 'treatmentAndPrimes');
+        self::assertTrue($expected->equals($average->retirement()), 'retirement');
+        self::assertTrue($expected->equals($average->otherContributions()), 'otherContributions');
+        self::assertTrue($expected->equals($average->rafp()), 'rafp');
+
+        // ... et ce n'est pas la moyenne du coût de base (la stratégie est bien honorée).
+        $base = (new PermanentRegimeCalculator($this->annualCostCalculator()))
+            ->compute($career, $date, 1)
+            ->averagePerAgent();
+        self::assertFalse($base->retirement()->equals($average->retirement()));
+    }
+
     public function testComputationIsReproducible(): void
     {
         // Déterminisme : même carrière, même date → résultat égal terme à terme.
@@ -153,6 +182,23 @@ final class PermanentRegimeCalculatorTest extends TestCase
     private function compute(Career $career, \DateTimeImmutable $date, int $headcount): \App\Domain\Cost\PermanentRegimeCost
     {
         return (new PermanentRegimeCalculator($this->annualCostCalculator()))->compute($career, $date, $headcount);
+    }
+
+    /**
+     * Stratégie de coût d'échelon fictive : chaque terme vaut l'indice majoré de la
+     * situation (distinct par échelon), pour isoler le fait que la moyenne porte bien
+     * sur les coûts de la stratégie et respecte la pondération par durée.
+     */
+    private function indexValuedStrategy(): StepCostCalculator
+    {
+        return new class () implements StepCostCalculator {
+            public function compute(AgentSituation $situation, \DateTimeImmutable $date): AnnualCost
+            {
+                $amount = Amount::fromString((string) $situation->increasedIndex());
+
+                return new AnnualCost($amount, $amount, $amount, $amount);
+            }
+        };
     }
 
     private function weightedMean(AnnualCost $a, int $wa, AnnualCost $b, int $wb, int $total): AnnualCost

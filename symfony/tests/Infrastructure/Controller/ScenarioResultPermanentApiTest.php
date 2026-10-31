@@ -8,8 +8,10 @@ use App\Domain\Cost\AgentSituation;
 use App\Domain\Cost\AnnualCostCalculator;
 use App\Domain\Cost\Career;
 use App\Domain\Cost\CareerStep;
+use App\Domain\Cost\CostViewCalculator;
 use App\Domain\Cost\PermanentRegimeCalculator;
 use App\Domain\Cost\PermanentRegimeCost;
+use App\Domain\Cost\ViewAwareStepCost;
 use App\Infrastructure\Entity\Echelon;
 use App\Infrastructure\Entity\Profile;
 use App\Tests\Infrastructure\Fixture\ScenarioFixtureTrait;
@@ -148,6 +150,47 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
     }
 
     /**
+     * C1.2 : le régime permanent est view-aware — pour deux vues (BUDGETAIRE,
+     * EQUIVALENT_PRIVE), `results[view].permanent` diffère sur le SEUL terme retraite
+     * (les 3 autres termes identiques), cohérent avec le mécanisme de vue (#18) appliqué
+     * à la moyenne pondérée par échelon. La vue BUDGETAIRE reste égale au coût de base.
+     */
+    public function testPermanentIsViewAwareOnRetirementOnly(): void
+    {
+        $profile = $this->seedMultiEchelonProfile([
+            ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
+            ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
+        ]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=permanent&views=BUDGETAIRE,EQUIVALENT_PRIVE');
+        self::assertSame(200, $this->client->getResponse()->getStatusCode());
+        /** @var array<string, mixed> $body */
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        $budget = $this->permanentBlock($body, 0, 'BUDGETAIRE');
+        $private = $this->permanentBlock($body, 0, 'EQUIVALENT_PRIVE');
+
+        // Seul le terme retraite (et donc le total) diffère entre les deux vues.
+        self::assertNotSame($budget['retirement'], $private['retirement']);
+        self::assertNotSame($budget['total'], $private['total']);
+        self::assertSame($budget['treatmentAndPrimes'], $private['treatmentAndPrimes']);
+        self::assertSame($budget['otherContributions'], $private['otherContributions']);
+        self::assertSame($budget['rafp'], $private['rafp']);
+
+        // La vue BUDGETAIRE reste le coût de base (non-régression C1.1).
+        $base = $this->expectedPermanent()->averagePerAgent();
+        self::assertSame($base->retirement()->toString(), $budget['retirement']);
+
+        // La vue EQUIVALENT_PRIVE = moyenne pondérée par échelon des coûts view-aware.
+        $expectedPrivate = $this->permanentCalculator()
+            ->compute($this->career(60), new \DateTimeImmutable(self::RECRUITMENT), 1, new ViewAwareStepCost($this->viewCalculator(), 'EQUIVALENT_PRIVE'))
+            ->averagePerAgent();
+        self::assertSame($expectedPrivate->retirement()->toString(), $private['retirement']);
+        self::assertSame($expectedPrivate->total()->toString(), $private['total']);
+    }
+
+    /**
      * C4.2 : `horizons=permanent` sur un profil dont un paramètre daté nécessaire à la
      * valorisation de la carrière manque (point_indice) → 422 (UncomputableView), pas de 500.
      */
@@ -229,6 +272,14 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
     {
         $calculator = static::getContainer()->get(AnnualCostCalculator::class);
         self::assertInstanceOf(AnnualCostCalculator::class, $calculator);
+
+        return $calculator;
+    }
+
+    private function viewCalculator(): CostViewCalculator
+    {
+        $calculator = static::getContainer()->get(CostViewCalculator::class);
+        self::assertInstanceOf(CostViewCalculator::class, $calculator);
 
         return $calculator;
     }

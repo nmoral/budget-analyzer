@@ -10,6 +10,7 @@ use App\Domain\Cost\CostViewCalculator;
 use App\Domain\Cost\PermanentRegimeCalculator;
 use App\Domain\Cost\Prorata;
 use App\Domain\Cost\TermTrace;
+use App\Domain\Cost\ViewAwareStepCost;
 use App\Domain\Cost\Year1Horizon;
 use App\Domain\Cost\Year1HorizonCalculator;
 use App\Domain\Rule\CostView\CostViewRuleResolver;
@@ -128,10 +129,13 @@ final class ScenarioResultCalculator
                 }
 
                 if ($career !== null) {
+                    // View-aware (#66, C1.2) : la moyenne pondérée par échelon est calculée
+                    // sur les coûts de la vue (terme retraite suivant la vue, comme year1).
+                    $stepCost = new ViewAwareStepCost($this->viewCalculator, $view);
                     try {
                         $permanent = $this->scope->within(
                             $set,
-                            fn (): AnnualCost => $this->permanent->compute($career, $recruitment, 1)->averagePerAgent(),
+                            fn (): AnnualCost => $this->permanent->compute($career, $recruitment, 1, $stepCost)->averagePerAgent(),
                         );
                     } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
                         throw UncomputableViewException::forView($view, $exception);

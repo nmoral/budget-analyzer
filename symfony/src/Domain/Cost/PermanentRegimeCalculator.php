@@ -21,7 +21,13 @@ final class PermanentRegimeCalculator
     {
     }
 
-    public function compute(Career $career, \DateTimeImmutable $date, int $headcount): PermanentRegimeCost
+    /**
+     * @param ?StepCostCalculator $stepCost stratégie de valorisation de chaque échelon ;
+     *                                       par défaut le coût de base. Fournir un
+     *                                       `ViewAwareStepCost` rend la moyenne view-aware
+     *                                       (terme retraite suivant la vue, cf. #66 C1.2).
+     */
+    public function compute(Career $career, \DateTimeImmutable $date, int $headcount, ?StepCostCalculator $stepCost = null): PermanentRegimeCost
     {
         if ($headcount < 1) {
             throw new \InvalidArgumentException(sprintf(
@@ -30,6 +36,7 @@ final class PermanentRegimeCalculator
             ));
         }
 
+        $stepCost ??= $this->annualCost;
         $totalMonths = $career->totalMonths();
 
         $treatmentAndPrimes = Amount::fromString('0');
@@ -38,7 +45,7 @@ final class PermanentRegimeCalculator
         $rafp = Amount::fromString('0');
 
         foreach ($career->steps() as $step) {
-            $cost = $this->annualCost->compute($step->situation(), $date);
+            $cost = $stepCost->compute($step->situation(), $date);
             $months = $step->durationMonths();
 
             $treatmentAndPrimes = $treatmentAndPrimes->plus($cost->treatmentAndPrimes()->multipliedByIndex($months));
