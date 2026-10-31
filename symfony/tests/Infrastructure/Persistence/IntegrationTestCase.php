@@ -73,6 +73,8 @@ abstract class IntegrationTestCase extends KernelTestCase
         $source->code = $code;
         $source->label = 'Source ' . $code;
         $source->publisher = 'Éditeur';
+        $source->edition = '2026';
+        $source->locator = 'p. 1';
         $source->url = 'https://example.test/' . $code;
         $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
         $source->fileHash = 'hash-' . $code;

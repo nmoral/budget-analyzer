@@ -163,7 +163,7 @@ final class Importer
 
     /**
      * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
-     * @param array<string, array{label: string, publisher: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
      * @param array<string, Source>                                                                           $sources
      */
     private function loadDatedParameters(array $parsed, ParameterSet $set, array $sourceReferential, array &$sources): void
@@ -185,7 +185,7 @@ final class Importer
 
     /**
      * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
-     * @param array<string, array{label: string, publisher: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
      * @param array<string, array{label: string, versant: string, category: string}>                         $corpsReferential
      * @param array<string, Source>                                                                           $sources
      * @param array<string, Corps>                                                                            $corps
@@ -256,7 +256,7 @@ final class Importer
 
     /**
      * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
-     * @param array<string, array{label: string, publisher: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
      * @param array<string, array{label: string, versant: string, category: string}>                         $corpsReferential
      * @param array<string, Source>                                                                           $sources
      * @param array<string, Corps>                                                                            $corps
@@ -360,7 +360,7 @@ final class Importer
     }
 
     /**
-     * @param array<string, array{label: string, publisher: string, url: string, retrievedAt: string, fileHash: string}> $referential
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $referential
      * @param array<string, Source>                                                                                       $cache
      */
     private function resolveSource(string $slug, array $referential, array &$cache): Source
@@ -385,6 +385,8 @@ final class Importer
         }
         $source->label = $data['label'];
         $source->publisher = $data['publisher'];
+        $source->edition = $data['edition'];
+        $source->locator = $data['locator'];
         $source->url = $data['url'];
         $source->retrievedAt = new \DateTimeImmutable($data['retrievedAt']);
         $source->fileHash = $data['fileHash'];

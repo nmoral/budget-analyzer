@@ -72,6 +72,8 @@ trait ScenarioFixtureTrait
         $source->code = 'SRC-' . uniqid();
         $source->label = 'Source grille';
         $source->publisher = 'Éditeur';
+        $source->edition = '2026';
+        $source->locator = 'p. 1';
         $source->url = 'https://example.test/grille';
         $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
         $source->fileHash = 'hash-grille';
@@ -150,6 +152,8 @@ trait ScenarioFixtureTrait
         $source->code = 'SRC-grille-' . $corpsCode;
         $source->label = 'Source grille';
         $source->publisher = 'Éditeur';
+        $source->edition = '2026';
+        $source->locator = 'p. 1';
         $source->url = 'https://example.test/grille';
         $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
         $source->fileHash = 'hash-grille-' . $corpsCode;
@@ -222,6 +226,8 @@ trait ScenarioFixtureTrait
         $source->code = 'SRC-engine-' . $set->versionId;
         $source->label = 'Source calcul';
         $source->publisher = 'Éditeur';
+        $source->edition = '2026';
+        $source->locator = 'p. 1';
         $source->url = 'https://example.test/engine';
         $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
         $source->fileHash = 'hash-engine-' . $set->versionId;
