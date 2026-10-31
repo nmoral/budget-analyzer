@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "08a8c21ef0d0e3a1468abb38b81b8da2",
+    "content-hash": "dc2e9a7619be228f11578269756767d3",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -1425,7 +1425,8 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-28T10:54:34+00:00"
+            "time": "2026-10-28T10:54:34+00:00",
+            "published-time": "2026-10-28T18:20:47+00:00"
         },
         {
             "name": "symfony/cache-contracts",

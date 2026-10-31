@@ -1,0 +1,8 @@
+framework:
+    cache:
+        # Pool dédié aux résultats de simulation (#19). La clé portera la version
+        # des paramètres (versionId) ; le câblage effectif (service + en-tête
+        # X-Cache + purge à l'import) relève de J3.
+        pools:
+            app.cache.scenario_result:
+                adapter: cache.adapter.filesystem

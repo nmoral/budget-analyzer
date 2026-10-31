@@ -17,6 +17,21 @@ final class ParameterSetRepository
     {
     }
 
+    public function findByVersionId(string $versionId): ?ParameterSet
+    {
+        $result = $this->em->createQueryBuilder()
+            ->select('s')
+            ->from(ParameterSet::class, 's')
+            ->where('s.versionId = :versionId')
+            ->setParameter('versionId', $versionId)
+            ->getQuery()
+            ->getOneOrNullResult();
+
+        \assert($result === null || $result instanceof ParameterSet);
+
+        return $result;
+    }
+
     public function latest(): ?ParameterSet
     {
         $result = $this->em->createQueryBuilder()
