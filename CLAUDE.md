@@ -9,7 +9,9 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
   moteur de calcul #12, premières règles de retraite — taux employeur daté — #13,
   formule de coût employeur annuel d'un agent titulaire #14, horizon « année 1 »
   — prorata de la date de recrutement + année pleine + vue année scolaire — #15,
-  horizon régime permanent — coût moyen en population stationnaire × N postes — #16).
+  horizon régime permanent — coût moyen en population stationnaire × N postes — #16,
+  horizon cohorte — série annuelle avec avancement d'échelon mensuel, horizon ou
+  carrière complète × N agents — #17).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.
