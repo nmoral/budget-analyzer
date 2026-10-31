@@ -744,6 +744,9 @@ une **version** différente a une clé distincte (jamais de cache croisé) ; le 
 l'ordre des horizons/vues indifférent. `get()` renvoie un `CachedScenarioResult` (résultat
 + drapeau `hit()`), lu par le contrôleur pour l'en-tête `X-Cache`. Une sélection invalide
 (`InvalidSelectionException`) remonte au contrôleur et **n'est pas mise en cache** (422).
+De même, une vue valide mais non valorisable (`UncomputableViewException`, paramètre daté
+manquant) est levée **avant** la sauvegarde : l'erreur **n'empoisonne pas le pool**, si bien
+qu'après import du paramètre manquant (qui purge le pool) le résultat se calcule (422, #58).
 
 Le **pool** `app.cache.scenario_result` est un `FilesystemAdapter` à **répertoire et
 namespace fixes** (`var/cache/scenario_result`, `config/services.yaml`), **hors**
