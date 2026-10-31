@@ -445,6 +445,75 @@ classes anonymes et `AgentSituation`/`Career` construits à la main. Comme le re
 domaine de coût, l'horizon est couvert par Infection (mutation sur `src/Domain`,
 MSI ≥ 85 %).
 
+## Horizon « cohorte » d'un recrutement (#17)
+
+À partir du coût annuel (#14), le domaine calcule l'**horizon « cohorte »** : la **série
+annuelle** du coût d'une cohorte de N agents, de l'entrée jusqu'à un horizon, avec
+**avancement d'échelon mensuel**. Tout vit sous `src/Domain/Cost/` en **PHP pur**
+(frontière Deptrac, aucune dépendance Doctrine ni infra). Le périmètre est **domaine
+seul** : la carrière (échelons + durées, réutilisée de #16), la date d'entrée, l'horizon et
+l'effectif N sont des **entrées** du calculateur, composées à la main en test ; aucun
+câblage de persistance, aucune route ni commande n'est ajouté. Aucune nouvelle méthode
+`Amount` n'est requise (le prorata intra-année et les cumuls réutilisent `multipliedByIndex`,
+`plus` et `dividedBy`, #14→#16).
+
+### Calculateur `CohortHorizonCalculator`
+
+`App\Domain\Cost\CohortHorizonCalculator` dépend par constructeur de l'`AnnualCostCalculator`
+**concret** (#14) — pas d'interface, hors périmètre — et réutilise les value objects
+`Career`/`CareerStep` (#16). Deux points d'entrée :
+
+- `compute(Career $career, \DateTimeImmutable $entry, int $horizonYears, int $headcount = 1):
+  CohortCostSeries` — garde `horizonYears ≥ 1` et `headcount ≥ 1` (sinon
+  `\InvalidArgumentException`). Il valorise d'abord **une seule fois** le coût annuel de
+  chaque échelon à la date d'entrée (**point gelé** : aucune revalorisation d'une année à
+  l'autre, seul l'échelon évolue), puis construit la série année par année.
+- `computeFullCareer(Career $career, \DateTimeImmutable $entry, int $headcount = 1):
+  CohortCostSeries` — mode « carrière complète » : **dérive l'horizon**
+  `⌈Σ(durées des échelons non terminaux) / 12⌉`, calculé en entier par
+  `intdiv(Σ + 11, 12)` (sans flottant), **clampé à 1** minimum (une carrière réduite au seul
+  terminal donne Σ = 0 → horizon 1 an, série minimale non vide, plutôt que de violer la
+  garde). Il délègue ensuite à `compute(...)` (aucune duplication de garde ni de série).
+
+**Avancement d'échelon** : `activeStepIndex()` détermine l'échelon actif au mois _m_
+(0-indexé depuis l'entrée) par les **durées cumulées** des échelons — step0 couvre `[0, d0)`,
+step1 `[d0, d0+d1)`, etc. Le **dernier `CareerStep` est le terminal** : sa durée propre est
+**ignorée** et il reste actif indéfiniment une fois les échelons non terminaux épuisés (pas
+de départ, pas d'attrition).
+
+**Découpage et prorata intra-année** : l'année _k_ (0-indexée en interne) couvre les mois
+`[k·12, (k+1)·12)` glissants depuis l'entrée (années pleines de 12 mois, **pas** de prorata
+calendaire de la 1re année — c'est #15). `yearCost()` calcule, pour chacun des **quatre
+termes** de l'`AnnualCost`, la **moyenne des coûts d'échelon actifs sur les 12 mois** : somme
+terme par terme des 12 coûts mensuels (`plus`, accumulateur à `Amount::fromString('0')`) puis
+`dividedBy(12)`. Une année entièrement sur un échelon rend l'`AnnualCost` de cet échelon ;
+une année à cheval rend `Σ(mois_échelon × terme)/12` terme par terme (via la somme mensuelle,
+bcmath exact, équivalent à la formule groupée).
+
+### Value object résultat `CohortCostSeries`
+
+`App\Domain\Cost\CohortCostSeries` est un value object **pur** portant la série (`list<AnnualCost>`,
+une entrée par année) et l'effectif N. Il ne recalcule rien, il **projette terme par terme**
+la série déjà valorisée :
+
+- `perYear(): list<AnnualCost>` — coût annuel d'un agent, année par année (exactement
+  `horizonYears` entrées) ;
+- `forHeadcount(): list<AnnualCost>` — chaque année × N (chaque terme `multipliedByIndex(N)`,
+  le total de l'`AnnualCost` se **recompose** comme somme des termes × N, jamais multiplié
+  séparément) ; identique à `perYear()` quand N = 1 ;
+- `totalPerAgent(): AnnualCost` — cumul d'un agent sur tout l'horizon (somme terme par terme
+  des années) ;
+- `totalForHeadcount(): AnnualCost` — `totalPerAgent()` × N terme par terme.
+
+### Garde-fou d'architecture et tests
+
+Le test d'architecture `DomainBoundaryTest` interdit tout littéral `/Doctrine|Entity/i` dans
+`src/Domain/` (commentaires compris), en ceinture et bretelles de Deptrac. Ces composants
+sont exercés par des **tests unitaires purs** (`tests/Domain/Cost/CohortHorizonCalculatorTest.php`,
+PHPUnit sans conteneur ni base), les ports/règles étant fournis en classes anonymes et
+`Career`/`AgentSituation` construits à la main. Comme le reste du domaine de coût, l'horizon
+est couvert par Infection (mutation sur `src/Domain`, MSI ≥ 85 %).
+
 ## Kernel et amorçage
 
 - `App\Kernel` utilise `MicroKernelTrait` ; la configuration est en YAML sous

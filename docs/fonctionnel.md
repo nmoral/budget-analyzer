@@ -133,7 +133,9 @@ présentes aujourd'hui :
   l'**horizon « année 1 »** d'un recrutement (prorata, année pleine, vue scolaire) est
   disponible (issue #15, voir ci-dessous) et l'**horizon « régime permanent »**
   (coût moyen en population stationnaire × N postes) l'est aussi (issue #16, voir
-  ci-dessous), mais les apports suivants arrivent aux issues #17 à #18 ;
+  ci-dessous) et l'**horizon « cohorte »** (série année par année du coût d'une
+  cohorte de N agents avec avancement d'échelon) également (issue #17, voir
+  ci-dessous), mais les apports suivants arrivent à l'issue #18 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
@@ -320,6 +322,59 @@ résultat identique) et ne comporte **aucun arrondi d'affichage** à ce stade (#
 grille persistée (charger les échelons et leurs durées, fournir la durée du terminal,
 dériver la situation de chaque agent), reportée à une issue ultérieure ; la carrière est
 ici composée à la main. Restent aussi hors périmètre le **calibrage** contre le coût moyen
-du PAP (#22), l'**autre horizon** cohorte (#17), les **vues de coût** enfichables (#18) et
+du PAP (#22), l'**autre horizon** cohorte (#17, voir ci-dessous), les **vues de coût**
+enfichables (#18) et l'**arrondi d'affichage** (#19/#20). Comme les autres horizons, ce
+calcul n'est exposé ni par une API ni par un écran : il n'est exercé que par les tests.
+
+### Horizon « cohorte » d'un recrutement (série annuelle, avancement d'échelon)
+
+À partir du coût employeur annuel ci-dessus, le simulateur calcule désormais l'**horizon
+« cohorte »** : la **série année par année** du coût d'une cohorte de **N agents** recrutés
+ensemble, de leur entrée jusqu'à un horizon donné, en tenant compte de leur **avancement
+d'échelon** au fil de la carrière. Chaque année de la série reprend la **décomposition en
+quatre termes** du coût annuel (voir ci-dessus).
+
+- **Série année par année** : le résultat donne, pour chaque année de l'horizon, le coût
+  annuel d'un agent. L'année _k_ couvre les douze mois qui suivent l'entrée (année 1 = mois
+  1 à 12 depuis l'entrée, année 2 = mois 13 à 24, etc.) ; ce sont des **années pleines de
+  douze mois glissantes depuis la date d'entrée**, sans prorata de la date de recrutement
+  (ce prorata calendaire relève de l'horizon « année 1 », #15).
+- **Avancement d'échelon mensuel** : au fil des mois, l'agent progresse d'un échelon au
+  suivant selon la **durée** de chaque échelon. Une année entièrement passée sur un même
+  échelon vaut le coût annuel de cet échelon ; une année **à cheval** sur deux échelons
+  (changement en cours d'année) est valorisée **au prorata du nombre de mois passés sur
+  chacun**, terme par terme.
+- **Échelon terminal** : le **dernier échelon** de la carrière est le terminal ; l'agent y
+  reste indéfiniment (pas de départ). Une fois le terminal atteint, toutes les années
+  suivantes sont **constantes** à son coût.
+- **Horizon** : par défaut **10 ans**. Un mode **« carrière complète »** dérive
+  automatiquement l'horizon pour couvrir toute la progression jusqu'au terminal (nombre
+  d'années nécessaires pour épuiser les échelons non terminaux, arrondi à l'année
+  supérieure).
+- **Cohorte de N agents** : le coût de la cohorte est, pour chaque année, le coût d'un agent
+  **multiplié par N** terme par terme ; avec N = 1 il est égal au coût d'un agent. La série
+  fournit aussi les **cumuls** sur tout l'horizon : coût total d'un agent (somme des années)
+  et coût total de la cohorte (ce total × N).
+- **Point gelé** : toutes les années sont valorisées à la **date d'entrée** ; seul
+  l'échelon évolue d'une année à l'autre, pas la valeur du point d'indice ni les taux. La
+  **revalorisation annuelle** (valoriser chaque année à sa propre date) est une hypothèse
+  distincte, hors de ce périmètre (#18).
+
+La **carrière** (la suite des échelons avec leur durée), la **date d'entrée**, l'**horizon**
+et le **nombre d'agents** N sont des **entrées** de ce calcul. Un horizon inférieur à 1 an
+ou un effectif inférieur à 1 sont **rejetés** par une erreur explicite. Le calcul est
+**reproductible** (à carrière, date, horizon et N identiques, résultat identique) et ne
+comporte **aucun arrondi d'affichage** à ce stade (#19/#20).
+
+**Hypothèses et limites de la V1** : pas de **revalorisation** annuelle (point gelé à
+l'entrée, #18), pas de **départs ni d'attrition** (l'effectif reste constant, les agents
+restent au terminal), pas de **prorata de la première année** (années pleines depuis
+l'entrée ; le prorata de la date de recrutement est l'horizon « année 1 », #15).
+
+**Hors de ce périmètre** : la construction automatique de la carrière à partir d'une grille
+persistée (charger les échelons et leurs durées, dériver la situation de chaque agent et la
+durée terminale), reportée à une issue ultérieure ; la carrière, l'horizon et N sont ici
+composés à la main. Restent aussi hors périmètre la **revalorisation annuelle** et les
+**départs / attrition** (#18 et ultérieurs), les **vues de coût** enfichables (#18) et
 l'**arrondi d'affichage** (#19/#20). Comme les autres horizons, ce calcul n'est exposé ni
 par une API ni par un écran : il n'est exercé que par les tests.

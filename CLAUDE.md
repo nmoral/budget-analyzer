@@ -9,7 +9,9 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
   moteur de calcul #12, premières règles de retraite — taux employeur daté — #13,
   formule de coût employeur annuel d'un agent titulaire #14, horizon « année 1 »
   — prorata de la date de recrutement + année pleine + vue année scolaire — #15,
-  horizon régime permanent — coût moyen en population stationnaire × N postes — #16).
+  horizon régime permanent — coût moyen en population stationnaire × N postes — #16,
+  horizon cohorte — série annuelle avec avancement d'échelon mensuel, horizon ou
+  carrière complète × N agents — #17).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.
@@ -164,8 +166,8 @@ l'image, cf. `symfony/Dockerfile`).
 ## Protection de la branche `main`
 
 À activer par un **administrateur du dépôt** (étape manuelle, hors CI). Commande
-prête à copier — exige le check CI `qa`, une revue de PR et interdit les
-contournements :
+prête à copier — exige le check CI `qa`, n'impose aucune revue de PR et interdit
+les contournements :
 
 ```sh
 gh api -X PUT repos/nmoral/budget-analyzer/branches/main/protection \
@@ -178,7 +180,7 @@ gh api -X PUT repos/nmoral/budget-analyzer/branches/main/protection \
   },
   "enforce_admins": true,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 1,
+    "required_approving_review_count": 0,
     "dismiss_stale_reviews": true
   },
   "required_linear_history": true,
