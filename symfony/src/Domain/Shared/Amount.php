@@ -27,6 +27,12 @@ final class Amount
     private const RATE_PRODUCT_SCALE = self::SCALE + self::SCALE + 2;
 
     /**
+     * Échelle de calcul du quotient d'une proratisation : deux décimales de plus
+     * que l'échelle finale, suffisantes pour un arrondi half-up fiable à SCALE.
+     */
+    private const PRORATION_SCALE = self::SCALE + 2;
+
+    /**
      * @param numeric-string $value chaîne décimale canonique à l'échelle SCALE
      */
     private function __construct(private readonly string $value)
@@ -60,6 +66,18 @@ final class Amount
     public function multipliedByIndex(int $index): self
     {
         return new self(bcmul($this->value, (string) $index, self::SCALE));
+    }
+
+    /**
+     * Proratisation par des mois entiers : produit par la fraction `present/total`
+     * (total 12 par défaut), arrondi à 6 décimales half-up. Première division
+     * d'`Amount` ; le numérateur `× present` est exact, seul le quotient est arrondi.
+     */
+    public function proratedByMonths(int $present, int $total = 12): self
+    {
+        $numerator = bcmul($this->value, (string) $present, self::SCALE);
+
+        return self::rounded(bcdiv($numerator, (string) $total, self::PRORATION_SCALE));
     }
 
     /**
