@@ -133,6 +133,31 @@ final class ScenarioResultApiTest extends WebTestCase
     }
 
     /**
+     * R1 (J5) : une vue répétée dans la requête (`views=BUDGETAIRE,BUDGETAIRE`) ne doit
+     * pas doubler l'agrégat. L'agrégat reste Σ(ligne × volume) et la liste `views`
+     * exposée est dédupliquée.
+     */
+    public function testRepeatedViewDoesNotDoubleAggregate(): void
+    {
+        $profile = $this->seedComputable();
+        $id = $this->createScenario($profile, [
+            ['profileRef' => $profile->id, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->id, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
+        ]);
+
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE,BUDGETAIRE');
+        /** @var array{views: list<string>, aggregate: array<string, array{year1: array{year1: array<string, string>}}>} $body */
+        $body = json_decode((string) $this->client->getResponse()->getContent(), true);
+
+        $expected = $this->baseCalculator()->compute($this->situation(), new \DateTimeImmutable(self::RECRUITMENT));
+        $lineYear1Total = $this->prorated($expected, 4)->total();
+        $aggregateExpected = $lineYear1Total->multipliedByIndex(2)->plus($lineYear1Total->multipliedByIndex(3));
+
+        self::assertSame(['BUDGETAIRE'], $body['views']);
+        self::assertSame($aggregateExpected->toString(), $body['aggregate']['BUDGETAIRE']['year1']['year1']['total']);
+    }
+
+    /**
      * C4.1 : deux appels identiques → `parametersVersion` identique et valeurs
      * identiques (calcul contre la version épinglée).
      */

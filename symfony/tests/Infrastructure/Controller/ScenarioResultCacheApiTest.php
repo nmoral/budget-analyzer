@@ -99,6 +99,22 @@ final class ScenarioResultCacheApiTest extends WebTestCase
     }
 
     /**
+     * R1 (J5) : une vue répétée (`views=BUDGETAIRE,BUDGETAIRE`) produit la même entrée
+     * de cache que la version non répétée → servie par le cache (HIT).
+     */
+    public function testRepeatedViewSharesCacheEntryWithNonRepeated(): void
+    {
+        $profile = $this->seed('ver-r1');
+        $id = $this->createScenario($profile);
+
+        $firstHeader = $this->requestResult('/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE');
+        self::assertSame('MISS', $firstHeader);
+
+        $repeatedHeader = $this->requestResult('/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE,BUDGETAIRE');
+        self::assertSame('HIT', $repeatedHeader);
+    }
+
+    /**
      * C6.1 : deux versions aux taux retraite distincts → résultats distincts, aucun
      * cache croisé (chaque version a sa propre clé).
      */

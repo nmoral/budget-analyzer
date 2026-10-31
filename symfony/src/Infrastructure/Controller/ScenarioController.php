@@ -188,17 +188,18 @@ final class ScenarioController
     }
 
     /**
-     * Liste de codes depuis un paramètre `?a,b,c` : valeurs triées dans l'ordre fourni,
-     * vides ignorées ; sélection vide → `[$default]`.
+     * Liste de codes depuis un paramètre `?a,b,c` : valeurs dans l'ordre d'apparition,
+     * vides ignorées, dédupliquées (R1 : une répétition ne doit doubler ni l'agrégat ni
+     * la clé de cache) ; sélection vide → `[$default]`.
      *
      * @return list<string>
      */
     private function selection(string $raw, string $default): array
     {
-        $items = array_values(array_filter(
+        $items = array_values(array_unique(array_filter(
             array_map('trim', explode(',', $raw)),
             static fn (string $item): bool => $item !== '',
-        ));
+        )));
 
         return $items === [] ? [$default] : $items;
     }
