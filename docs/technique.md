@@ -304,6 +304,75 @@ purs (`tests/Domain/Cost/`, `tests/Domain/Shared/`) et tests d'intégration sur
 de bout en bout (`IndexedSalaryCalculator`, `AnnualCostCalculator` et le port de taux de
 primes sont rendus `public` sous `when@test`).
 
+## Horizon « année 1 » d'un recrutement (#15)
+
+À partir du coût annuel (#14), le domaine calcule l'**horizon « année 1 »** d'un
+recrutement : le coût de la première année proraté à la date de recrutement, le coût
+année pleine en regard, et une vue année scolaire optionnelle. Tout vit sous
+`src/Domain/Cost/` en **PHP pur** (frontière Deptrac, aucune dépendance Doctrine ni
+infra). Le périmètre est **domaine seul** : la date de recrutement et le calendrier sont
+des **entrées** du calculateur, composées à la main en test ; aucun câblage de
+persistance, aucune route ni commande n'est ajouté.
+
+### Fondation arithmétique : `Amount::proratedByMonths`
+
+`App\Domain\Shared\Amount` reçoit sa **première division** :
+`proratedByMonths(int $present, int $total = 12): Amount` multiplie le montant par la
+fraction `present/total` (12 par défaut), le numérateur `× present` restant **exact** et
+seul le quotient étant arrondi **half-up à 6 décimales**. Le quotient est calculé à
+l'échelle `SCALE + 2` (constante `PRORATION_SCALE`) avant arrondi, cohérent avec la
+convention décimale d'`Amount` (bcmath, aucun float). Il n'y a **pas de garde** sur
+`total = 0` ou `present < 0` : hors périmètre, et éviter du code non testé préserve le
+MSI.
+
+### Enum de domaine `ReferenceCalendar`
+
+`App\Domain\Cost\ReferenceCalendar` est une enum de domaine **pure** (sans backing
+scalar) à deux cas : `CIVIL` (année 1 comptée du recrutement à décembre inclus) et
+`SCOLAIRE` (fenêtre année scolaire 1er sept → 31 août). Elle est passée **en entrée** du
+calculateur. L'entité Doctrine `Profile` porte aujourd'hui un champ `referenceCalendar`
+sous forme de chaîne, non remontée vers le domaine ; le mapping chaîne → enum relève de
+l'adapter de persistance reporté à une issue ultérieure.
+
+### Comptage de mois : `CalendarMonths`
+
+`App\Domain\Cost\CalendarMonths` est un utilitaire PHP pur (constructeur privé, méthode
+statique) :
+`countUntil(\DateTimeImmutable $recruitment, int $endMonth): int` compte les mois civils
+du **mois** de recrutement jusqu'à la prochaine occurrence de `$endMonth` (1 = janvier …
+12 = décembre), **bornes incluses**, le **jour étant ignoré** (mois d'entrée compté
+entier). Si `$endMonth` est antérieur au mois de recrutement, la fenêtre franchit l'année
+suivante (`$endMonth + 12`) — c'est le **rollover** de la fenêtre scolaire. Ainsi
+`countUntil($d, 12)` donne l'année 1 civile (sept→déc = 4, janv→déc = 12, déc→déc = 1) et
+`countUntil($d, 8)` la fenêtre scolaire (sept→août = 12, nov→août = 10).
+
+### Calculateur et value object résultat
+
+`App\Domain\Cost\Year1HorizonCalculator::compute(AgentSituation $situation,
+\DateTimeImmutable $recruitment, ReferenceCalendar $calendar): Year1Horizon` dépend par
+constructeur de l'`AnnualCostCalculator` **concret** (#14) — pas d'interface, hors
+périmètre. Il calcule d'abord le coût année pleine (`AnnualCostCalculator::compute(
+$situation, $recruitment)`), puis proratise chacun des quatre termes du coût annuel via
+`Amount::proratedByMonths($months)`, où `$months = CalendarMonths::countUntil(...)` :
+`DECEMBER` (12) pour l'année 1, `AUGUST` (8) pour la vue scolaire. La vue scolaire n'est
+calculée que si `$calendar === ReferenceCalendar::SCOLAIRE`, sinon `null`.
+
+Le résultat `App\Domain\Cost\Year1Horizon` est un value object **pur** (simple porteur à
+trois getters) : `fullYear(): AnnualCost` (année pleine non proratée), `year1():
+AnnualCost` (première année civile proratée) et `schoolYear(): ?AnnualCost` (vue
+scolaire, `null` en calendrier civil). Les totaux des vues proratées sont **recomposés
+par le constructeur d'`AnnualCost`** (somme des quatre termes proratés, jamais le total
+proraté séparément), garantissant la cohérence `total = somme des termes`.
+
+### Garde-fou d'architecture et tests
+
+Le test d'architecture `DomainBoundaryTest` interdit tout littéral `/Doctrine|Entity/i`
+dans `src/Domain/` (commentaires compris), en ceinture et bretelles de Deptrac. Ces
+composants sont exercés par des **tests unitaires purs** (`tests/Domain/Cost/`,
+`tests/Domain/Shared/`, PHPUnit sans conteneur ni base), les ports/règles étant fournis
+en classes anonymes et `AgentSituation` construit à la main. Comme le reste du domaine de
+coût, l'horizon est couvert par Infection (mutation sur `src/Domain`, MSI ≥ 85 %).
+
 ## Kernel et amorçage
 
 - `App\Kernel` utilise `MicroKernelTrait` ; la configuration est en YAML sous

@@ -128,9 +128,11 @@ présentes aujourd'hui :
   cohorte, horizons) et plusieurs **règles métier réelles** (indemnitaire au sens du
   régime de primes, financeur, vues de coût) — l'**ossature** du moteur est posée
   (issue #12, voir ci-dessous), les premières règles réelles de la famille retraite
-  sont livrées (issue #13, voir « Règles de retraite » ci-dessous) et le **coût
-  employeur annuel d'un agent** est désormais calculé (issue #14, voir ci-dessous),
-  mais les apports suivants arrivent aux issues #15 à #18 ;
+  sont livrées (issue #13, voir « Règles de retraite » ci-dessous), le **coût
+  employeur annuel d'un agent** est désormais calculé (issue #14, voir ci-dessous) et
+  l'**horizon « année 1 »** d'un recrutement (prorata, année pleine, vue scolaire) est
+  disponible (issue #15, voir ci-dessous), mais les apports suivants arrivent aux
+  issues #16 à #18 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
@@ -216,7 +218,8 @@ date (donc le taux de retraite) ne modifie que le terme retraite.
 
 La **situation de l'agent** prise en entrée décrit son corps, son versant, son indice
 majoré et son régime de retraite. Elle est aujourd'hui **composée à la main** ; sa
-dérivation automatique depuis un profil de simulation arrivera plus tard (#15).
+dérivation automatique depuis un profil de simulation arrivera dans une issue
+ultérieure.
 
 **Erreurs explicites, jamais de valeur par défaut** : si une valeur réglementaire
 nécessaire manque à la date demandée (point d'indice, taux de primes, taux d'un régime),
@@ -246,3 +249,39 @@ coût** alternatives de la retraite (#18), le **coût d'un scénario** complet (
 étalement, cohorte, horizons — #15 à #17) et l'**arrondi d'affichage** (#19/#20). Ce
 calcul n'est encore exposé ni par une API ni par un écran : il n'est exercé que par les
 tests.
+
+### Horizon « année 1 » d'un recrutement (prorata + année pleine + vue scolaire)
+
+À partir du coût employeur annuel ci-dessus, le simulateur calcule désormais l'**horizon
+« année 1 »** d'un recrutement, c'est-à-dire le coût de la **première année** d'un agent
+proraté selon sa **date de recrutement**, avec le coût **année pleine** toujours affiché
+en regard. Chaque vue reprend la **décomposition en quatre termes** du coût annuel (voir
+ci-dessus).
+
+- **Année pleine** : le coût employeur annuel non proraté, valorisé à la date de
+  recrutement. Il reste toujours disponible comme point de comparaison.
+- **Année 1 (année civile)** : le coût de l'année calendaire du recrutement, proraté au
+  **nombre de mois civils** du mois de recrutement à décembre inclus, divisé par 12. Le
+  **mois d'entrée est compté entier** : le jour du mois n'intervient pas (pas de prorata
+  au jour). Un recrutement au 1er septembre compte 4 mois (sept→déc), au 1er janvier 12
+  mois (année 1 = année pleine), au 1er décembre 1 mois, et un recrutement en milieu de
+  mois (ex. 15 septembre) compte le même nombre de mois qu'un recrutement en début de ce
+  mois. Le prorata s'applique **terme par terme**, et le total de l'année 1 est la somme
+  des quatre termes proratés.
+- **Vue année scolaire** : proposée **uniquement pour les profils à calendrier de
+  référence scolaire**. Elle proratise sur la **fenêtre de l'année scolaire** (1er
+  septembre → 31 août) qui contient la date de recrutement, du mois de recrutement à fin
+  août inclus (mois d'août compris), divisé par 12. Un recrutement au 1er septembre
+  couvre 12 mois (vue scolaire = année pleine), au 1er novembre 10 mois. Pour un profil à
+  **calendrier civil**, cette vue n'est **pas** fournie.
+
+Le **calendrier de référence** (civil ou scolaire) et la **date de recrutement** sont des
+**entrées** de ce calcul. La proratisation suit la même convention décimale que le reste
+du calcul (produit exact, quotient arrondi à 6 décimales half-up), sans arrondi
+d'affichage à ce stade (#19/#20).
+
+**Hors de ce périmètre** : la **dérivation automatique** de la date de recrutement et du
+calendrier depuis un profil / une ligne de scénario (qui sont ici composés à la main),
+le **prorata au jour**, les **autres horizons** — régime permanent (#16), cohorte (#17) —
+et les **vues de coût** enfichables (#18). Comme le coût annuel, cet horizon n'est exposé
+ni par une API ni par un écran : il n'est exercé que par les tests.

@@ -7,7 +7,8 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
 - `symfony/` — moteur de calcul + API + front (brique V1 ; squelette livré #9,
   modèle de données Doctrine #10, commande d'import `app:import` #11, ossature du
   moteur de calcul #12, premières règles de retraite — taux employeur daté — #13,
-  formule de coût employeur annuel d'un agent titulaire #14).
+  formule de coût employeur annuel d'un agent titulaire #14, horizon « année 1 »
+  — prorata de la date de recrutement + année pleine + vue année scolaire — #15).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.

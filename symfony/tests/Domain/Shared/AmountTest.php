@@ -64,6 +64,30 @@ final class AmountTest extends TestCase
         self::assertFalse(Amount::fromString('23333.993')->equals(Amount::fromString('23333.993001')));
     }
 
+    public function testProratedByMonthsIsExactWhenDivisible(): void
+    {
+        // C4.1 : 1200.000000 × 4/12 → 400.000000 (exact).
+        self::assertSame('400.000000', Amount::fromString('1200.000000')->proratedByMonths(4)->toString());
+    }
+
+    public function testProratedByMonthsIsRoundedHalfUpToSixDecimals(): void
+    {
+        // C4.2 : 100.000000 × 1/12 = 8.33333... → 8.333333 (half-up 6 décimales).
+        self::assertSame('8.333333', Amount::fromString('100.000000')->proratedByMonths(1)->toString());
+    }
+
+    public function testProratedByMonthsDefaultsToTwelveMonths(): void
+    {
+        // Le total par défaut est 12 : 1200.000000 × 12/12 → 1200.000000.
+        self::assertSame('1200.000000', Amount::fromString('1200.000000')->proratedByMonths(12)->toString());
+    }
+
+    public function testProratedByMonthsHonoursExplicitTotal(): void
+    {
+        // Total explicite : 100.000000 × 1/8 → 12.500000.
+        self::assertSame('12.500000', Amount::fromString('100.000000')->proratedByMonths(1, 8)->toString());
+    }
+
     public function testMinReturnsSmallerAmount(): void
     {
         // C6 : assiette RAFP plafonnée = min(TIB·p, 0,2·TIB).
