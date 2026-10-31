@@ -148,6 +148,142 @@ final class CohortHorizonCalculatorTest extends TestCase
         }
     }
 
+    public function testForHeadcountMultipliesEachYearTermByN(): void
+    {
+        // C4.1 : N = 10 → forHeadcount()[k] = perYear()[k] × 10, terme par terme.
+        $series = $this->compute($this->careerK(), new \DateTimeImmutable(self::ENTRY), 3, 10);
+
+        $perYear = $series->perYear();
+        $forHeadcount = $series->forHeadcount();
+
+        self::assertCount(3, $forHeadcount);
+        foreach (range(0, 2) as $year) {
+            self::assertCostEquals($this->scaled($perYear[$year], 10), $forHeadcount[$year]);
+        }
+    }
+
+    public function testForHeadcountOfOneEqualsPerYear(): void
+    {
+        // C4.3 : N = 1 → forHeadcount() == perYear(), terme par terme de chaque année.
+        $series = $this->compute($this->careerK(), new \DateTimeImmutable(self::ENTRY), 3, 1);
+
+        $perYear = $series->perYear();
+        $forHeadcount = $series->forHeadcount();
+
+        self::assertCount(3, $forHeadcount);
+        foreach (range(0, 2) as $year) {
+            self::assertCostEquals($perYear[$year], $forHeadcount[$year]);
+        }
+    }
+
+    public function testTotalsAreTermByTermSumsThenScaledByN(): void
+    {
+        // C4.2 : carrière K, horizon 3, N = 4.
+        // totalPerAgent() = somme terme par terme des 3 années ;
+        // totalForHeadcount() = totalPerAgent() × N.
+        $series = $this->compute($this->careerK(), new \DateTimeImmutable(self::ENTRY), 3, 4);
+
+        $expectedPerAgent = $this->sumYears($series->perYear());
+
+        self::assertCostEquals($expectedPerAgent, $series->totalPerAgent());
+        self::assertCostEquals($this->scaled($expectedPerAgent, 4), $series->totalForHeadcount());
+    }
+
+    public function testHeadcountBelowOneThrows(): void
+    {
+        // C6.2 : N = 0 → erreur (N ≥ 1).
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('au moins égal à 1');
+
+        $this->compute($this->careerK(), new \DateTimeImmutable(self::ENTRY), 3, 0);
+    }
+
+    public function testFullCareerDerivesHorizonFromNonTerminalDurations(): void
+    {
+        // C3.1 : carrière K, mode carrière complète.
+        // Non-terminaux = 18 + 36 = 54 mois → horizon = ⌈54/12⌉ = 5 ; perYear() a 5 entrées.
+        $series = $this->computeFullCareer($this->careerK(), new \DateTimeImmutable(self::ENTRY), 1);
+
+        self::assertCount(5, $series->perYear());
+    }
+
+    public function testFullCareerMatchesExplicitHorizon(): void
+    {
+        // Carrière complète ≡ compute(..., horizon dérivé) : même série terme par terme.
+        $entry = new \DateTimeImmutable(self::ENTRY);
+
+        $full = $this->computeFullCareer($this->careerK(), $entry, 7);
+        $explicit = $this->compute($this->careerK(), $entry, 5, 7);
+
+        self::assertCount(5, $full->perYear());
+        foreach (range(0, 4) as $year) {
+            self::assertCostEquals($explicit->perYear()[$year], $full->perYear()[$year]);
+        }
+        self::assertCostEquals($explicit->totalForHeadcount(), $full->totalForHeadcount());
+    }
+
+    public function testFullCareerClampsSingleTerminalStepToOneYear(): void
+    {
+        // Carrière à un seul échelon (terminal seul) : Σ non-terminal = 0 → ⌈0/12⌉ = 0,
+        // clampé à un minimum de 1 (série d'1 an), sans exception.
+        $entry = new \DateTimeImmutable(self::ENTRY);
+        $cost678 = $this->annualCostCalculator()->compute($this->situation(678), $entry);
+
+        $series = $this->computeFullCareer(new Career(new CareerStep($this->situation(678), 24)), $entry, 1);
+
+        self::assertCount(1, $series->perYear());
+        self::assertCostEquals($cost678, $series->perYear()[0]);
+    }
+
+    public function testFullCareerRoundsHorizonUpOnExactMultipleOfTwelve(): void
+    {
+        // Σ non-terminal = 48 mois (multiple de 12) → horizon = ⌈48/12⌉ = 4 (pas 5).
+        $career = new Career(
+            new CareerStep($this->situation(395), 48),
+            new CareerStep($this->situation(678), 12),
+        );
+
+        $series = $this->computeFullCareer($career, new \DateTimeImmutable(self::ENTRY), 1);
+
+        self::assertCount(4, $series->perYear());
+    }
+
+    public function testFullCareerRoundsHorizonUpOnPartialYear(): void
+    {
+        // Σ non-terminal = 49 mois (déborde d'un mois) → horizon = ⌈49/12⌉ = 5 (arrondi au supérieur).
+        $career = new Career(
+            new CareerStep($this->situation(395), 49),
+            new CareerStep($this->situation(678), 12),
+        );
+
+        $series = $this->computeFullCareer($career, new \DateTimeImmutable(self::ENTRY), 1);
+
+        self::assertCount(5, $series->perYear());
+    }
+
+    public function testComputeDefaultsToASingleAgent(): void
+    {
+        // Défaut N = 1 sur compute (sans N explicite) : forHeadcount() == perYear().
+        $series = (new CohortHorizonCalculator($this->annualCostCalculator()))
+            ->compute($this->careerK(), new \DateTimeImmutable(self::ENTRY), 3);
+
+        foreach (range(0, 2) as $year) {
+            self::assertCostEquals($series->perYear()[$year], $series->forHeadcount()[$year]);
+        }
+    }
+
+    public function testFullCareerDefaultsToASingleAgent(): void
+    {
+        // Défaut N = 1 sur computeFullCareer (sans N explicite) : forHeadcount() == perYear().
+        $series = (new CohortHorizonCalculator($this->annualCostCalculator()))
+            ->computeFullCareer($this->careerK(), new \DateTimeImmutable(self::ENTRY));
+
+        self::assertCount(5, $series->perYear());
+        foreach (range(0, 4) as $year) {
+            self::assertCostEquals($series->perYear()[$year], $series->forHeadcount()[$year]);
+        }
+    }
+
     private function careerK(): Career
     {
         // Carrière type K : step0 IM 395 (18 mois), step1 IM 430 (36 mois),
@@ -168,9 +304,46 @@ final class CohortHorizonCalculatorTest extends TestCase
         );
     }
 
-    private function compute(Career $career, \DateTimeImmutable $entry, int $horizonYears): CohortCostSeries
+    private function compute(Career $career, \DateTimeImmutable $entry, int $horizonYears, int $headcount = 1): CohortCostSeries
     {
-        return (new CohortHorizonCalculator($this->annualCostCalculator()))->compute($career, $entry, $horizonYears);
+        return (new CohortHorizonCalculator($this->annualCostCalculator()))
+            ->compute($career, $entry, $horizonYears, $headcount);
+    }
+
+    private function computeFullCareer(Career $career, \DateTimeImmutable $entry, int $headcount): CohortCostSeries
+    {
+        return (new CohortHorizonCalculator($this->annualCostCalculator()))
+            ->computeFullCareer($career, $entry, $headcount);
+    }
+
+    private function scaled(AnnualCost $cost, int $factor): AnnualCost
+    {
+        return new AnnualCost(
+            $cost->treatmentAndPrimes()->multipliedByIndex($factor),
+            $cost->retirement()->multipliedByIndex($factor),
+            $cost->otherContributions()->multipliedByIndex($factor),
+            $cost->rafp()->multipliedByIndex($factor),
+        );
+    }
+
+    /**
+     * @param list<AnnualCost> $years
+     */
+    private function sumYears(array $years): AnnualCost
+    {
+        $treatmentAndPrimes = Amount::fromString('0');
+        $retirement = Amount::fromString('0');
+        $otherContributions = Amount::fromString('0');
+        $rafp = Amount::fromString('0');
+
+        foreach ($years as $year) {
+            $treatmentAndPrimes = $treatmentAndPrimes->plus($year->treatmentAndPrimes());
+            $retirement = $retirement->plus($year->retirement());
+            $otherContributions = $otherContributions->plus($year->otherContributions());
+            $rafp = $rafp->plus($year->rafp());
+        }
+
+        return new AnnualCost($treatmentAndPrimes, $retirement, $otherContributions, $rafp);
     }
 
     private function proratedYear(AnnualCost $a, int $ma, AnnualCost $b, int $mb): AnnualCost

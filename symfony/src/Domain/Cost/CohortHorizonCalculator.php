@@ -26,12 +26,19 @@ final class CohortHorizonCalculator
     {
     }
 
-    public function compute(Career $career, \DateTimeImmutable $entry, int $horizonYears): CohortCostSeries
+    public function compute(Career $career, \DateTimeImmutable $entry, int $horizonYears, int $headcount = 1): CohortCostSeries
     {
         if ($horizonYears < 1) {
             throw new \InvalidArgumentException(sprintf(
                 'L\'horizon doit être au moins égal à 1 an, %d reçu.',
                 $horizonYears,
+            ));
+        }
+
+        if ($headcount < 1) {
+            throw new \InvalidArgumentException(sprintf(
+                'L\'effectif doit être au moins égal à 1, %d reçu.',
+                $headcount,
             ));
         }
 
@@ -49,7 +56,31 @@ final class CohortHorizonCalculator
             $perYear[] = $this->yearCost($steps, $lastIndex, $stepCosts, $year);
         }
 
-        return new CohortCostSeries($perYear);
+        return new CohortCostSeries($perYear, $headcount);
+    }
+
+    /**
+     * Mode « carrière complète » : dérive l'horizon couvrant toute la progression
+     * jusqu'au terminal, `horizonYears = ⌈Σ(durées des échelons non terminaux) / 12⌉`
+     * (arrondi au supérieur), puis délègue à `compute(...)`.
+     *
+     * Le dernier `CareerStep` est le terminal : sa durée est exclue de la somme. Une
+     * carrière réduite au seul terminal donne Σ = 0 ; l'horizon est alors ramené à 1 an
+     * (série minimale non vide) plutôt que de violer la garde `horizon ≥ 1`.
+     */
+    public function computeFullCareer(Career $career, \DateTimeImmutable $entry, int $headcount = 1): CohortCostSeries
+    {
+        $steps = $career->steps();
+        $lastIndex = count($steps) - 1;
+
+        $nonTerminalMonths = 0;
+        for ($i = 0; $i < $lastIndex; ++$i) {
+            $nonTerminalMonths += $steps[$i]->durationMonths();
+        }
+
+        $horizonYears = max(1, intdiv($nonTerminalMonths + self::MONTHS_PER_YEAR - 1, self::MONTHS_PER_YEAR));
+
+        return $this->compute($career, $entry, $horizonYears, $headcount);
     }
 
     /**
