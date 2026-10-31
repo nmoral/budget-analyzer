@@ -7,6 +7,7 @@ namespace App\Infrastructure\Cost;
 use App\Domain\Cost\AnnualCost;
 use App\Domain\Cost\CostTrace;
 use App\Domain\Cost\CostViewCalculator;
+use App\Domain\Cost\PermanentRegimeCalculator;
 use App\Domain\Cost\Prorata;
 use App\Domain\Cost\TermTrace;
 use App\Domain\Cost\Year1Horizon;
@@ -26,17 +27,19 @@ use App\Infrastructure\Transparency\SourceCapture;
 
 /**
  * Orchestrateur de résultat (#19, J2) : pour chaque ligne du scénario et chaque vue
- * demandée, calcule l'horizon année 1 (fullYear / year1 proraté / schoolYear) valorisé
- * selon la vue, puis l'agrégat Σ(résultat_ligne × volume).
+ * demandée, calcule les horizons sélectionnés — année 1 (fullYear / year1 proraté /
+ * schoolYear) valorisée selon la vue, et régime permanent (#66, coût annuel moyen par
+ * agent sur la carrière du profil) — puis l'agrégat Σ(résultat_ligne × volume).
  *
  * Le calcul est fait CONTRE le jeu de paramètres épinglé du scénario : la portée
  * `ParameterSetScope` lie, le temps du calcul, les adapters datés à cette version
- * (rejouabilité). Le prorata année 1 est délégué au domaine (`computeFrom`).
+ * (rejouabilité). Le prorata année 1 est délégué au domaine (`computeFrom`). La carrière
+ * du régime permanent est construite par la factory d'infrastructure (`CareerFactory`).
  */
 final class ScenarioResultCalculator
 {
     /** @var list<string> */
-    private const array SUPPORTED_HORIZONS = ['year1'];
+    private const array SUPPORTED_HORIZONS = ['year1', 'permanent'];
 
     /**
      * Hypothèses structurelles appliquées par le moteur, nommées pour la transparence
@@ -56,6 +59,8 @@ final class ScenarioResultCalculator
         private readonly CostViewCalculator $viewCalculator,
         private readonly CostViewRuleResolver $viewResolver,
         private readonly Year1HorizonCalculator $year1,
+        private readonly CareerFactory $careerFactory,
+        private readonly PermanentRegimeCalculator $permanent,
         private readonly ParameterSetScope $scope,
         private readonly SourceCapture $sourceCapture,
     ) {
@@ -84,31 +89,58 @@ final class ScenarioResultCalculator
         $set = $scenario->parameterSet;
         $lines = $this->lines->forScenario($scenario);
 
+        $wantYear1 = \in_array('year1', $horizons, true);
+        $wantPermanent = \in_array('permanent', $horizons, true);
+
         $lineResults = [];
-        /** @var array<string, list<array{Year1Horizon, int}>> $weightedByView */
-        $weightedByView = array_fill_keys($views, []);
+        /** @var array<string, list<array{Year1Horizon, int}>> $weightedYear1 */
+        $weightedYear1 = array_fill_keys($views, []);
+        /** @var array<string, list<array{AnnualCost, int}>> $weightedPermanent */
+        $weightedPermanent = array_fill_keys($views, []);
 
         foreach ($lines as $line) {
             $situation = $this->situations->fromProfile($line->profile);
             $calendar = $this->situations->calendarFor($line->profile);
             $recruitment = $line->recruitmentDate;
+            // La carrière (régime permanent) ne dépend pas de la vue : construite une
+            // fois par ligne, elle est valorisée par vue à la date de recrutement.
+            $career = $wantPermanent ? $this->careerFactory->fromProfile($line->profile) : null;
 
             $byView = [];
             foreach ($views as $view) {
-                try {
-                    /** @var array{Year1Horizon, AnnualCost} $computed */
-                    $computed = $this->scope->within($set, function () use ($situation, $recruitment, $calendar, $view): array {
-                        $viewCost = $this->viewCalculator->compute($situation, $recruitment, $view);
+                $block = [];
 
-                        return [$this->year1->computeFrom($viewCost, $recruitment, $calendar), $viewCost];
-                    });
-                } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
-                    throw UncomputableViewException::forView($view, $exception);
+                if ($wantYear1) {
+                    try {
+                        /** @var array{Year1Horizon, AnnualCost} $computed */
+                        $computed = $this->scope->within($set, function () use ($situation, $recruitment, $calendar, $view): array {
+                            $viewCost = $this->viewCalculator->compute($situation, $recruitment, $view);
+
+                            return [$this->year1->computeFrom($viewCost, $recruitment, $calendar), $viewCost];
+                        });
+                    } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
+                        throw UncomputableViewException::forView($view, $exception);
+                    }
+                    [$horizon, $viewCost] = $computed;
+                    $trace = $detail ? $viewCost->trace() : null;
+                    $block['year1'] = $this->windowArray($horizon, $trace);
+                    $weightedYear1[$view][] = [$horizon, $line->volume];
                 }
-                [$horizon, $viewCost] = $computed;
-                $trace = $detail ? $viewCost->trace() : null;
-                $byView[$view] = ['year1' => $this->windowArray($horizon, $trace)];
-                $weightedByView[$view][] = [$horizon, $line->volume];
+
+                if ($career !== null) {
+                    try {
+                        $permanent = $this->scope->within(
+                            $set,
+                            fn (): AnnualCost => $this->permanent->compute($career, $recruitment, 1)->averagePerAgent(),
+                        );
+                    } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
+                        throw UncomputableViewException::forView($view, $exception);
+                    }
+                    $block['permanent'] = $this->amountArray($permanent);
+                    $weightedPermanent[$view][] = [$permanent, $line->volume];
+                }
+
+                $byView[$view] = $block;
             }
 
             $lineResults[] = [
@@ -121,7 +153,14 @@ final class ScenarioResultCalculator
 
         $aggregate = [];
         foreach ($views as $view) {
-            $aggregate[$view] = ['year1' => $this->aggregateWindowArray($weightedByView[$view])];
+            $viewAggregate = [];
+            if ($wantYear1) {
+                $viewAggregate['year1'] = $this->aggregateWindowArray($weightedYear1[$view]);
+            }
+            if ($wantPermanent) {
+                $viewAggregate['permanent'] = $this->aggregatePermanent($weightedPermanent[$view]);
+            }
+            $aggregate[$view] = $viewAggregate;
         }
 
         $result = [
@@ -251,6 +290,20 @@ final class ScenarioResultCalculator
             'year1' => $year1 === [] ? null : $this->amountArray($this->weightedSum($year1)),
             'schoolYear' => $schoolYear === [] ? null : $this->amountArray($this->weightedSum($schoolYear)),
         ];
+    }
+
+    /**
+     * Agrégat du régime permanent sur les lignes d'une vue : Σ(coût par agent × volume),
+     * terme par terme (même pondération par volume que l'agrégat année 1). `null` si la
+     * vue ne porte aucune ligne.
+     *
+     * @param list<array{AnnualCost, int}> $weighted
+     *
+     * @return array<string, mixed>|null
+     */
+    private function aggregatePermanent(array $weighted): ?array
+    {
+        return $weighted === [] ? null : $this->amountArray($this->weightedSum($weighted));
     }
 
     /**
