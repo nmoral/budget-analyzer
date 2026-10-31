@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Infrastructure\Import;
 
+use App\Infrastructure\Entity\Echelon;
+use App\Infrastructure\Entity\Funder;
+use App\Infrastructure\Entity\ParameterSet;
+use App\Infrastructure\Entity\Profile;
+use App\Infrastructure\Entity\RetirementScheme;
+use App\Infrastructure\Entity\Scenario;
+use App\Infrastructure\Entity\ScenarioLine;
 use App\Tests\Infrastructure\Persistence\IntegrationTestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Command\Command;
@@ -263,6 +270,89 @@ final class ImportCommandTest extends IntegrationTestCase
         // Les valeurs datées restent rattachées à l'unique ParameterSet du commit.
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
         self::assertSame(10, $this->rowCountWhere('dated_parameter', 'parameter_set_id = ' . $setId));
+    }
+
+    /**
+     * A2 (C6.2) — ré-import d'un commit déjà épinglé par un scénario : succès et FK de
+     * toute la chaîne épinglée préservée (scénario→ligne→profil→échelon→grille→jeu).
+     *
+     * Le ré-import idempotent réutilise le ParameterSet existant (FK
+     * `scenario.parameter_set_id`) et met Grille/Echelon à jour en place par upsert (FK
+     * `profile.entry_echelon_id`), au lieu de supprimer/recréer : aucune FK n'est cassée.
+     */
+    public function testReimportingCommitPinnedByScenarioChainSucceeds(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+
+        $set = $this->em->getRepository(ParameterSet::class)->findOneBy(['versionId' => '9f3a1c2']);
+        self::assertInstanceOf(ParameterSet::class, $set);
+
+        // Un échelon réellement importé (scopé au jeu) sert d'entrée au profil épinglé.
+        $echelon = $this->em->getRepository(Echelon::class)->findOneBy([]);
+        self::assertInstanceOf(Echelon::class, $echelon);
+        $echelonId = $echelon->id;
+        self::assertNotNull($echelonId);
+
+        $scheme = new RetirementScheme();
+        $scheme->code = 'CAS_CIVIL';
+        $scheme->label = 'CAS civil';
+        $this->em->persist($scheme);
+
+        $funder = new Funder();
+        $funder->code = 'ETAT';
+        $funder->label = 'État';
+        $this->em->persist($funder);
+
+        $profile = new Profile();
+        $profile->body = $echelon->grille->body;
+        $profile->grade = 'classe_normale';
+        $profile->entryEchelon = $echelon;
+        $profile->retirementScheme = $scheme;
+        $profile->indemnitaryScheme = null;
+        $profile->funder = $funder;
+        $profile->status = 'titulaire';
+        $profile->referenceCalendar = 'scolaire';
+        $this->em->persist($profile);
+
+        $scenario = new Scenario();
+        $scenario->title = 'Épinglé';
+        $scenario->provenance = 'simulation';
+        $scenario->parameterSet = $set;
+        $this->em->persist($scenario);
+
+        $line = new ScenarioLine();
+        $line->scenario = $scenario;
+        $line->profile = $profile;
+        $line->volume = 1;
+        $line->recruitmentDate = new \DateTimeImmutable('2026-09-01');
+        $line->spreadYears = 0;
+        $this->em->persist($line);
+
+        $this->em->flush();
+        $scenarioId = $scenario->id;
+        self::assertNotNull($scenarioId);
+
+        // Ré-import idempotent du MÊME commit : doit réussir sans violer aucune FK.
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode(), $second->getDisplay());
+
+        // Le scénario et la chaîne épinglée restent valides : même jeu, même échelon.
+        $this->em->clear();
+        $reloaded = $this->em->getRepository(Scenario::class)->find($scenarioId);
+        self::assertInstanceOf(Scenario::class, $reloaded);
+        self::assertSame('9f3a1c2', $reloaded->parameterSet->versionId);
+
+        $reloadedLine = $this->em->getRepository(ScenarioLine::class)->findOneBy(['scenario' => $reloaded]);
+        self::assertInstanceOf(ScenarioLine::class, $reloadedLine);
+        // L'échelon épinglé est conservé en place (même id) par l'upsert.
+        self::assertSame($echelonId, $reloadedLine->profile->entryEchelon->id);
+
+        // Idempotence : un seul jeu, comptes datés stables.
+        self::assertSame(1, $this->rowCount('parameter_set'));
+        self::assertSame(10, $this->rowCount('dated_parameter'));
+        self::assertSame(2, $this->rowCount('grille'));
+        self::assertSame(22, $this->rowCount('echelon'));
     }
 
     /** C6.2 — nom de commande impératif `app:import`. */

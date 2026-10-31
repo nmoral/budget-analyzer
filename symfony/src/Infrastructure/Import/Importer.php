@@ -26,9 +26,12 @@ use Doctrine\ORM\EntityManagerInterface;
  *
  * Un slug/corps référencé mais absent de son référentiel → refus (rollback total).
  *
- * Réimport idempotent du même commit (C6, décision Q5) : en tête de transaction, les
- * entités scopées au `ParameterSet` du commit sont purgées puis rechargées, tandis que
- * les référentiels globaux `Source`/`Corps` sont mis à jour par upsert sur `code`.
+ * Réimport idempotent du même commit (C6, décisions Q2/Q5) : le `ParameterSet` est
+ * réutilisé (jamais supprimé — un scénario l'épingle), `Grille`/`Echelon` sont mis à
+ * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`
+ * et `PrimeRate` — que rien ne référence — sont remplacés par rechargement, et les
+ * référentiels globaux `Source`/`Corps` sont mis à jour par upsert sur `code`. Aucune FK
+ * d'objet utilisateur (scénario, profil) n'est donc cassée par un ré-import.
  */
 final class Importer
 {
@@ -95,17 +98,32 @@ final class Importer
             $sourceReferential = $this->sourceReferential->load($dataDir);
             $corpsReferential = $this->corpsReferential->load($dataDir);
 
-            // Reproductibilité (C6, décision Q5) : repartir d'un état propre pour ce
-            // commit. Les valeurs datées scopées (DatedParameter/Grille/Echelon/PrimeRate)
-            // du ParameterSet existant sont purgées, puis le set est recréé. Les
-            // référentiels globaux (Source/Corps) sont conservés et mis à jour par
-            // upsert sur `code`. Le tout dans la même transaction (atomicité préservée).
-            $this->purgeExistingCommit($commit);
-
-            $set = new ParameterSet();
-            $set->versionId = $commit;
+            // Reproductibilité idempotente (C6, décisions Q2/Q5). Au ré-import du même
+            // commit, aucune ligne référencée par un objet utilisateur n'est détruite :
+            // - le ParameterSet est RÉUTILISÉ (même id) — le supprimer violerait la FK
+            //   NOT NULL `scenario.parameter_set_id` d'un scénario épinglé (A2) ;
+            // - Grille et Echelon sont mis à jour en place par clé naturelle (upsert),
+            //   car un Profil épingle un échelon (`profile.entry_echelon_id`) d'une
+            //   grille scopée : supprimer/recréer casserait cette FK et, par la chaîne
+            //   scénario→ligne→profil→échelon, rendrait un scénario épinglé invalide ;
+            // - DatedParameter et PrimeRate, référencés par rien, sont simplement
+            //   remplacés (purge + rechargement). Les référentiels globaux (Source/Corps)
+            //   sont conservés et mis à jour par upsert sur `code`. Le tout dans la même
+            //   transaction (atomicité préservée).
+            $existing = $this->findExistingSet($commit);
+            if ($existing instanceof ParameterSet) {
+                $set = $existing;
+                $this->purgeReplaceableScoped($set);
+                $existingGrilles = $this->indexExistingGrilles($set);
+                $existingEchelons = $this->indexExistingEchelons($existingGrilles);
+            } else {
+                $set = new ParameterSet();
+                $set->versionId = $commit;
+                $this->em->persist($set);
+                $existingGrilles = [];
+                $existingEchelons = [];
+            }
             $set->importedAt = new \DateTimeImmutable();
-            $this->em->persist($set);
 
             /** @var array<string, Source> $sources */
             $sources = [];
@@ -115,8 +133,8 @@ final class Importer
             $grilles = [];
 
             $this->loadDatedParameters($parsed, $set, $sourceReferential, $sources);
-            $this->loadGrilles($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps, $grilles);
-            $this->loadEchelons($parsed, $grilles);
+            $this->loadGrilles($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps, $grilles, $existingGrilles);
+            $this->loadEchelons($parsed, $grilles, $existingEchelons);
             $this->loadPrimeRates($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
 
             $this->em->flush();
@@ -172,6 +190,7 @@ final class Importer
      * @param array<string, Source>                                                                           $sources
      * @param array<string, Corps>                                                                            $corps
      * @param array<string, Grille>                                                                           $grilles
+     * @param array<string, Grille>                                                                           $existingGrilles grilles scopées préexistantes (upsert au ré-import)
      */
     private function loadGrilles(
         array $parsed,
@@ -181,10 +200,14 @@ final class Importer
         array &$sources,
         array &$corps,
         array &$grilles,
+        array $existingGrilles,
     ): void {
         foreach (self::GRILLE_FILES as $file) {
             foreach ($parsed[$file]['rows'] as $row) {
-                $grille = new Grille();
+                $key = $this->grilleKey($row['body_code'], $row['grade'], $row['version']);
+                // Upsert par clé naturelle : au ré-import, la ligne existante est
+                // réutilisée (même id, FK des échelons/profils préservées) ; sinon créée.
+                $grille = $existingGrilles[$key] ?? new Grille();
                 $grille->body = $this->resolveCorps($row['body_code'], $corpsReferential, $corps);
                 $grille->grade = $row['grade'];
                 $grille->version = $row['version'];
@@ -192,9 +215,11 @@ final class Importer
                 $grille->endDate = $row['end_date'] === '' ? null : new \DateTimeImmutable($row['end_date']);
                 $grille->source = $this->resolveSource($row['source'], $sourceReferential, $sources);
                 $grille->parameterSet = $set;
-                $this->em->persist($grille);
+                if (!isset($existingGrilles[$key])) {
+                    $this->em->persist($grille);
+                }
 
-                $grilles[$this->grilleKey($row['body_code'], $row['grade'], $row['version'])] = $grille;
+                $grilles[$key] = $grille;
             }
         }
     }
@@ -202,8 +227,9 @@ final class Importer
     /**
      * @param array<string, array{header: list<string>, rows: list<array<string, string>>}> $parsed
      * @param array<string, Grille>                                                          $grilles
+     * @param array<string, Echelon>                                                         $existingEchelons échelons scopés préexistants (upsert au ré-import), indexés par `grilleKey#rank`
      */
-    private function loadEchelons(array $parsed, array $grilles): void
+    private function loadEchelons(array $parsed, array $grilles, array $existingEchelons): void
     {
         foreach (self::ECHELON_FILES as $file) {
             foreach ($parsed[$file]['rows'] as $row) {
@@ -212,13 +238,18 @@ final class Importer
                     throw new ImportException(sprintf('grille inconnue `%s` (fichier %s.csv)', $key, $file));
                 }
 
-                $echelon = new Echelon();
+                // Upsert par clé naturelle (grille + rang) : au ré-import, l'échelon
+                // existant est réutilisé (même id, FK `profile.entry_echelon_id` préservée).
+                $echelonKey = $this->echelonKey($key, (int) $row['rank']);
+                $echelon = $existingEchelons[$echelonKey] ?? new Echelon();
                 $echelon->grille = $grilles[$key];
                 $echelon->rank = (int) $row['rank'];
                 $echelon->grossIndex = (int) $row['gross_index'];
                 $echelon->increasedIndex = (int) $row['increased_index'];
                 $echelon->durationMonths = $row['duration_months'] === '' ? null : (int) $row['duration_months'];
-                $this->em->persist($echelon);
+                if (!isset($existingEchelons[$echelonKey])) {
+                    $this->em->persist($echelon);
+                }
             }
         }
     }
@@ -253,39 +284,79 @@ final class Importer
     }
 
     /**
-     * Purge les entités scopées du ParameterSet de ce commit puis le set lui-même,
-     * s'il existe déjà (réimport). Échelons d'abord (FK vers Grille), puis Grille /
-     * DatedParameter / PrimeRate (FK vers le set), enfin le ParameterSet. Les Source
-     * et Corps globaux ne sont pas touchés. L'identité est réinitialisée pour éviter
-     * tout état résiduel avant rechargement.
+     * Le ParameterSet déjà présent pour ce commit (ré-import), ou null au premier import.
      */
-    private function purgeExistingCommit(string $commit): void
+    private function findExistingSet(string $commit): ?ParameterSet
     {
         $existing = $this->em->getRepository(ParameterSet::class)->findOneBy(['versionId' => $commit]);
         if (!$existing instanceof ParameterSet || $existing->id === null) {
-            return;
+            return null;
         }
 
-        $setId = $existing->id;
+        return $existing;
+    }
+
+    /**
+     * Purge les seules entités scopées que RIEN ne référence (DatedParameter, PrimeRate) :
+     * elles sont remplacées par rechargement. Grille/Echelon (référencés par les profils)
+     * et le ParameterSet (référencé par les scénarios) ne sont jamais supprimés ici — ils
+     * sont mis à jour en place par upsert, pour ne casser aucune FK d'objet utilisateur.
+     */
+    private function purgeReplaceableScoped(ParameterSet $set): void
+    {
+        $setId = $set->id;
 
         $deletes = [
-            'DELETE App\Infrastructure\Entity\Echelon e WHERE IDENTITY(e.grille) IN '
-                . '(SELECT g.id FROM App\Infrastructure\Entity\Grille g WHERE IDENTITY(g.parameterSet) = :set)',
-            'DELETE App\Infrastructure\Entity\Grille g WHERE IDENTITY(g.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\DatedParameter p WHERE IDENTITY(p.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\PrimeRate r WHERE IDENTITY(r.parameterSet) = :set',
-            'DELETE App\Infrastructure\Entity\ParameterSet s WHERE s.id = :set',
         ];
         foreach ($deletes as $dql) {
             $this->em->createQuery($dql)->setParameter('set', $setId)->execute();
         }
+    }
 
-        $this->em->clear();
+    /**
+     * Grilles scopées préexistantes, indexées par clé naturelle `{body_code}_{grade}_{version}`.
+     *
+     * @return array<string, Grille>
+     */
+    private function indexExistingGrilles(ParameterSet $set): array
+    {
+        $map = [];
+        foreach ($this->em->getRepository(Grille::class)->findBy(['parameterSet' => $set]) as $grille) {
+            $map[$this->grilleKey($grille->body->code, $grille->grade, $grille->version)] = $grille;
+        }
+
+        return $map;
+    }
+
+    /**
+     * Échelons scopés préexistants, indexés par clé naturelle `grilleKey#rank`.
+     *
+     * @param array<string, Grille> $existingGrilles
+     *
+     * @return array<string, Echelon>
+     */
+    private function indexExistingEchelons(array $existingGrilles): array
+    {
+        $map = [];
+        foreach ($existingGrilles as $grilleKey => $grille) {
+            foreach ($this->em->getRepository(Echelon::class)->findBy(['grille' => $grille]) as $echelon) {
+                $map[$this->echelonKey($grilleKey, $echelon->rank)] = $echelon;
+            }
+        }
+
+        return $map;
     }
 
     private function grilleKey(string $bodyCode, string $grade, string $version): string
     {
         return sprintf('%s_%s_%s', $bodyCode, $grade, $version);
+    }
+
+    private function echelonKey(string $grilleKey, int $rank): string
+    {
+        return sprintf('%s#%d', $grilleKey, $rank);
     }
 
     /**

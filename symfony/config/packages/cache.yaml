@@ -1,7 +1,12 @@
-framework:
-    cache:
-        # Pool dédié aux résultats de simulation (#19) : clé = f(scénario, versionId,
-        # horizons triés, vues triées) ; en-tête X-Cache HIT/MISS ; purge au `app:import`.
-        pools:
-            app.cache.scenario_result:
-                adapter: cache.adapter.filesystem
+# Pool dédié aux résultats de simulation (#19) : clé = f(scénario, versionId,
+# horizons triés, vues triées) ; en-tête X-Cache HIT/MISS ; purge au `app:import`.
+#
+# A1/J4 — le pool N'EST PLUS déclaré sous `framework.cache.pools` : un pool
+# framework dérive son répertoire ET son namespace de `%kernel.cache_dir%` (donc de
+# l'environnement et de la classe du conteneur). Or le serveur web résout `prod` et
+# la console `app:import` résout `dev` (défauts divergents de public/index.php et
+# bin/console, aucun `.env` dans le conteneur) : web et console écrivaient alors dans
+# deux stockages distincts (`var/cache/prod/pools` vs `var/cache/dev/pools`) et la
+# purge à l'import ratait le pool lu par l'API. Le pool est désormais un service
+# `FilesystemAdapter` à répertoire ET namespace FIXES (cf. config/services.yaml),
+# indépendant de l'environnement : web et console pointent le même stockage.
