@@ -6,9 +6,11 @@ namespace App\Tests\Domain\Rule\CostView;
 
 use App\Domain\Rule\CostView\TechnicalBalanceViewRule;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -30,7 +32,8 @@ final class TechnicalBalanceViewRuleTest extends TestCase
 
         $retirement = $this->rule()->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('17500.494750', $retirement->toString());
+        self::assertSame('17500.494750', $retirement->amount()->toString());
+        self::assertSame('TIB·taux_equilibre_cas_civil', $retirement->formula());
     }
 
     public function testRetirementCostForCnraclUsesItsKey(): void
@@ -40,7 +43,7 @@ final class TechnicalBalanceViewRuleTest extends TestCase
 
         $retirement = $this->rule()->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CNRACL');
 
-        self::assertSame('9800.277060', $retirement->toString());
+        self::assertSame('9800.277060', $retirement->amount()->toString());
     }
 
     public function testUnknownRegimeHasNoEquilibriumKeyAndThrows(): void
@@ -76,13 +79,13 @@ final class TechnicalBalanceViewRuleTest extends TestCase
     private function rateProvider(): DatedRateProvider
     {
         return new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
-                return match ($key) {
+                return Trace::datedRate(match ($key) {
                     'taux_equilibre_cas_civil' => Rate::fromPercentage('75.00'),
                     'taux_equilibre_cnracl' => Rate::fromPercentage('42.00'),
                     default => throw MissingDatedRateException::forKeyAndDate($key, $date),
-                };
+                });
             }
         };
     }

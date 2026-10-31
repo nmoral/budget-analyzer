@@ -26,7 +26,8 @@ final class ActuarialViewRuleTest extends TestCase
         $retirement = $this->rule(AssumptionsActuarielles::defaults())
             ->retirementCost($this->tib(), new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('5104.310975', $retirement->toString());
+        self::assertSame('5104.310975', $retirement->amount()->toString());
+        self::assertSame([], $retirement->inputs());
     }
 
     public function testOverriddenFacteurChangesTheResult(): void
@@ -39,8 +40,8 @@ final class ActuarialViewRuleTest extends TestCase
         $result = $this->rule($overridden)
             ->retirementCost($this->tib(), new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('4083.448780', $result->toString());
-        self::assertFalse($result->equals($nominal));
+        self::assertSame('4083.448780', $result->amount()->toString());
+        self::assertFalse($result->amount()->equals($nominal->amount()));
     }
 
     public function testMetadata(): void

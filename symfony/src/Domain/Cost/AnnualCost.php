@@ -24,6 +24,7 @@ final class AnnualCost
         private readonly Amount $retirement,
         private readonly Amount $otherContributions,
         private readonly Amount $rafp,
+        private readonly ?CostTrace $trace = null,
     ) {
         $this->total = $treatmentAndPrimes
             ->plus($retirement)
@@ -69,5 +70,15 @@ final class AnnualCost
     public function total(): Amount
     {
         return $this->total;
+    }
+
+    /**
+     * Trace de calcul PURE par terme (formule + entrées datées utilisées), ou
+     * `null` si le coût a été assemblé sans trace (ex. horizons agrégés). La
+     * sérialisation et la résolution des sources sont faites hors du domaine (#J3).
+     */
+    public function trace(): ?CostTrace
+    {
+        return $this->trace;
     }
 }

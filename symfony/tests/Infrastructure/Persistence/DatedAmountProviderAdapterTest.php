@@ -10,6 +10,7 @@ use App\Domain\Shared\MissingDatedAmountException;
 use App\Infrastructure\Amount\DatedAmountProviderAdapter;
 use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Repository\DatedParameterRepository;
+use App\Infrastructure\Transparency\SourceCapture;
 
 /**
  * C2 / C8 — l'adapter branche le port de domaine `DatedAmountProvider` sur les
@@ -24,7 +25,7 @@ final class DatedAmountProviderAdapterTest extends IntegrationTestCase
 
         $amount = $this->adapter()->amountAt('point_indice', new \DateTimeImmutable('2026-06-01'));
 
-        self::assertTrue($amount->equals(Amount::fromString('59.0734')));
+        self::assertTrue($amount->amount()->equals(Amount::fromString('59.0734')));
     }
 
     public function testIgnoresParametersOfOlderSets(): void
@@ -36,7 +37,7 @@ final class DatedAmountProviderAdapterTest extends IntegrationTestCase
 
         $amount = $this->adapter()->amountAt('point_indice', new \DateTimeImmutable('2026-06-01'));
 
-        self::assertSame('59.073400', $amount->toString());
+        self::assertSame('59.073400', $amount->amount()->toString());
     }
 
     public function testComputesIndexedSalaryThroughContainerWiring(): void
@@ -76,7 +77,7 @@ final class DatedAmountProviderAdapterTest extends IntegrationTestCase
         $repository = self::getContainer()->get(DatedParameterRepository::class);
         self::assertInstanceOf(DatedParameterRepository::class, $repository);
 
-        return new DatedAmountProviderAdapter($repository, new ParameterSetScope());
+        return new DatedAmountProviderAdapter($repository, new ParameterSetScope(), new SourceCapture());
     }
 
     private function calculator(): IndexedSalaryCalculator

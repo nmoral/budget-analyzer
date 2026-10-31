@@ -7,6 +7,7 @@ namespace App\Tests\Fixtures\Rule\CostView;
 use App\Domain\Rule\CostView\CostViewRule;
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\Rate;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Implémentation de test de la famille vue de coût (code ANNEE_1), prouvant la
@@ -19,9 +20,9 @@ final class AnnualCostViewRule implements CostViewRule
         return 'ANNEE_1';
     }
 
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
     {
-        return $tib->multipliedByRate(Rate::fromPercentage('0'));
+        return new RetirementValuation($tib->multipliedByRate(Rate::fromPercentage('0')), 'TIB·0', []);
     }
 
     public function definition(): string

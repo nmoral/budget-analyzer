@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Cost;
 
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedAmount;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\Rate;
 
@@ -28,9 +29,22 @@ final class RafpContributionCalculator
 
     public function compute(Amount $tib, Rate $primeRate, \DateTimeImmutable $date): Amount
     {
+        return $this->computeTraced($tib, $primeRate, $date)->amount();
+    }
+
+    /**
+     * Terme RAFP + l'entrée datée `taux_rafp` utilisée, pour la trace de calcul (#65).
+     */
+    public function computeTraced(Amount $tib, Rate $primeRate, \DateTimeImmutable $date): DatedAmount
+    {
         $primeBase = $tib->multipliedByRate($primeRate);
         $cap = $tib->multipliedByRate(Rate::fromPercentage(self::CAP_PERCENTAGE));
 
-        return $primeBase->min($cap)->multipliedByRate($this->rates->rateAt(self::PARAMETER_KEY, $date));
+        $rafpRate = $this->rates->rateAt(self::PARAMETER_KEY, $date);
+
+        return new DatedAmount(
+            $primeBase->min($cap)->multipliedByRate($rafpRate->rate()),
+            $rafpRate->input(),
+        );
     }
 }

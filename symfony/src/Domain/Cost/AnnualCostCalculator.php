@@ -32,19 +32,30 @@ final class AnnualCostCalculator
 
     public function compute(AgentSituation $situation, \DateTimeImmutable $date): AnnualCost
     {
-        $tib = $this->indexedSalary->compute($situation->increasedIndex(), $date);
-        $primeRate = $this->primeRates->primeRateAt($situation->bodyCode(), $date)->rate();
+        $tibTraced = $this->indexedSalary->computeTraced($situation->increasedIndex(), $date);
+        $tib = $tibTraced->amount();
+        $primeObservation = $this->primeRates->primeRateAt($situation->bodyCode(), $date);
+        $primeRate = $primeObservation->rate();
 
         $treatmentAndPrimes = $tib->plus($tib->multipliedByRate($primeRate));
 
         $retirementRule = $this->retirementRules->resolve($situation->retirementRegimeCode());
-        $retirement = $tib->multipliedByRate($retirementRule->employerRate($date));
+        $retirementRate = $retirementRule->employerRate($date);
+        $retirement = $tib->multipliedByRate($retirementRate->rate());
 
         $otherRule = $this->otherContributions->resolve($situation->versant());
-        $other = $treatmentAndPrimes->multipliedByRate($otherRule->rate($date));
+        $otherRate = $otherRule->rate($date);
+        $other = $treatmentAndPrimes->multipliedByRate($otherRate->rate());
 
-        $rafp = $this->rafp->compute($tib, $primeRate, $date);
+        $rafpTraced = $this->rafp->computeTraced($tib, $primeRate, $date);
 
-        return new AnnualCost($treatmentAndPrimes, $retirement, $other, $rafp);
+        $trace = new CostTrace(
+            new TermTrace('TIB·(1+p)', [$tibTraced->input(), $primeObservation->input()]),
+            new TermTrace('TIB·r_retraite', [$retirementRate->input()]),
+            new TermTrace('TIB·(1+p)·r_autres', [$otherRate->input()]),
+            new TermTrace('min(TIB·p, 0,2·TIB)·r_RAFP', [$rafpTraced->input()]),
+        );
+
+        return new AnnualCost($treatmentAndPrimes, $retirement, $other, $rafpTraced->amount(), $trace);
     }
 }

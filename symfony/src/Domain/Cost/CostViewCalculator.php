@@ -31,13 +31,22 @@ final class CostViewCalculator
 
         $view = $this->costViews->resolve($costViewCode);
         $tib = $this->indexedSalary->compute($situation->increasedIndex(), $date);
-        $retirement = $view->retirementCost($tib, $date, $situation->retirementRegimeCode());
+        $valuation = $view->retirementCost($tib, $date, $situation->retirementRegimeCode());
+
+        $baseTrace = $base->trace();
+        $trace = $baseTrace === null ? null : new CostTrace(
+            $baseTrace->treatmentAndPrimes(),
+            new TermTrace($valuation->formula(), $valuation->inputs()),
+            $baseTrace->otherContributions(),
+            $baseTrace->rafp(),
+        );
 
         return new AnnualCost(
             $base->treatmentAndPrimes(),
-            $retirement,
+            $valuation->amount(),
             $base->otherContributions(),
             $base->rafp(),
+            $trace,
         );
     }
 }

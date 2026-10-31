@@ -6,9 +6,11 @@ namespace App\Tests\Domain\Rule\CostView;
 
 use App\Domain\Rule\CostView\PrivateEquivalentViewRule;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -30,7 +32,8 @@ final class PrivateEquivalentViewRuleTest extends TestCase
         $retirement = $this->rule($this->rateProvider())
             ->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('6533.518040', $retirement->toString());
+        self::assertSame('6533.518040', $retirement->amount()->toString());
+        self::assertSame('TIB·taux_employeur_prive', $retirement->formula());
     }
 
     public function testRetirementCostIgnoresRegimeCodeAndReadsThePrivateKey(): void
@@ -42,7 +45,7 @@ final class PrivateEquivalentViewRuleTest extends TestCase
         $forCasCivil = $rule->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
         $forCnracl = $rule->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CNRACL');
 
-        self::assertTrue($forCasCivil->equals($forCnracl));
+        self::assertTrue($forCasCivil->amount()->equals($forCnracl->amount()));
     }
 
     public function testMetadata(): void
@@ -67,13 +70,13 @@ final class PrivateEquivalentViewRuleTest extends TestCase
     private function rateProvider(): DatedRateProvider
     {
         return new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== 'taux_employeur_prive') {
                     throw MissingDatedRateException::forKeyAndDate($key, $date);
                 }
 
-                return Rate::fromPercentage('28.00');
+                return Trace::datedRate(Rate::fromPercentage('28.00'));
             }
         };
     }

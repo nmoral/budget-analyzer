@@ -25,7 +25,7 @@ final class RetirementRuleResolutionTest extends IntegrationTestCase
 
         $rate = $this->resolve('CAS_CIVIL')->employerRate(new \DateTimeImmutable('2026-06-01'));
 
-        self::assertTrue($rate->equals(Rate::fromPercentage('82.28')));
+        self::assertTrue($rate->rate()->equals(Rate::fromPercentage('82.28')));
     }
 
     public function testCnraclEmployerRateFollowsDatedValue(): void
@@ -40,10 +40,10 @@ final class RetirementRuleResolutionTest extends IntegrationTestCase
         $cnracl = $this->resolve('CNRACL');
 
         self::assertTrue(
-            $cnracl->employerRate(new \DateTimeImmutable('2026-06-01'))->equals(Rate::fromPercentage('37.65')),
+            $cnracl->employerRate(new \DateTimeImmutable('2026-06-01'))->rate()->equals(Rate::fromPercentage('37.65')),
         );
         self::assertTrue(
-            $cnracl->employerRate(new \DateTimeImmutable('2027-06-01'))->equals(Rate::fromPercentage('40.65')),
+            $cnracl->employerRate(new \DateTimeImmutable('2027-06-01'))->rate()->equals(Rate::fromPercentage('40.65')),
         );
     }
 
@@ -62,7 +62,7 @@ final class RetirementRuleResolutionTest extends IntegrationTestCase
 
         $rate = $this->resolve('CAS_CIVIL')->employerRate(new \DateTimeImmutable('2026-06-01'));
 
-        self::assertTrue($rate->equals(Rate::fromPercentage('90.00')));
+        self::assertTrue($rate->rate()->equals(Rate::fromPercentage('90.00')));
     }
 
     private function seedParameter(string $key, string $value, string $startDate, ?string $endDate): void

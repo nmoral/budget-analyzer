@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Fixtures\Rule\Retirement;
 
 use App\Domain\Rule\Retirement\RetirementRule;
+use App\Domain\Shared\CostInput;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\Rate;
 
 /**
@@ -19,8 +21,11 @@ final class EnfichableRetirementRule implements RetirementRule
         return 'X_TEST';
     }
 
-    public function employerRate(\DateTimeImmutable $date): Rate
+    public function employerRate(\DateTimeImmutable $date): DatedRate
     {
-        return Rate::fromPercentage('0');
+        return new DatedRate(
+            Rate::fromPercentage('0'),
+            new CostInput('taux_x_test', '0', 'PCT_TIB', $date),
+        );
     }
 }

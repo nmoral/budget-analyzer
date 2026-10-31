@@ -6,6 +6,7 @@ namespace App\Domain\Rule\CostView;
 
 use App\Domain\Rule\Rule;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Famille « vue de coût » (#18) : angle de valorisation de la composante retraite
@@ -21,9 +22,10 @@ interface CostViewRule extends Rule
 {
     /**
      * Terme retraite employeur annuel selon cette vue, pour le TIB, la date et le
-     * code de régime de retraite donnés.
+     * code de régime de retraite donnés : montant + trace (formule lisible et entrées
+     * datées utilisées) pour la transparence (#65).
      */
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount;
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation;
 
     /**
      * Définition courte de la méthode de valorisation (non vide).

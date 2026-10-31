@@ -6,15 +6,18 @@ namespace App\Infrastructure\Import;
 
 /**
  * Référentiel curaté des sources (`data/sources.json`) : slug → métadonnées
- * complètes (`label`, `publisher`, `url`, `retrievedAt`, `fileHash`).
+ * complètes (`label`, `publisher`, `edition`, `locator`, `url`, `retrievedAt`,
+ * `fileHash`).
  *
  * Tous les champs de l'entité `Source` étant NOT NULL, ce référentiel doit les
  * fournir pour chaque slug référencé par la colonne `source` d'un CSV (décision Q3).
+ * `edition` (année/édition) et `locator` (localisation page/tableau/article) sont
+ * requis depuis #65 (« source en clair complète »).
  */
 final class SourceReferential
 {
     /**
-     * @return array<string, array{label: string, publisher: string, url: string, retrievedAt: string, fileHash: string}>
+     * @return array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}>
      */
     public function load(string $dataDir): array
     {
@@ -30,7 +33,7 @@ final class SourceReferential
             throw new ImportException(sprintf('référentiel des sources invalide : %s', $path));
         }
 
-        /** @var array<string, array{label: string, publisher: string, url: string, retrievedAt: string, fileHash: string}> $decoded */
+        /** @var array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $decoded */
         return $decoded;
     }
 }

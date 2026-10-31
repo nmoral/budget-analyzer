@@ -23,13 +23,17 @@ use App\Domain\Rule\Retirement\RetirementRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Rule\UnknownRuleCodeException;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedAmount;
 use App\Domain\Shared\DatedAmountProvider;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedAmountException;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\PrimeRateObservation;
 use App\Domain\Shared\PrimeRateProvider;
 use App\Domain\Shared\Rate;
+use App\Domain\Shared\RetirementValuation;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -175,14 +179,14 @@ final class CostViewCalculatorTest extends TestCase
     private function viewRateProvider(): DatedRateProvider
     {
         return new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
-                return match ($key) {
+                return Trace::datedRate(match ($key) {
                     'taux_employeur_prive' => Rate::fromPercentage('28.00'),
                     'taux_equilibre_cas_civil' => Rate::fromPercentage('75.00'),
                     'taux_equilibre_cnracl' => Rate::fromPercentage('42.00'),
                     default => throw MissingDatedRateException::forKeyAndDate($key, $date),
-                };
+                });
             }
         };
     }
@@ -215,9 +219,9 @@ final class CostViewCalculatorTest extends TestCase
                 return 'X_TEST_VIEW';
             }
 
-            public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+            public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
             {
-                return $tib->multipliedByRate(Rate::fromPercentage('10'));
+                return new RetirementValuation($tib->multipliedByRate(Rate::fromPercentage('10')), 'TIB·10%', []);
             }
 
             public function definition(): string
@@ -245,13 +249,13 @@ final class CostViewCalculatorTest extends TestCase
     private function indexPointProvider(): DatedAmountProvider
     {
         return new class () implements DatedAmountProvider {
-            public function amountAt(string $key, \DateTimeImmutable $date): Amount
+            public function amountAt(string $key, \DateTimeImmutable $date): DatedAmount
             {
                 if ($key !== 'point_indice') {
                     throw MissingDatedAmountException::forKeyAndDate($key, $date);
                 }
 
-                return Amount::fromString('59.0734');
+                return Trace::datedAmount(Amount::fromString('59.0734'));
             }
         };
     }
@@ -265,7 +269,7 @@ final class CostViewCalculatorTest extends TestCase
 
             public function primeRateAt(string $bodyCode, \DateTimeImmutable $date): PrimeRateObservation
             {
-                return new PrimeRateObservation(Rate::fromRatio($this->ratio), false);
+                return Trace::primeObservation(Rate::fromRatio($this->ratio), false);
             }
         };
     }
@@ -284,9 +288,9 @@ final class CostViewCalculatorTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function employerRate(\DateTimeImmutable $date): Rate
+            public function employerRate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }
@@ -305,9 +309,9 @@ final class CostViewCalculatorTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function rate(\DateTimeImmutable $date): Rate
+            public function rate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }
@@ -321,13 +325,13 @@ final class CostViewCalculatorTest extends TestCase
             ) {
             }
 
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== $this->expectedKey) {
                     throw new \LogicException(sprintf('Unexpected key "%s".', $key));
                 }
 
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }

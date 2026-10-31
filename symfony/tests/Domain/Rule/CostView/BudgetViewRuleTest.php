@@ -8,7 +8,9 @@ use App\Domain\Rule\CostView\BudgetViewRule;
 use App\Domain\Rule\Retirement\RetirementRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -32,7 +34,9 @@ final class BudgetViewRuleTest extends TestCase
 
         $retirement = $this->rule()->retirementCost($tib, new \DateTimeImmutable('2026-01-01'), 'CAS_CIVIL');
 
-        self::assertSame('19199.209440', $retirement->toString());
+        self::assertSame('19199.209440', $retirement->amount()->toString());
+        self::assertSame('TIB·r_retraite', $retirement->formula());
+        self::assertCount(1, $retirement->inputs());
     }
 
     public function testAssumptionsAreEmpty(): void
@@ -85,9 +89,9 @@ final class BudgetViewRuleTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function employerRate(\DateTimeImmutable $date): Rate
+            public function employerRate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }

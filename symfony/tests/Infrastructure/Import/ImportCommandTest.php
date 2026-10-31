@@ -224,6 +224,47 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame('03eff22fb00d9d1326b35fae7fe60594ff400542854c81d1014deab87b70f067', $row['file_hash']);
     }
 
+    /**
+     * #65 C2.1 — « source en clair » : l'import mappe et persiste l'édition/année et
+     * le `locator` depuis `data/sources.json`, tous deux non vides.
+     */
+    public function testSourcePersistsEditionAndLocatorFromReferential(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        $referential = $this->loadReferential();
+
+        foreach (array_keys($referential) as $code) {
+            $row = $this->em->getConnection()->fetchAssociative(
+                'SELECT edition, locator FROM source WHERE code = ?',
+                [$code],
+            );
+            self::assertIsArray($row, sprintf('source %s absente', $code));
+
+            $edition = $row['edition'];
+            $locator = $row['locator'];
+            self::assertIsString($edition);
+            self::assertIsString($locator);
+            self::assertNotSame('', trim($edition), sprintf('édition vide pour %s', $code));
+            self::assertNotSame('', trim($locator), sprintf('locator vide pour %s', $code));
+            self::assertSame($referential[$code]['edition'], $edition);
+            self::assertSame($referential[$code]['locator'], $locator);
+        }
+
+        // Cas témoin explicite (C2.1) : un bloc source complet, tous champs non vides.
+        $row = $this->em->getConnection()->fetchAssociative(
+            'SELECT publisher, label, edition, locator, url, retrieved_at FROM source '
+            . "WHERE code = 'decret-2023-519'",
+        );
+        self::assertIsArray($row);
+        foreach (['publisher', 'label', 'edition', 'locator', 'url', 'retrieved_at'] as $field) {
+            $value = $row[$field];
+            self::assertIsString($value);
+            self::assertNotSame('', trim($value), sprintf('champ %s vide', $field));
+        }
+    }
+
     /** C5.5 — Corps persiste tous ses champs curatés. */
     public function testCorpsPersistsAllCuratedFields(): void
     {
@@ -370,6 +411,19 @@ final class ImportCommandTest extends IntegrationTestCase
         $dir = getenv('BUDGET_DATA_DIR');
 
         return $dir !== false && $dir !== '' ? $dir : '/data';
+    }
+
+    /**
+     * @return array<string, array{edition: string, locator: string}>
+     */
+    private function loadReferential(): array
+    {
+        $raw = file_get_contents($this->dataDir() . '/sources.json');
+        self::assertIsString($raw);
+        /** @var array<string, array{edition: string, locator: string}> $decoded */
+        $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+        return $decoded;
     }
 
     private function replaceInFile(string $path, string $search, string $replace): void

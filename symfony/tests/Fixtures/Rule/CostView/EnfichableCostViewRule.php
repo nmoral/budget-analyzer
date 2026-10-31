@@ -7,6 +7,7 @@ namespace App\Tests\Fixtures\Rule\CostView;
 use App\Domain\Rule\CostView\CostViewRule;
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\Rate;
+use App\Domain\Shared\RetirementValuation;
 
 /**
  * Implémentation de test taggée (code X_TEST_VIEW) : prouve l'enfichabilité (C7),
@@ -20,9 +21,9 @@ final class EnfichableCostViewRule implements CostViewRule
         return 'X_TEST_VIEW';
     }
 
-    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
+    public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): RetirementValuation
     {
-        return $tib->multipliedByRate(Rate::fromPercentage('10'));
+        return new RetirementValuation($tib->multipliedByRate(Rate::fromPercentage('10')), 'TIB·10%', []);
     }
 
     public function definition(): string

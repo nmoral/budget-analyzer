@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Rule\Retirement;
 
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
-use App\Domain\Shared\Rate;
 
 /**
  * Régime de retraite CAS civil : expose le taux employeur daté lu depuis le
@@ -26,7 +26,7 @@ final class CasCivilRule implements RetirementRule
         return 'CAS_CIVIL';
     }
 
-    public function employerRate(\DateTimeImmutable $date): Rate
+    public function employerRate(\DateTimeImmutable $date): DatedRate
     {
         return $this->rates->rateAt(self::PARAMETER_KEY, $date);
     }

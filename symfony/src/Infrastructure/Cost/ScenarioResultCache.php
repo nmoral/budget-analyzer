@@ -10,10 +10,11 @@ use Psr\Cache\CacheItemPoolInterface;
 /**
  * Cache du résultat de scénario (#19, J3) autour de `ScenarioResultCalculator`.
  *
- * La clé = f(scénario, versionId du jeu épinglé, horizons triés, vues triées) : deux
- * appels identiques partagent l'entrée (rejouabilité), une sélection ou une version
- * différente a une clé distincte (jamais de cache croisé). Le tri rend l'ordre des
- * horizons/vues indifférent. L'invalidation par ré-import passe par la purge du pool
+ * La clé = f(scénario, versionId du jeu épinglé, horizons triés, vues triées, mode
+ * `detail`) : deux appels identiques partagent l'entrée (rejouabilité), une sélection,
+ * une version ou un mode `detail` différent a une clé distincte (jamais de cache
+ * croisé : la réponse légère et la réponse `detail=full` ne se servent/polluent pas).
+ * Le tri rend l'ordre des horizons/vues indifférent. L'invalidation par ré-import passe par la purge du pool
  * (cf. `app:import`), le versionId d'un import idempotent ne changeant pas.
  */
 final class ScenarioResultCache
@@ -31,9 +32,9 @@ final class ScenarioResultCache
      * @throws InvalidSelectionException  si une vue ou un horizon demandé est inconnu
      * @throws UncomputableViewException si une vue valide n'est pas valorisable (paramètre daté manquant) ; l'erreur n'est pas mise en cache (levée avant la sauvegarde)
      */
-    public function get(Scenario $scenario, array $horizons, array $views): CachedScenarioResult
+    public function get(Scenario $scenario, array $horizons, array $views, bool $detail = false): CachedScenarioResult
     {
-        $item = $this->pool->getItem($this->key($scenario, $horizons, $views));
+        $item = $this->pool->getItem($this->key($scenario, $horizons, $views, $detail));
 
         if ($item->isHit()) {
             $cached = $item->get();
@@ -43,7 +44,7 @@ final class ScenarioResultCache
             return new CachedScenarioResult($cached, true);
         }
 
-        $result = $this->calculator->compute($scenario, $horizons, $views);
+        $result = $this->calculator->compute($scenario, $horizons, $views, $detail);
         $item->set($result);
         $this->pool->save($item);
 
@@ -54,7 +55,7 @@ final class ScenarioResultCache
      * @param list<string> $horizons
      * @param list<string> $views
      */
-    private function key(Scenario $scenario, array $horizons, array $views): string
+    private function key(Scenario $scenario, array $horizons, array $views, bool $detail): string
     {
         $sortedHorizons = $horizons;
         sort($sortedHorizons);
@@ -67,6 +68,7 @@ final class ScenarioResultCache
             $scenario->parameterSet->versionId,
             implode(',', $sortedHorizons),
             implode(',', $sortedViews),
+            $detail ? 'detail=full' : 'detail=none',
         ]);
 
         return 'scenario_result_' . hash('sha256', $raw);

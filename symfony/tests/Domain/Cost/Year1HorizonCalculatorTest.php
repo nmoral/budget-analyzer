@@ -16,12 +16,15 @@ use App\Domain\Rule\OtherContributions\OtherContributionsRuleResolver;
 use App\Domain\Rule\Retirement\RetirementRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedAmount;
 use App\Domain\Shared\DatedAmountProvider;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedAmountException;
 use App\Domain\Shared\PrimeRateObservation;
 use App\Domain\Shared\PrimeRateProvider;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -156,6 +159,43 @@ final class Year1HorizonCalculatorTest extends TestCase
         self::assertCostEquals($this->prorated($full, 10), $schoolYear);
     }
 
+    public function testFullYearExposesAProrataOfTwelveOverTwelve(): void
+    {
+        // C1.3 : l'année pleine n'est pas proratisée → prorata 12/12 (facteur 1).
+        $horizon = $this->compute(new \DateTimeImmutable(self::RECRUITMENT), ReferenceCalendar::CIVIL);
+
+        self::assertSame(12, $horizon->fullYearProrata()->months());
+        self::assertSame(12, $horizon->fullYearProrata()->over());
+    }
+
+    public function testYear1ExposesItsProrataFactorUntilDecember(): void
+    {
+        // C1.3 : recrut. 1er sept → year1 proratisé 4/12 (sept→déc), facteur exposé.
+        $horizon = $this->compute(new \DateTimeImmutable(self::RECRUITMENT), ReferenceCalendar::CIVIL);
+
+        self::assertSame(4, $horizon->year1Prorata()->months());
+        self::assertSame(12, $horizon->year1Prorata()->over());
+    }
+
+    public function testSchoolYearExposesItsProrataFactorUntilAugust(): void
+    {
+        // C1.3 : scolaire, recrut. 1er nov → schoolYear proratisé 10/12 (nov→août).
+        $horizon = $this->compute(new \DateTimeImmutable('2026-11-01'), ReferenceCalendar::SCOLAIRE);
+
+        $prorata = $horizon->schoolYearProrata();
+        self::assertNotNull($prorata);
+        self::assertSame(10, $prorata->months());
+        self::assertSame(12, $prorata->over());
+    }
+
+    public function testSchoolYearProrataIsNullForCivilCalendar(): void
+    {
+        // C1.3 : calendrier civil → pas de fenêtre scolaire, donc pas de prorata scolaire.
+        $horizon = $this->compute(new \DateTimeImmutable(self::RECRUITMENT), ReferenceCalendar::CIVIL);
+
+        self::assertNull($horizon->schoolYearProrata());
+    }
+
     private function sampleCost(): AnnualCost
     {
         return new AnnualCost(
@@ -214,13 +254,13 @@ final class Year1HorizonCalculatorTest extends TestCase
     private function indexPointProvider(): DatedAmountProvider
     {
         return new class () implements DatedAmountProvider {
-            public function amountAt(string $key, \DateTimeImmutable $date): Amount
+            public function amountAt(string $key, \DateTimeImmutable $date): DatedAmount
             {
                 if ($key !== 'point_indice') {
                     throw MissingDatedAmountException::forKeyAndDate($key, $date);
                 }
 
-                return Amount::fromString('59.0734');
+                return Trace::datedAmount(Amount::fromString('59.0734'));
             }
         };
     }
@@ -234,7 +274,7 @@ final class Year1HorizonCalculatorTest extends TestCase
 
             public function primeRateAt(string $bodyCode, \DateTimeImmutable $date): PrimeRateObservation
             {
-                return new PrimeRateObservation(Rate::fromRatio($this->ratio), false);
+                return Trace::primeObservation(Rate::fromRatio($this->ratio), false);
             }
         };
     }
@@ -253,9 +293,9 @@ final class Year1HorizonCalculatorTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function employerRate(\DateTimeImmutable $date): Rate
+            public function employerRate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }
@@ -274,9 +314,9 @@ final class Year1HorizonCalculatorTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function rate(\DateTimeImmutable $date): Rate
+            public function rate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }
@@ -290,13 +330,13 @@ final class Year1HorizonCalculatorTest extends TestCase
             ) {
             }
 
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== $this->expectedKey) {
                     throw new \LogicException(sprintf('Unexpected key "%s".', $key));
                 }
 
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }
