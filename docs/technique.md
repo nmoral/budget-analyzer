@@ -373,6 +373,78 @@ composants sont exercés par des **tests unitaires purs** (`tests/Domain/Cost/`,
 en classes anonymes et `AgentSituation` construit à la main. Comme le reste du domaine de
 coût, l'horizon est couvert par Infection (mutation sur `src/Domain`, MSI ≥ 85 %).
 
+## Horizon « régime permanent » d'un corps (#16)
+
+À partir du coût annuel (#14), le domaine calcule l'**horizon « régime permanent »** d'un
+corps en **population stationnaire** : le coût annuel moyen d'un agent est la moyenne des
+coûts d'échelon pondérée par la durée de chaque échelon, projetée sur N postes. Tout vit
+sous `src/Domain/Cost/` en **PHP pur** (frontière Deptrac, aucune dépendance Doctrine ni
+infra). Le périmètre est **domaine seul** : la carrière (échelons + durées) et N sont des
+**entrées** du calculateur, composées à la main en test ; aucun câblage de persistance,
+aucune route ni commande n'est ajouté.
+
+### Fondation arithmétique : `Amount::dividedBy`
+
+`App\Domain\Shared\Amount` reçoit une **division générique** :
+`dividedBy(int $divisor): Amount` divise le montant par un diviseur entier, arrondi
+**half-up à 6 décimales**. Le quotient est calculé à l'échelle `SCALE + 2` (constante
+`DIVISION_SCALE`, alignée sur `PRORATION_SCALE`) avant arrondi, cohérent avec la convention
+décimale d'`Amount` (bcmath, aucun float). Un **diviseur nul est rejeté**
+(`\InvalidArgumentException`) ; le diviseur négatif n'est pas gardé (hors flux #16 où
+`totalMonths ≥ 1` et `N ≥ 1`, et éviter du code non testé préserve le MSI). Elle complète
+`proratedByMonths` (#15), qui multiplie par une fraction `present/total`, là où `dividedBy`
+divise par un entier seul (moyenne pondérée, répartition par effectif).
+
+### Enum de domaine `PopulationAssumption`
+
+`App\Domain\Cost\PopulationAssumption` est une enum de domaine **pure** (sans backing
+scalar), à un seul cas `STATIONARY` (population stationnaire). Elle est portée par le value
+object résultat et exposée sans logique de calcul, pour rendre lisible l'hypothèse de
+population retenue (prépare d'autres hypothèses éventuelles).
+
+### Value objects d'entrée : `CareerStep` et `Career`
+
+- `App\Domain\Cost\CareerStep` est un value object pur `(AgentSituation $situation, int
+  $durationMonths)` : la situation valorisable d'un agent (#14) et la durée en mois pleins
+  passée sur cet échelon. La **durée doit être strictement positive** (`durationMonths > 0`,
+  sinon `\InvalidArgumentException`) ; l'échelon terminal reçoit donc une durée fournie, pas
+  de durée vide.
+- `App\Domain\Cost\Career` est un value object pur construit par
+  `__construct(CareerStep ...$steps)` : la suite ordonnée des échelons, terminal inclus. Une
+  **carrière vide est rejetée** (`\InvalidArgumentException`). `totalMonths(): int` renvoie
+  la somme des durées des échelons ; `steps(): list<CareerStep>` les expose.
+
+### Calculateur et value object résultat
+
+`App\Domain\Cost\PermanentRegimeCalculator::compute(Career $career, \DateTimeImmutable
+$date, int $headcount): PermanentRegimeCost` dépend par constructeur de
+l'`AnnualCostCalculator` **concret** (#14) — pas d'interface, hors périmètre. Il **garde
+l'effectif** (`$headcount ≥ 1`, sinon `\InvalidArgumentException`), puis, pour chacun des
+quatre termes du coût annuel, accumule le numérateur `Σ(terme_i × duréeMois_i)` via
+`Amount::multipliedByIndex($months)` (produit **exact** par un entier) chaîné par `plus`
+(accumulateur initialisé à `Amount::fromString('0')`, somme exacte, arrondi **uniquement**
+au quotient final), chaque échelon étant valorisé par `AnnualCostCalculator::compute(
+$step->situation(), $date)`. Le coût moyen par agent est l'`AnnualCost` des quatre termes
+`numérateur->dividedBy($career->totalMonths())`.
+
+Le résultat `App\Domain\Cost\PermanentRegimeCost` est un value object **pur** construit
+avec le coût moyen (`AnnualCost`) et l'effectif : `averagePerAgent(): AnnualCost` renvoie
+le coût moyen d'un agent (quatre termes moyens + total) ; `forHeadcount(): AnnualCost`
+multiplie chaque terme par N via `multipliedByIndex` (le total de l'`AnnualCost` se
+**recompose** comme somme des termes × N, jamais multiplié séparément) ; `assumption():
+PopulationAssumption` renvoie `STATIONARY`, sans logique. Le VO ne porte aucun calcul
+métier au-delà du produit par l'effectif.
+
+### Garde-fou d'architecture et tests
+
+Le test d'architecture `DomainBoundaryTest` interdit tout littéral `/Doctrine|Entity/i`
+dans `src/Domain/` (commentaires compris), en ceinture et bretelles de Deptrac. Ces
+composants sont exercés par des **tests unitaires purs** (`tests/Domain/Cost/`,
+`tests/Domain/Shared/`, PHPUnit sans conteneur ni base), les ports/règles étant fournis en
+classes anonymes et `AgentSituation`/`Career` construits à la main. Comme le reste du
+domaine de coût, l'horizon est couvert par Infection (mutation sur `src/Domain`,
+MSI ≥ 85 %).
+
 ## Kernel et amorçage
 
 - `App\Kernel` utilise `MicroKernelTrait` ; la configuration est en YAML sous
