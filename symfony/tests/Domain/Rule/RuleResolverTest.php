@@ -11,6 +11,7 @@ use App\Domain\Rule\Retirement\CasCivilRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Rule\UnknownRuleCodeException;
 use App\Tests\Fixtures\Rule\CostView\AnnualCostViewRule;
+use App\Tests\Fixtures\Rule\CostView\EnfichableCostViewRule;
 use App\Tests\Fixtures\Rule\Funder\EtatFunderRule;
 use App\Tests\Fixtures\Rule\Indemnitary\IfseIndemnitaryRule;
 use App\Tests\Fixtures\Rule\Retirement\EnfichableRetirementRule;
@@ -74,6 +75,19 @@ final class RuleResolverTest extends KernelTestCase
         $costView = $container->get(CostViewRuleResolver::class);
         self::assertInstanceOf(CostViewRuleResolver::class, $costView);
         self::assertInstanceOf(AnnualCostViewRule::class, $costView->resolve('ANNEE_1'));
+    }
+
+    public function testPluggableCostViewIsDiscoveredByTagAndResolvedByItsCode(): void
+    {
+        // C7.1 : ajouter une 5ᵉ vue taggée (X_TEST_VIEW) la rend résolvable par le
+        // résolveur de la famille cost_view, sans modifier la surcouche ni le résolveur.
+        $costView = self::getContainer()->get(CostViewRuleResolver::class);
+        self::assertInstanceOf(CostViewRuleResolver::class, $costView);
+
+        $rule = $costView->resolve('X_TEST_VIEW');
+
+        self::assertInstanceOf(EnfichableCostViewRule::class, $rule);
+        self::assertSame('X_TEST_VIEW', $rule->code());
     }
 
     private function retirementResolver(): RetirementRuleResolver

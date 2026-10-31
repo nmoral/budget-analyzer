@@ -58,6 +58,14 @@ services:
     App\Domain\Rule\OtherContributions\FphOtherContributionsRule:
         tags: [{ name: 'app.rule.other_contributions', code: 'FPH' }]
 
+    # Vues de coût enfichables (#18), taggées dans leur famille avec leur code comme
+    # clé d'index du locator. La vue budgétaire (par défaut) valorise la retraite via
+    # la règle de régime existante (`RetirementRuleResolver`), identique au moteur de
+    # base ; ajouter une vue = ajouter un service taggé, sans toucher à la surcouche
+    # ni au résolveur.
+    App\Domain\Rule\CostView\BudgetViewRule:
+        tags: [{ name: 'app.rule.cost_view', code: 'BUDGETAIRE' }]
+
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du
     # tag). La sélection passe donc par le locator, jamais par un `match`/`if` sur un
@@ -103,6 +111,8 @@ when@test:
             tags: [{ name: 'app.rule.funder', code: 'ETAT_P140' }]
         App\Tests\Fixtures\Rule\CostView\AnnualCostViewRule:
             tags: [{ name: 'app.rule.cost_view', code: 'ANNEE_1' }]
+        App\Tests\Fixtures\Rule\CostView\EnfichableCostViewRule:
+            tags: [{ name: 'app.rule.cost_view', code: 'X_TEST_VIEW' }]
 
         # Repositories rendus publics en test pour pouvoir les récupérer depuis le
         # conteneur de test (sinon supprimés car inlined, faute de référence applicative
@@ -124,6 +134,9 @@ when@test:
             autowire: true
             public: true
         App\Domain\Cost\AnnualCostCalculator:
+            autowire: true
+            public: true
+        App\Domain\Cost\CostViewCalculator:
             autowire: true
             public: true
         App\Domain\Shared\PrimeRateProvider:
