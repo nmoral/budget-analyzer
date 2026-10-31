@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Controller;
 
 use App\Infrastructure\Cost\InvalidSelectionException;
-use App\Infrastructure\Cost\ScenarioResultCalculator;
+use App\Infrastructure\Cost\ScenarioResultCache;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\ScenarioLine;
 use App\Infrastructure\Repository\ParameterSetRepository;
@@ -28,7 +28,7 @@ final class ScenarioController
         private readonly ScenarioLineRepository $lines,
         private readonly ProfileRepository $profiles,
         private readonly ParameterSetRepository $parameterSets,
-        private readonly ScenarioResultCalculator $resultCalculator,
+        private readonly ScenarioResultCache $resultCache,
     ) {
     }
 
@@ -111,10 +111,15 @@ final class ScenarioController
         $views = $this->selection($request->query->getString('views'), 'BUDGETAIRE');
 
         try {
-            return new JsonResponse($this->resultCalculator->compute($scenario, $horizons, $views));
+            $cached = $this->resultCache->get($scenario, $horizons, $views);
         } catch (InvalidSelectionException $exception) {
             return $this->error($exception->getMessage(), 422);
         }
+
+        $response = new JsonResponse($cached->result());
+        $response->headers->set('X-Cache', $cached->hit() ? 'HIT' : 'MISS');
+
+        return $response;
     }
 
     /**

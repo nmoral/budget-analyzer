@@ -129,21 +129,22 @@ trait ScenarioFixtureTrait
         EntityManagerInterface $em,
         ParameterSet $set,
         string $referenceCalendar = 'scolaire',
+        string $corpsCode = 'PE',
     ): Profile {
         $corps = new Corps();
-        $corps->code = 'PE';
+        $corps->code = $corpsCode;
         $corps->label = 'Professeur des écoles';
         $corps->versant = 'FPE';
         $corps->category = 'A';
         $em->persist($corps);
 
         $source = new Source();
-        $source->code = 'SRC-compute';
-        $source->label = 'Source calcul';
+        $source->code = 'SRC-grille-' . $corpsCode;
+        $source->label = 'Source grille';
         $source->publisher = 'Éditeur';
-        $source->url = 'https://example.test/compute';
+        $source->url = 'https://example.test/grille';
         $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
-        $source->fileHash = 'hash-compute';
+        $source->fileHash = 'hash-grille-' . $corpsCode;
         $em->persist($source);
 
         $grille = new Grille();
@@ -174,20 +175,7 @@ trait ScenarioFixtureTrait
         $funder->label = 'État';
         $em->persist($funder);
 
-        $this->persistDatedParameter($em, $set, $source, 'point_indice', '59.0734');
-        $this->persistDatedParameter($em, $set, $source, 'taux_cas_civil', '82.28');
-        $this->persistDatedParameter($em, $set, $source, 'taux_autres_cotisations_fpe', '16.07');
-        $this->persistDatedParameter($em, $set, $source, 'taux_rafp', '5');
-        $this->persistDatedParameter($em, $set, $source, 'taux_employeur_prive', '28');
-
-        $prime = new PrimeRate();
-        $prime->body = $corps;
-        $prime->value = '0.21';
-        $prime->observationYear = 2026;
-        $prime->fallback = false;
-        $prime->source = $source;
-        $prime->parameterSet = $set;
-        $em->persist($prime);
+        $this->persistEngineParameters($em, $set, $corps);
 
         $profile = new Profile();
         $profile->body = $corps;
@@ -201,6 +189,43 @@ trait ScenarioFixtureTrait
         $em->persist($profile);
 
         return $profile;
+    }
+
+    /**
+     * Paramètres datés + taux de primes nécessaires au calcul, pour le corps `$corps`
+     * et le jeu `$set` : point d'indice, taux CAS civil (`$casCivilPercentage`, variable
+     * pour tester l'invalidation par version), autres cotisations FPE, RAFP, taux
+     * employeur privé. Permet d'attacher un second jeu de paramètres au même corps.
+     */
+    private function persistEngineParameters(
+        EntityManagerInterface $em,
+        ParameterSet $set,
+        Corps $corps,
+        string $casCivilPercentage = '82.28',
+    ): void {
+        $source = new Source();
+        $source->code = 'SRC-engine-' . $set->versionId;
+        $source->label = 'Source calcul';
+        $source->publisher = 'Éditeur';
+        $source->url = 'https://example.test/engine';
+        $source->retrievedAt = new \DateTimeImmutable('2024-01-01');
+        $source->fileHash = 'hash-engine-' . $set->versionId;
+        $em->persist($source);
+
+        $this->persistDatedParameter($em, $set, $source, 'point_indice', '59.0734');
+        $this->persistDatedParameter($em, $set, $source, 'taux_cas_civil', $casCivilPercentage);
+        $this->persistDatedParameter($em, $set, $source, 'taux_autres_cotisations_fpe', '16.07');
+        $this->persistDatedParameter($em, $set, $source, 'taux_rafp', '5');
+        $this->persistDatedParameter($em, $set, $source, 'taux_employeur_prive', '28');
+
+        $prime = new PrimeRate();
+        $prime->body = $corps;
+        $prime->value = '0.21';
+        $prime->observationYear = 2026;
+        $prime->fallback = false;
+        $prime->source = $source;
+        $prime->parameterSet = $set;
+        $em->persist($prime);
     }
 
     private function persistDatedParameter(

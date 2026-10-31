@@ -11,6 +11,7 @@ use App\Domain\Cost\CostViewCalculator;
 use App\Infrastructure\Entity\Profile;
 use App\Tests\Infrastructure\Fixture\ScenarioFixtureTrait;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 
@@ -36,15 +37,25 @@ final class ScenarioResultApiTest extends WebTestCase
         $this->em = $em;
 
         $this->createScenarioSchema($this->em);
+        $this->resultPool()->clear();
     }
 
     protected function tearDown(): void
     {
+        $this->resultPool()->clear();
         $this->dropScenarioSchema($this->em);
         $this->em->clear();
         $this->em->close();
 
         parent::tearDown();
+    }
+
+    private function resultPool(): CacheItemPoolInterface
+    {
+        $pool = static::getContainer()->get('app.cache.scenario_result');
+        self::assertInstanceOf(CacheItemPoolInterface::class, $pool);
+
+        return $pool;
     }
 
     /**

@@ -9,6 +9,11 @@ services:
         autoconfigure: true
         bind:
             string $defaultDataDir: '%env(BUDGET_DATA_DIR)%'
+            # Pool de cache des résultats de simulation (#19) : injecté dans le service
+            # de cache (argument $pool) et dans la commande d'import pour la purge
+            # (argument $resultCache).
+            Psr\Cache\CacheItemPoolInterface $pool: '@app.cache.scenario_result'
+            Psr\Cache\CacheItemPoolInterface $resultCache: '@app.cache.scenario_result'
 
     App\:
         resource: '../src/'
