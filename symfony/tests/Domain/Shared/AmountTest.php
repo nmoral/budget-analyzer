@@ -88,6 +88,34 @@ final class AmountTest extends TestCase
         self::assertSame('12.500000', Amount::fromString('100.000000')->proratedByMonths(1, 8)->toString());
     }
 
+    public function testDividedByIsExactWhenDivisible(): void
+    {
+        // C4.1 : 1000.000000 / 4 → 250.000000 (division exacte).
+        self::assertSame('250.000000', Amount::fromString('1000.000000')->dividedBy(4)->toString());
+    }
+
+    public function testDividedByIsRoundedHalfUpToSixDecimals(): void
+    {
+        // C4.2 : 100.000000 / 3 = 33.33333... → 33.333333 (half-up 6 décimales).
+        self::assertSame('33.333333', Amount::fromString('100.000000')->dividedBy(3)->toString());
+    }
+
+    public function testDividedByRoundsHalfUpOnTheSeventhDecimal(): void
+    {
+        // 1.000000 / 16 = 0.0625 exact ; 2.000000 / 3 = 0.6666666... → 0.666667.
+        self::assertSame('0.062500', Amount::fromString('1.000000')->dividedBy(16)->toString());
+        self::assertSame('0.666667', Amount::fromString('2.000000')->dividedBy(3)->toString());
+    }
+
+    public function testDividedByZeroThrows(): void
+    {
+        // Division par zéro interdite (garde bloquante).
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Division par zéro interdite.');
+
+        Amount::fromString('1000.000000')->dividedBy(0);
+    }
+
     public function testMinReturnsSmallerAmount(): void
     {
         // C6 : assiette RAFP plafonnée = min(TIB·p, 0,2·TIB).
