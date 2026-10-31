@@ -8,7 +8,8 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
   modèle de données Doctrine #10, commande d'import `app:import` #11, ossature du
   moteur de calcul #12, premières règles de retraite — taux employeur daté — #13,
   formule de coût employeur annuel d'un agent titulaire #14, horizon « année 1 »
-  — prorata de la date de recrutement + année pleine + vue année scolaire — #15).
+  — prorata de la date de recrutement + année pleine + vue année scolaire — #15,
+  horizon régime permanent — coût moyen en population stationnaire × N postes — #16).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.

@@ -33,6 +33,12 @@ final class Amount
     private const PRORATION_SCALE = self::SCALE + 2;
 
     /**
+     * Échelle de calcul d'une division générique : deux décimales de plus que
+     * l'échelle finale, suffisantes pour un arrondi half-up fiable à SCALE.
+     */
+    private const DIVISION_SCALE = self::SCALE + 2;
+
+    /**
      * @param numeric-string $value chaîne décimale canonique à l'échelle SCALE
      */
     private function __construct(private readonly string $value)
@@ -78,6 +84,20 @@ final class Amount
         $numerator = bcmul($this->value, (string) $present, self::SCALE);
 
         return self::rounded(bcdiv($numerator, (string) $total, self::PRORATION_SCALE));
+    }
+
+    /**
+     * Quotient par un diviseur entier, arrondi à 6 décimales half-up. Division
+     * générique (moyenne pondérée, répartition par effectif) ; le diviseur doit
+     * être non nul, une division par zéro étant rejetée.
+     */
+    public function dividedBy(int $divisor): self
+    {
+        if ($divisor === 0) {
+            throw new \InvalidArgumentException('Division par zéro interdite.');
+        }
+
+        return self::rounded(bcdiv($this->value, (string) $divisor, self::DIVISION_SCALE));
     }
 
     /**

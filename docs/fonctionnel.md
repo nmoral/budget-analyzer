@@ -129,10 +129,11 @@ présentes aujourd'hui :
   régime de primes, financeur, vues de coût) — l'**ossature** du moteur est posée
   (issue #12, voir ci-dessous), les premières règles réelles de la famille retraite
   sont livrées (issue #13, voir « Règles de retraite » ci-dessous), le **coût
-  employeur annuel d'un agent** est désormais calculé (issue #14, voir ci-dessous) et
+  employeur annuel d'un agent** est désormais calculé (issue #14, voir ci-dessous),
   l'**horizon « année 1 »** d'un recrutement (prorata, année pleine, vue scolaire) est
-  disponible (issue #15, voir ci-dessous), mais les apports suivants arrivent aux
-  issues #16 à #18 ;
+  disponible (issue #15, voir ci-dessous) et l'**horizon « régime permanent »**
+  (coût moyen en population stationnaire × N postes) l'est aussi (issue #16, voir
+  ci-dessous), mais les apports suivants arrivent aux issues #17 à #18 ;
 - l'API JSON exposant les résultats — issue #19 ;
 - le front / les pages Twig — issue #20.
 
@@ -282,6 +283,43 @@ d'affichage à ce stade (#19/#20).
 
 **Hors de ce périmètre** : la **dérivation automatique** de la date de recrutement et du
 calendrier depuis un profil / une ligne de scénario (qui sont ici composés à la main),
-le **prorata au jour**, les **autres horizons** — régime permanent (#16), cohorte (#17) —
-et les **vues de coût** enfichables (#18). Comme le coût annuel, cet horizon n'est exposé
-ni par une API ni par un écran : il n'est exercé que par les tests.
+le **prorata au jour**, les **autres horizons** — régime permanent (#16, voir
+ci-dessous), cohorte (#17) — et les **vues de coût** enfichables (#18). Comme le coût
+annuel, cet horizon n'est exposé ni par une API ni par un écran : il n'est exercé que par
+les tests.
+
+### Horizon « régime permanent » d'un corps (population stationnaire)
+
+À partir du coût employeur annuel ci-dessus, le simulateur calcule désormais l'**horizon
+« régime permanent »** d'un corps, c'est-à-dire le coût d'une **population stationnaire** :
+une situation où chaque poste est en permanence occupé, les agents se répartissant sur
+tous les échelons de la carrière au prorata du temps qu'on y passe. Dans cette hypothèse,
+le coût annuel moyen d'un agent du corps est la **moyenne des coûts d'échelon pondérée par
+la durée de chaque échelon**, et le coût du corps est ce coût moyen multiplié par le
+**nombre de postes** N.
+
+- **Coût annuel moyen d'un agent** : pour chacun des **quatre termes** du coût annuel
+  (voir ci-dessus), la moyenne pondérée `Σ(terme de l'échelon × durée en mois) / Σ(durées
+  en mois)` sur tous les échelons de la carrière, chaque échelon étant valorisé à la
+  **date** demandée. Le total est la somme des quatre termes moyens. Une carrière réduite
+  à un seul échelon donne simplement le coût annuel de cet échelon (moyenne triviale).
+- **Coût pour l'effectif** : le coût annuel moyen d'un agent multiplié par N, **terme par
+  terme** ; avec N = 1, il est égal au coût moyen d'un agent.
+- **Hypothèse de population** : le résultat porte explicitement l'hypothèse retenue,
+  « population stationnaire », pour que l'angle de lecture du chiffre soit toujours lisible.
+
+La **carrière** (la suite des échelons avec leur durée) et le **nombre de postes** N sont
+des **entrées** de ce calcul. Chaque échelon doit porter une durée strictement positive, y
+compris l'**échelon terminal** dont la durée est **fournie** (le régime permanent n'a de
+sens que si l'on sait combien de temps les agents restent au sommet de la grille). Une
+carrière vide, une durée nulle ou négative, ou un effectif inférieur à 1 sont **rejetés**
+par une erreur explicite. Le calcul est **reproductible** (à carrière et date identiques,
+résultat identique) et ne comporte **aucun arrondi d'affichage** à ce stade (#19/#20).
+
+**Hors de ce périmètre** : la construction automatique de la carrière à partir d'une
+grille persistée (charger les échelons et leurs durées, fournir la durée du terminal,
+dériver la situation de chaque agent), reportée à une issue ultérieure ; la carrière est
+ici composée à la main. Restent aussi hors périmètre le **calibrage** contre le coût moyen
+du PAP (#22), l'**autre horizon** cohorte (#17), les **vues de coût** enfichables (#18) et
+l'**arrondi d'affichage** (#19/#20). Comme les autres horizons, ce calcul n'est exposé ni
+par une API ni par un écran : il n'est exercé que par les tests.
