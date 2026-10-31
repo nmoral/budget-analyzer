@@ -164,8 +164,8 @@ l'image, cf. `symfony/Dockerfile`).
 ## Protection de la branche `main`
 
 À activer par un **administrateur du dépôt** (étape manuelle, hors CI). Commande
-prête à copier — exige le check CI `qa`, une revue de PR et interdit les
-contournements :
+prête à copier — exige le check CI `qa`, n'impose aucune revue de PR et interdit
+les contournements :
 
 ```sh
 gh api -X PUT repos/nmoral/budget-analyzer/branches/main/protection \
@@ -178,7 +178,7 @@ gh api -X PUT repos/nmoral/budget-analyzer/branches/main/protection \
   },
   "enforce_admins": true,
   "required_pull_request_reviews": {
-    "required_approving_review_count": 1,
+    "required_approving_review_count": 0,
     "dismiss_stale_reviews": true
   },
   "required_linear_history": true,
