@@ -65,6 +65,16 @@ services:
     # ni au résolveur.
     App\Domain\Rule\CostView\BudgetViewRule:
         tags: [{ name: 'app.rule.cost_view', code: 'BUDGETAIRE' }]
+    # Vues « taux datés » (#18) : lisent leur taux via le port `DatedRateProvider`
+    # (aliasé vers l'adapter d'infrastructure). Équivalent privé → clé fixe
+    # `taux_employeur_prive` ; équilibre technique → une clé par régime, dérivée du
+    # code de régime (`taux_equilibre_cas_civil`, `taux_equilibre_cnracl`). Les valeurs
+    # réelles (import CSV/infra) sont hors périmètre : la règle lève tant qu'elles
+    # manquent à la date.
+    App\Domain\Rule\CostView\PrivateEquivalentViewRule:
+        tags: [{ name: 'app.rule.cost_view', code: 'EQUIVALENT_PRIVE' }]
+    App\Domain\Rule\CostView\TechnicalBalanceViewRule:
+        tags: [{ name: 'app.rule.cost_view', code: 'EQUILIBRE_TECHNIQUE' }]
 
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du

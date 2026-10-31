@@ -13,6 +13,8 @@ use App\Domain\Cost\RafpContributionCalculator;
 use App\Domain\Rule\CostView\BudgetViewRule;
 use App\Domain\Rule\CostView\CostViewRule;
 use App\Domain\Rule\CostView\CostViewRuleResolver;
+use App\Domain\Rule\CostView\PrivateEquivalentViewRule;
+use App\Domain\Rule\CostView\TechnicalBalanceViewRule;
 use App\Domain\Rule\OtherContributions\OtherContributionsRule;
 use App\Domain\Rule\OtherContributions\OtherContributionsRuleResolver;
 use App\Domain\Rule\Retirement\RetirementRule;
@@ -22,6 +24,7 @@ use App\Domain\Shared\Amount;
 use App\Domain\Shared\DatedAmountProvider;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedAmountException;
+use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\PrimeRateObservation;
 use App\Domain\Shared\PrimeRateProvider;
 use App\Domain\Shared\Rate;
@@ -91,6 +94,42 @@ final class CostViewCalculatorTest extends TestCase
         $this->costViewCalculator()->compute($this->situation(), new \DateTimeImmutable(self::DATE), 'INCONNU');
     }
 
+    public function testEquivalentPriveReplacesOnlyRetirementAndRecomposesTotal(): void
+    {
+        // C4.1 + C2.1 : EQUIVALENT_PRIVE (TIB × 28 %) → retraite 6533.518040, total
+        // recomposé ; traitement+primes, autres et RAFP identiques à BUDGETAIRE.
+        $date = new \DateTimeImmutable(self::DATE);
+        $situation = $this->situation();
+        $calculator = $this->costViewCalculator();
+
+        $budgetaire = $calculator->compute($situation, $date, 'BUDGETAIRE');
+        $view = $calculator->compute($situation, $date, 'EQUIVALENT_PRIVE');
+
+        self::assertSame('6533.518040', $view->retirement()->toString());
+        self::assertSame('37824.402653', $view->total()->toString());
+        self::assertTrue($view->treatmentAndPrimes()->equals($budgetaire->treatmentAndPrimes()));
+        self::assertTrue($view->otherContributions()->equals($budgetaire->otherContributions()));
+        self::assertTrue($view->rafp()->equals($budgetaire->rafp()));
+    }
+
+    public function testEquilibreTechniqueReplacesOnlyRetirement(): void
+    {
+        // C5.1 + C2.1 : EQUILIBRE_TECHNIQUE CAS civil (TIB × 75 %) → retraite
+        // 17500.494750 ; les trois autres termes restent ceux de BUDGETAIRE.
+        $date = new \DateTimeImmutable(self::DATE);
+        $situation = $this->situation();
+        $calculator = $this->costViewCalculator();
+
+        $budgetaire = $calculator->compute($situation, $date, 'BUDGETAIRE');
+        $view = $calculator->compute($situation, $date, 'EQUILIBRE_TECHNIQUE');
+
+        self::assertSame('17500.494750', $view->retirement()->toString());
+        self::assertTrue($view->treatmentAndPrimes()->equals($budgetaire->treatmentAndPrimes()));
+        self::assertTrue($view->otherContributions()->equals($budgetaire->otherContributions()));
+        self::assertTrue($view->rafp()->equals($budgetaire->rafp()));
+        self::assertFalse($view->retirement()->equals($budgetaire->retirement()));
+    }
+
     private function situation(): AgentSituation
     {
         return new AgentSituation('PE', 'FPE', 395, 'CAS_CIVIL');
@@ -105,9 +144,26 @@ final class CostViewCalculatorTest extends TestCase
             new IndexedSalaryCalculator($this->indexPointProvider()),
             new CostViewRuleResolver($this->container([
                 'BUDGETAIRE' => new BudgetViewRule($retirementResolver),
+                'EQUIVALENT_PRIVE' => new PrivateEquivalentViewRule($this->viewRateProvider()),
+                'EQUILIBRE_TECHNIQUE' => new TechnicalBalanceViewRule($this->viewRateProvider()),
                 'X_TEST_VIEW' => $this->tenPercentView(),
             ])),
         );
+    }
+
+    private function viewRateProvider(): DatedRateProvider
+    {
+        return new class () implements DatedRateProvider {
+            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            {
+                return match ($key) {
+                    'taux_employeur_prive' => Rate::fromPercentage('28.00'),
+                    'taux_equilibre_cas_civil' => Rate::fromPercentage('75.00'),
+                    'taux_equilibre_cnracl' => Rate::fromPercentage('42.00'),
+                    default => throw MissingDatedRateException::forKeyAndDate($key, $date),
+                };
+            }
+        };
     }
 
     private function annualCostCalculator(?RetirementRuleResolver $retirementResolver = null): AnnualCostCalculator
