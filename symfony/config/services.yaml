@@ -21,6 +21,7 @@ services:
             - '../src/Domain/Rule/ResolvedRules.php'
             - '../src/Domain/Cost/AgentSituation.php'
             - '../src/Domain/Cost/AnnualCost.php'
+            - '../src/Domain/Rule/CostView/AssumptionsActuarielles.php'
 
     # Port de domaine « taux daté » (#13) résolu vers l'adapter d'infrastructure
     # au-dessus des paramètres datés (#04) : toute injection de `DatedRateProvider`
@@ -75,6 +76,16 @@ services:
         tags: [{ name: 'app.rule.cost_view', code: 'EQUIVALENT_PRIVE' }]
     App\Domain\Rule\CostView\TechnicalBalanceViewRule:
         tags: [{ name: 'app.rule.cost_view', code: 'EQUILIBRE_TECHNIQUE' }]
+    # Vue actuarielle (#18) : coût des services rendus, (TIB × taux d'annuité) ×
+    # facteur actuariel. Les hypothèses (VO de domaine, non service) sont injectées
+    # à leurs défauts sourcés via la factory `AssumptionsActuarielles::defaults()` ;
+    # l'édition par l'utilisateur est hors périmètre (#19/#20).
+    App\Domain\Rule\CostView\ActuarialViewRule:
+        arguments:
+            $assumptions: !service
+                class: App\Domain\Rule\CostView\AssumptionsActuarielles
+                factory: ['App\Domain\Rule\CostView\AssumptionsActuarielles', 'defaults']
+        tags: [{ name: 'app.rule.cost_view', code: 'ACTUARIELLE' }]
 
     # Résolveurs de règles enfichables (#12) : chacun reçoit un service locator des
     # implémentations de sa famille, indexé par le code métier (attribut `code` du

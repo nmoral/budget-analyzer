@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Domain\Rule;
 
+use App\Domain\Rule\CostView\ActuarialViewRule;
+use App\Domain\Rule\CostView\BudgetViewRule;
 use App\Domain\Rule\CostView\CostViewRuleResolver;
+use App\Domain\Rule\CostView\PrivateEquivalentViewRule;
+use App\Domain\Rule\CostView\TechnicalBalanceViewRule;
 use App\Domain\Rule\Funder\FunderRuleResolver;
 use App\Domain\Rule\Indemnitary\IndemnitaryRuleResolver;
 use App\Domain\Rule\Retirement\CasCivilRule;
@@ -88,6 +92,19 @@ final class RuleResolverTest extends KernelTestCase
 
         self::assertInstanceOf(EnfichableCostViewRule::class, $rule);
         self::assertSame('X_TEST_VIEW', $rule->code());
+    }
+
+    public function testBusinessCostViewsAreResolvedByTheirCode(): void
+    {
+        // C1 : les 4 vues métier livrées (#18) sont taggées et résolues par leur code ;
+        // ACTUARIELLE valide en prime le câblage du VO d'hypothèses par factory.
+        $costView = self::getContainer()->get(CostViewRuleResolver::class);
+        self::assertInstanceOf(CostViewRuleResolver::class, $costView);
+
+        self::assertInstanceOf(BudgetViewRule::class, $costView->resolve('BUDGETAIRE'));
+        self::assertInstanceOf(PrivateEquivalentViewRule::class, $costView->resolve('EQUIVALENT_PRIVE'));
+        self::assertInstanceOf(TechnicalBalanceViewRule::class, $costView->resolve('EQUILIBRE_TECHNIQUE'));
+        self::assertInstanceOf(ActuarialViewRule::class, $costView->resolve('ACTUARIELLE'));
     }
 
     private function retirementResolver(): RetirementRuleResolver

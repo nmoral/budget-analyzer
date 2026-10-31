@@ -10,6 +10,8 @@ use App\Domain\Cost\AnnualCostCalculator;
 use App\Domain\Cost\CostViewCalculator;
 use App\Domain\Cost\IndexedSalaryCalculator;
 use App\Domain\Cost\RafpContributionCalculator;
+use App\Domain\Rule\CostView\ActuarialViewRule;
+use App\Domain\Rule\CostView\AssumptionsActuarielles;
 use App\Domain\Rule\CostView\BudgetViewRule;
 use App\Domain\Rule\CostView\CostViewRule;
 use App\Domain\Rule\CostView\CostViewRuleResolver;
@@ -130,6 +132,24 @@ final class CostViewCalculatorTest extends TestCase
         self::assertFalse($view->retirement()->equals($budgetaire->retirement()));
     }
 
+    public function testActuarielleReplacesOnlyRetirement(): void
+    {
+        // C6.1 + C2.1 : ACTUARIELLE (TIB × 1.75 % × 12.5) → retraite 5104.310975 ;
+        // les trois autres termes restent ceux de BUDGETAIRE.
+        $date = new \DateTimeImmutable(self::DATE);
+        $situation = $this->situation();
+        $calculator = $this->costViewCalculator();
+
+        $budgetaire = $calculator->compute($situation, $date, 'BUDGETAIRE');
+        $view = $calculator->compute($situation, $date, 'ACTUARIELLE');
+
+        self::assertSame('5104.310975', $view->retirement()->toString());
+        self::assertTrue($view->treatmentAndPrimes()->equals($budgetaire->treatmentAndPrimes()));
+        self::assertTrue($view->otherContributions()->equals($budgetaire->otherContributions()));
+        self::assertTrue($view->rafp()->equals($budgetaire->rafp()));
+        self::assertFalse($view->retirement()->equals($budgetaire->retirement()));
+    }
+
     private function situation(): AgentSituation
     {
         return new AgentSituation('PE', 'FPE', 395, 'CAS_CIVIL');
@@ -146,6 +166,7 @@ final class CostViewCalculatorTest extends TestCase
                 'BUDGETAIRE' => new BudgetViewRule($retirementResolver),
                 'EQUIVALENT_PRIVE' => new PrivateEquivalentViewRule($this->viewRateProvider()),
                 'EQUILIBRE_TECHNIQUE' => new TechnicalBalanceViewRule($this->viewRateProvider()),
+                'ACTUARIELLE' => new ActuarialViewRule(AssumptionsActuarielles::defaults()),
                 'X_TEST_VIEW' => $this->tenPercentView(),
             ])),
         );
