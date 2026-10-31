@@ -194,7 +194,7 @@ final class ScenarioResultApiTest extends WebTestCase
         $profile = $this->seedComputable();
         $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
-        $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte');
+        $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=foobar');
 
         self::assertSame(422, $this->client->getResponse()->getStatusCode());
     }

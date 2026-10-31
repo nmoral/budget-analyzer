@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Infrastructure\Cost;
 
 use App\Domain\Cost\AnnualCost;
+use App\Domain\Cost\CohortCostSeries;
+use App\Domain\Cost\CohortHorizonCalculator;
 use App\Domain\Cost\CostTrace;
 use App\Domain\Cost\CostViewCalculator;
 use App\Domain\Cost\PermanentRegimeCalculator;
@@ -29,8 +31,10 @@ use App\Infrastructure\Transparency\SourceCapture;
 /**
  * Orchestrateur de résultat (#19, J2) : pour chaque ligne du scénario et chaque vue
  * demandée, calcule les horizons sélectionnés — année 1 (fullYear / year1 proraté /
- * schoolYear) valorisée selon la vue, et régime permanent (#66, coût annuel moyen par
- * agent sur la carrière du profil) — puis l'agrégat Σ(résultat_ligne × volume).
+ * schoolYear) valorisée selon la vue, régime permanent (#66, coût annuel moyen par
+ * agent sur la carrière du profil) et cohorte (#66, série année par année sur toute la
+ * carrière) — puis l'agrégat Σ(résultat_ligne × volume), aligné par index d'année pour
+ * la cohorte. Permanent et cohorte sont view-aware (terme retraite suivant la vue).
  *
  * Le calcul est fait CONTRE le jeu de paramètres épinglé du scénario : la portée
  * `ParameterSetScope` lie, le temps du calcul, les adapters datés à cette version
@@ -40,7 +44,7 @@ use App\Infrastructure\Transparency\SourceCapture;
 final class ScenarioResultCalculator
 {
     /** @var list<string> */
-    private const array SUPPORTED_HORIZONS = ['year1', 'permanent'];
+    private const array SUPPORTED_HORIZONS = ['year1', 'permanent', 'cohorte'];
 
     /**
      * Hypothèses structurelles appliquées par le moteur, nommées pour la transparence
@@ -62,6 +66,7 @@ final class ScenarioResultCalculator
         private readonly Year1HorizonCalculator $year1,
         private readonly CareerFactory $careerFactory,
         private readonly PermanentRegimeCalculator $permanent,
+        private readonly CohortHorizonCalculator $cohort,
         private readonly ParameterSetScope $scope,
         private readonly SourceCapture $sourceCapture,
     ) {
@@ -92,20 +97,23 @@ final class ScenarioResultCalculator
 
         $wantYear1 = \in_array('year1', $horizons, true);
         $wantPermanent = \in_array('permanent', $horizons, true);
+        $wantCohorte = \in_array('cohorte', $horizons, true);
 
         $lineResults = [];
         /** @var array<string, list<array{Year1Horizon, int}>> $weightedYear1 */
         $weightedYear1 = array_fill_keys($views, []);
         /** @var array<string, list<array{AnnualCost, int}>> $weightedPermanent */
         $weightedPermanent = array_fill_keys($views, []);
+        /** @var array<string, list<array{list<AnnualCost>, int}>> $weightedCohorte */
+        $weightedCohorte = array_fill_keys($views, []);
 
         foreach ($lines as $line) {
             $situation = $this->situations->fromProfile($line->profile);
             $calendar = $this->situations->calendarFor($line->profile);
             $recruitment = $line->recruitmentDate;
-            // La carrière (régime permanent) ne dépend pas de la vue : construite une
+            // La carrière (permanent/cohorte) ne dépend pas de la vue : construite une
             // fois par ligne, elle est valorisée par vue à la date de recrutement.
-            $career = $wantPermanent ? $this->careerFactory->fromProfile($line->profile) : null;
+            $career = ($wantPermanent || $wantCohorte) ? $this->careerFactory->fromProfile($line->profile) : null;
 
             $byView = [];
             foreach ($views as $view) {
@@ -129,19 +137,35 @@ final class ScenarioResultCalculator
                 }
 
                 if ($career !== null) {
-                    // View-aware (#66, C1.2) : la moyenne pondérée par échelon est calculée
-                    // sur les coûts de la vue (terme retraite suivant la vue, comme year1).
+                    // View-aware (#66, C1.2/C2.3) : chaque échelon est valorisé selon la vue
+                    // (terme retraite suivant la vue, comme year1) via la même stratégie.
                     $stepCost = new ViewAwareStepCost($this->viewCalculator, $view);
-                    try {
-                        $permanent = $this->scope->within(
-                            $set,
-                            fn (): AnnualCost => $this->permanent->compute($career, $recruitment, 1, $stepCost)->averagePerAgent(),
-                        );
-                    } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
-                        throw UncomputableViewException::forView($view, $exception);
+
+                    if ($wantPermanent) {
+                        try {
+                            $permanent = $this->scope->within(
+                                $set,
+                                fn (): AnnualCost => $this->permanent->compute($career, $recruitment, 1, $stepCost)->averagePerAgent(),
+                            );
+                        } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
+                            throw UncomputableViewException::forView($view, $exception);
+                        }
+                        $block['permanent'] = $this->amountArray($permanent);
+                        $weightedPermanent[$view][] = [$permanent, $line->volume];
                     }
-                    $block['permanent'] = $this->amountArray($permanent);
-                    $weightedPermanent[$view][] = [$permanent, $line->volume];
+
+                    if ($wantCohorte) {
+                        try {
+                            $series = $this->scope->within(
+                                $set,
+                                fn (): CohortCostSeries => $this->cohort->computeFullCareer($career, $recruitment, 1, $stepCost),
+                            );
+                        } catch (MissingDatedRateException|MissingDatedAmountException|MissingPrimeRateException $exception) {
+                            throw UncomputableViewException::forView($view, $exception);
+                        }
+                        $block['cohorte'] = $this->cohortArray($series);
+                        $weightedCohorte[$view][] = [$series->perYear(), $line->volume];
+                    }
                 }
 
                 $byView[$view] = $block;
@@ -163,6 +187,9 @@ final class ScenarioResultCalculator
             }
             if ($wantPermanent) {
                 $viewAggregate['permanent'] = $this->aggregatePermanent($weightedPermanent[$view]);
+            }
+            if ($wantCohorte) {
+                $viewAggregate['cohorte'] = $this->aggregateCohort($weightedCohorte[$view]);
             }
             $aggregate[$view] = $viewAggregate;
         }
@@ -308,6 +335,69 @@ final class ScenarioResultCalculator
     private function aggregatePermanent(array $weighted): ?array
     {
         return $weighted === [] ? null : $this->amountArray($this->weightedSum($weighted));
+    }
+
+    /**
+     * Sérialisation de la série cohorte par agent (#66, C2) : la série année par année
+     * (`perYear`, chaque année = 4 termes + total) et son cumul (`total` = Σ des années,
+     * terme par terme, exposé par le VO `CohortCostSeries`).
+     *
+     * @return array<string, mixed>
+     */
+    private function cohortArray(CohortCostSeries $series): array
+    {
+        return [
+            'perYear' => array_map(fn (AnnualCost $year): array => $this->amountArray($year), $series->perYear()),
+            'total' => $this->amountArray($series->totalPerAgent()),
+        ];
+    }
+
+    /**
+     * Agrégat cohorte sur les lignes d'une vue (#66, C2.2), ALIGNÉ PAR INDEX D'ANNÉE :
+     * la série a pour longueur la carrière la plus longue ; chaque année k = Σ sur les
+     * lignes de `perYear[k] × volume`, les lignes plus courtes ne contribuant pas
+     * au-delà de leur propre carrière (= 0). `total` = Σ des années agrégées, terme par
+     * terme. `null` si la vue ne porte aucune ligne.
+     *
+     * @param list<array{list<AnnualCost>, int}> $weighted
+     *
+     * @return array<string, mixed>|null
+     */
+    private function aggregateCohort(array $weighted): ?array
+    {
+        if ($weighted === []) {
+            return null;
+        }
+
+        $maxYears = 0;
+        foreach ($weighted as [$perYear, $volume]) {
+            $maxYears = max($maxYears, \count($perYear));
+        }
+
+        $perYearAggregate = [];
+        /** @var list<array{AnnualCost, int}> $flat */
+        $flat = [];
+        for ($year = 0; $year < $maxYears; ++$year) {
+            /** @var list<array{AnnualCost, int}> $yearWeighted */
+            $yearWeighted = [];
+            foreach ($weighted as [$perYear, $volume]) {
+                if (isset($perYear[$year])) {
+                    $yearWeighted[] = [$perYear[$year], $volume];
+                    $flat[] = [$perYear[$year], $volume];
+                }
+            }
+            // La ligne la plus longue atteint chaque année < $maxYears ⇒ $yearWeighted non vide.
+            \assert($yearWeighted !== []);
+            $perYearAggregate[] = $this->amountArray($this->weightedSum($yearWeighted));
+        }
+
+        // Invariant : $weighted non vide et toute série a ≥ 1 année ⇒ $flat non vide.
+        \assert($flat !== []);
+
+        return [
+            'perYear' => $perYearAggregate,
+            'total' => $this->amountArray($this->weightedSum($flat)),
+        ];
     }
 
     /**

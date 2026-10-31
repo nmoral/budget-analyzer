@@ -26,7 +26,13 @@ final class CohortHorizonCalculator
     {
     }
 
-    public function compute(Career $career, \DateTimeImmutable $entry, int $horizonYears, int $headcount = 1): CohortCostSeries
+    /**
+     * @param ?StepCostCalculator $stepCost stratégie de valorisation de chaque échelon ;
+     *                                       par défaut le coût de base. Fournir un
+     *                                       `ViewAwareStepCost` rend la série view-aware
+     *                                       (terme retraite suivant la vue, cf. #66 C2.3).
+     */
+    public function compute(Career $career, \DateTimeImmutable $entry, int $horizonYears, int $headcount = 1, ?StepCostCalculator $stepCost = null): CohortCostSeries
     {
         if ($horizonYears < 1) {
             throw new \InvalidArgumentException(sprintf(
@@ -42,13 +48,14 @@ final class CohortHorizonCalculator
             ));
         }
 
+        $stepCost ??= $this->annualCost;
         $steps = $career->steps();
         $lastIndex = count($steps) - 1;
 
         // Point gelé : coût annuel de chaque échelon valorisé une seule fois, à la date d'entrée.
         $stepCosts = [];
         foreach ($steps as $step) {
-            $stepCosts[] = $this->annualCost->compute($step->situation(), $entry);
+            $stepCosts[] = $stepCost->compute($step->situation(), $entry);
         }
 
         $perYear = [];
@@ -68,7 +75,7 @@ final class CohortHorizonCalculator
      * carrière réduite au seul terminal donne Σ = 0 ; l'horizon est alors ramené à 1 an
      * (série minimale non vide) plutôt que de violer la garde `horizon ≥ 1`.
      */
-    public function computeFullCareer(Career $career, \DateTimeImmutable $entry, int $headcount = 1): CohortCostSeries
+    public function computeFullCareer(Career $career, \DateTimeImmutable $entry, int $headcount = 1, ?StepCostCalculator $stepCost = null): CohortCostSeries
     {
         $steps = $career->steps();
         $lastIndex = count($steps) - 1;
@@ -80,7 +87,7 @@ final class CohortHorizonCalculator
 
         $horizonYears = max(1, intdiv($nonTerminalMonths + self::MONTHS_PER_YEAR - 1, self::MONTHS_PER_YEAR));
 
-        return $this->compute($career, $entry, $horizonYears, $headcount);
+        return $this->compute($career, $entry, $horizonYears, $headcount, $stepCost);
     }
 
     /**
