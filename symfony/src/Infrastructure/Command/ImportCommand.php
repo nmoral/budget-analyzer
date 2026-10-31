@@ -6,6 +6,7 @@ namespace App\Infrastructure\Command;
 
 use App\Infrastructure\Import\Importer;
 use App\Infrastructure\Import\ImportException;
+use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -30,6 +31,7 @@ final class ImportCommand extends Command
     public function __construct(
         private readonly Importer $importer,
         private readonly string $defaultDataDir,
+        private readonly CacheItemPoolInterface $resultCache,
     ) {
         parent::__construct();
     }
@@ -68,6 +70,11 @@ final class ImportCommand extends Command
 
             return Command::FAILURE;
         }
+
+        // Les résultats mis en cache dépendent des paramètres importés : on purge le
+        // pool pour qu'ils soient recalculés contre le nouvel état (jamais de cache
+        // périmé, y compris après un ré-import idempotent du même commit).
+        $this->resultCache->clear();
 
         $io->success(sprintf('Import du commit %s terminé.', $commit));
 

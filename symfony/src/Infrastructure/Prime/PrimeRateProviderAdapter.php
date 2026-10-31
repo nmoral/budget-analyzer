@@ -8,6 +8,7 @@ use App\Domain\Shared\MissingPrimeRateException;
 use App\Domain\Shared\PrimeRateObservation;
 use App\Domain\Shared\PrimeRateProvider;
 use App\Domain\Shared\Rate;
+use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Repository\PrimeRateRepository;
 
 /**
@@ -20,12 +21,13 @@ final class PrimeRateProviderAdapter implements PrimeRateProvider
 {
     public function __construct(
         private readonly PrimeRateRepository $primeRates,
+        private readonly ParameterSetScope $scope,
     ) {
     }
 
     public function primeRateAt(string $bodyCode, \DateTimeImmutable $date): PrimeRateObservation
     {
-        $primeRate = $this->primeRates->forYear($bodyCode, (int) $date->format('Y'));
+        $primeRate = $this->primeRates->forYear($bodyCode, (int) $date->format('Y'), $this->scope->current());
 
         if ($primeRate === null) {
             throw MissingPrimeRateException::forBodyAndDate($bodyCode, $date);

@@ -8,6 +8,7 @@ use App\Domain\Cost\IndexedSalaryCalculator;
 use App\Domain\Shared\Amount;
 use App\Domain\Shared\MissingDatedAmountException;
 use App\Infrastructure\Amount\DatedAmountProviderAdapter;
+use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Repository\DatedParameterRepository;
 
 /**
@@ -75,7 +76,7 @@ final class DatedAmountProviderAdapterTest extends IntegrationTestCase
         $repository = self::getContainer()->get(DatedParameterRepository::class);
         self::assertInstanceOf(DatedParameterRepository::class, $repository);
 
-        return new DatedAmountProviderAdapter($repository);
+        return new DatedAmountProviderAdapter($repository, new ParameterSetScope());
     }
 
     private function calculator(): IndexedSalaryCalculator

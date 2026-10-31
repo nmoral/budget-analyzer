@@ -9,6 +9,27 @@ services:
         autoconfigure: true
         bind:
             string $defaultDataDir: '%env(BUDGET_DATA_DIR)%'
+            # Pool de cache des résultats de simulation (#19) : injecté dans le service
+            # de cache (argument $pool) et dans la commande d'import pour la purge
+            # (argument $resultCache).
+            Psr\Cache\CacheItemPoolInterface $pool: '@app.cache.scenario_result'
+            Psr\Cache\CacheItemPoolInterface $resultCache: '@app.cache.scenario_result'
+
+    # Pool de cache des résultats de simulation (#19, A1/J4) : adapter filesystem à
+    # répertoire ET namespace FIXES, hors `%kernel.cache_dir%`, donc indépendant de
+    # l'environnement résolu par le process. Le serveur web (prod) et la console
+    # `app:import` (dev) pointent ainsi le MÊME stockage, de sorte que la purge à
+    # l'import (`clear()`) atteigne le pool réellement lu par l'API (C6.2). `clearer`
+    # est désactivé (autoconfigure off) pour ne purger qu'au ré-import, jamais au
+    # `cache:clear` d'un environnement donné.
+    app.cache.scenario_result:
+        class: Symfony\Component\Cache\Adapter\FilesystemAdapter
+        autowire: false
+        autoconfigure: false
+        arguments:
+            $namespace: 'scenario_result'
+            $defaultLifetime: 0
+            $directory: '%kernel.project_dir%/var/cache/scenario_result'
 
     App\:
         resource: '../src/'
