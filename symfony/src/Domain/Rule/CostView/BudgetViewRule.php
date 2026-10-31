@@ -32,7 +32,7 @@ final class BudgetViewRule implements CostViewRule
     {
         $regime = $this->retirementRules->resolve($retirementRegimeCode);
 
-        return $tib->multipliedByRate($regime->employerRate($date));
+        return $tib->multipliedByRate($regime->employerRate($date)->rate());
     }
 
     public function definition(): string

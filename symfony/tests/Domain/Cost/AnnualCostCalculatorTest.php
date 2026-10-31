@@ -15,7 +15,10 @@ use App\Domain\Rule\Retirement\RetirementRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Rule\UnknownRuleCodeException;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\CostInput;
+use App\Domain\Shared\DatedAmount;
 use App\Domain\Shared\DatedAmountProvider;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedAmountException;
 use App\Domain\Shared\PrimeRateObservation;
@@ -127,6 +130,73 @@ final class AnnualCostCalculatorTest extends TestCase
         self::assertFalse($withHigherRate->retirement()->equals($withLowerRate->retirement()));
     }
 
+    public function testTraceCarriesRetirementFormulaAndDatedInput(): void
+    {
+        // Socle C1.1 : la trace de la retraite porte la formule « TIB·r_retraite »
+        // et l'entrée datée taux_cas_civil (valeur, unité PCT_TIB, date d'effet).
+        $cost = $this->compute('0.21', '82.28', '10', '5', new \DateTimeImmutable('2026-06-01'));
+
+        $trace = $cost->trace();
+        self::assertNotNull($trace);
+
+        $retirement = $trace->retirement();
+        self::assertSame('TIB·r_retraite', $retirement->formula());
+        self::assertCount(1, $retirement->inputs());
+
+        $input = $retirement->inputs()[0];
+        self::assertSame('taux_cas_civil', $input->key());
+        self::assertSame('82.28', $input->value());
+        self::assertSame('PCT_TIB', $input->unit());
+        self::assertSame('2026-01-01', $input->effectiveDate()->format('Y-m-d'));
+    }
+
+    public function testTraceExposesTheFourTermsWithFormulasAndInputs(): void
+    {
+        // Socle C1 : chacun des 4 termes porte sa formule lisible et ses entrées.
+        $cost = $this->compute('0.21', '82.28', '10', '5', new \DateTimeImmutable('2026-06-01'));
+
+        $trace = $cost->trace();
+        self::assertNotNull($trace);
+
+        self::assertSame('TIB·(1+p)', $trace->treatmentAndPrimes()->formula());
+        self::assertSame(['point_indice', 'taux_primes_PE'], array_map(
+            static fn ($i) => $i->key(),
+            $trace->treatmentAndPrimes()->inputs(),
+        ));
+
+        self::assertSame('TIB·r_retraite', $trace->retirement()->formula());
+        self::assertSame(['taux_cas_civil'], array_map(
+            static fn ($i) => $i->key(),
+            $trace->retirement()->inputs(),
+        ));
+
+        self::assertSame('TIB·(1+p)·r_autres', $trace->otherContributions()->formula());
+        self::assertSame(['taux_autres_cotisations_fpe'], array_map(
+            static fn ($i) => $i->key(),
+            $trace->otherContributions()->inputs(),
+        ));
+
+        self::assertSame('min(TIB·p, 0,2·TIB)·r_RAFP', $trace->rafp()->formula());
+        self::assertSame(['taux_rafp'], array_map(
+            static fn ($i) => $i->key(),
+            $trace->rafp()->inputs(),
+        ));
+    }
+
+    public function testTotalEqualsSumOfTheFourTracedTerms(): void
+    {
+        // C4.2 : total = somme EXACTE des quatre termes dépliés (aucune dérive).
+        $cost = $this->compute('0.21', '82.28', '10', '5', new \DateTimeImmutable('2026-06-01'));
+
+        $sum = $cost->treatmentAndPrimes()
+            ->plus($cost->retirement())
+            ->plus($cost->otherContributions())
+            ->plus($cost->rafp());
+
+        self::assertTrue($cost->total()->equals($sum));
+        self::assertSame($cost->total()->toString(), $sum->toString());
+    }
+
     public function testUnknownRetirementRegimeThrows(): void
     {
         // C8.1 : code de régime retraite inconnu → UnknownRuleCodeException.
@@ -184,13 +254,16 @@ final class AnnualCostCalculatorTest extends TestCase
     private function indexPointProvider(): DatedAmountProvider
     {
         return new class () implements DatedAmountProvider {
-            public function amountAt(string $key, \DateTimeImmutable $date): Amount
+            public function amountAt(string $key, \DateTimeImmutable $date): DatedAmount
             {
                 if ($key !== 'point_indice') {
                     throw MissingDatedAmountException::forKeyAndDate($key, $date);
                 }
 
-                return Amount::fromString('59.0734');
+                return new DatedAmount(
+                    Amount::fromString('59.0734'),
+                    new CostInput('point_indice', '59.0734', 'EUR_POINT', new \DateTimeImmutable('2026-01-01')),
+                );
             }
         };
     }
@@ -204,7 +277,11 @@ final class AnnualCostCalculatorTest extends TestCase
 
             public function primeRateAt(string $bodyCode, \DateTimeImmutable $date): PrimeRateObservation
             {
-                return new PrimeRateObservation(Rate::fromRatio($this->ratio), false);
+                return new PrimeRateObservation(
+                    Rate::fromRatio($this->ratio),
+                    false,
+                    new CostInput('taux_primes_' . $bodyCode, $this->ratio, 'RATIO', new \DateTimeImmutable('2026-01-01')),
+                );
             }
         };
     }
@@ -223,9 +300,14 @@ final class AnnualCostCalculatorTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function employerRate(\DateTimeImmutable $date): Rate
+            public function employerRate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                $key = $this->codeValue === 'CNRACL' ? 'taux_cnracl' : 'taux_cas_civil';
+
+                return new DatedRate(
+                    Rate::fromPercentage($this->percentage),
+                    new CostInput($key, $this->percentage, 'PCT_TIB', new \DateTimeImmutable('2026-01-01')),
+                );
             }
         };
     }
@@ -244,9 +326,12 @@ final class AnnualCostCalculatorTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function rate(\DateTimeImmutable $date): Rate
+            public function rate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return new DatedRate(
+                    Rate::fromPercentage($this->percentage),
+                    new CostInput('taux_autres_cotisations_' . strtolower($this->codeValue), $this->percentage, 'PCT_TIB', new \DateTimeImmutable('2026-01-01')),
+                );
             }
         };
     }
@@ -260,13 +345,16 @@ final class AnnualCostCalculatorTest extends TestCase
             ) {
             }
 
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== $this->expectedKey) {
                     throw new \LogicException(sprintf('Unexpected key "%s".', $key));
                 }
 
-                return Rate::fromPercentage($this->percentage);
+                return new DatedRate(
+                    Rate::fromPercentage($this->percentage),
+                    new CostInput($key, $this->percentage, 'PCT_TIB', new \DateTimeImmutable('2026-01-01')),
+                );
             }
         };
     }

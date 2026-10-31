@@ -33,7 +33,7 @@ final class TechnicalBalanceViewRule implements CostViewRule
     {
         $key = self::KEY_PREFIX . strtolower($retirementRegimeCode);
 
-        return $tib->multipliedByRate($this->rates->rateAt($key, $date));
+        return $tib->multipliedByRate($this->rates->rateAt($key, $date)->rate());
     }
 
     public function definition(): string

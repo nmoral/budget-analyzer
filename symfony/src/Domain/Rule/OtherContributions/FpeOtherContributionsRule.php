@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Rule\OtherContributions;
 
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
-use App\Domain\Shared\Rate;
 
 /**
  * Autres cotisations du versant FPE : expose le taux r_autres daté lu depuis le
@@ -28,7 +28,7 @@ final class FpeOtherContributionsRule implements OtherContributionsRule
         return 'FPE';
     }
 
-    public function rate(\DateTimeImmutable $date): Rate
+    public function rate(\DateTimeImmutable $date): DatedRate
     {
         return $this->rates->rateAt(self::PARAMETER_KEY, $date);
     }

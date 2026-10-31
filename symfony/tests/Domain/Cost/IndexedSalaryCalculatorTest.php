@@ -6,8 +6,10 @@ namespace App\Tests\Domain\Cost;
 
 use App\Domain\Cost\IndexedSalaryCalculator;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedAmount;
 use App\Domain\Shared\DatedAmountProvider;
 use App\Domain\Shared\MissingDatedAmountException;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -47,13 +49,13 @@ final class IndexedSalaryCalculatorTest extends TestCase
     private function pointProvider(): DatedAmountProvider
     {
         return new class () implements DatedAmountProvider {
-            public function amountAt(string $key, \DateTimeImmutable $date): Amount
+            public function amountAt(string $key, \DateTimeImmutable $date): DatedAmount
             {
                 if ($key !== 'point_indice' || $date < new \DateTimeImmutable('2023-07-01')) {
                     throw MissingDatedAmountException::forKeyAndDate($key, $date);
                 }
 
-                return Amount::fromString('59.0734');
+                return Trace::datedAmount(Amount::fromString('59.0734'));
             }
         };
     }

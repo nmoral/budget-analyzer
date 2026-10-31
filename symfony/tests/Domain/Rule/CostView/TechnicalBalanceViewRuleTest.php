@@ -6,9 +6,11 @@ namespace App\Tests\Domain\Rule\CostView;
 
 use App\Domain\Rule\CostView\TechnicalBalanceViewRule;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -76,13 +78,13 @@ final class TechnicalBalanceViewRuleTest extends TestCase
     private function rateProvider(): DatedRateProvider
     {
         return new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
-                return match ($key) {
+                return Trace::datedRate(match ($key) {
                     'taux_equilibre_cas_civil' => Rate::fromPercentage('75.00'),
                     'taux_equilibre_cnracl' => Rate::fromPercentage('42.00'),
                     default => throw MissingDatedRateException::forKeyAndDate($key, $date),
-                };
+                });
             }
         };
     }

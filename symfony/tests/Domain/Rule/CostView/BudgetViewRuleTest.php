@@ -8,7 +8,9 @@ use App\Domain\Rule\CostView\BudgetViewRule;
 use App\Domain\Rule\Retirement\RetirementRule;
 use App\Domain\Rule\Retirement\RetirementRuleResolver;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
 
@@ -85,9 +87,9 @@ final class BudgetViewRuleTest extends TestCase
                 return $this->codeValue;
             }
 
-            public function employerRate(\DateTimeImmutable $date): Rate
+            public function employerRate(\DateTimeImmutable $date): DatedRate
             {
-                return Rate::fromPercentage($this->percentage);
+                return Trace::datedRate(Rate::fromPercentage($this->percentage));
             }
         };
     }

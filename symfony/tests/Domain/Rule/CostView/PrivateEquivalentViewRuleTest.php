@@ -6,9 +6,11 @@ namespace App\Tests\Domain\Rule\CostView;
 
 use App\Domain\Rule\CostView\PrivateEquivalentViewRule;
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -67,13 +69,13 @@ final class PrivateEquivalentViewRuleTest extends TestCase
     private function rateProvider(): DatedRateProvider
     {
         return new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== 'taux_employeur_prive') {
                     throw MissingDatedRateException::forKeyAndDate($key, $date);
                 }
 
-                return Rate::fromPercentage('28.00');
+                return Trace::datedRate(Rate::fromPercentage('28.00'));
             }
         };
     }

@@ -10,6 +10,7 @@ use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\ParameterSet\ParameterSetScope;
 use App\Infrastructure\Rate\DatedRateProviderAdapter;
 use App\Infrastructure\Repository\DatedParameterRepository;
+use App\Infrastructure\Transparency\SourceCapture;
 
 /**
  * C3 — l'adapter branche le port de domaine `DatedRateProvider` sur l'infra des
@@ -27,7 +28,7 @@ final class DatedRateProviderAdapterTest extends IntegrationTestCase
 
         $rate = $this->adapter()->rateAt('taux_cas_civil', new \DateTimeImmutable('2026-06-01'));
 
-        self::assertTrue($rate->equals(Rate::fromPercentage('82.28')));
+        self::assertTrue($rate->rate()->equals(Rate::fromPercentage('82.28')));
     }
 
     public function testThrowsWhenNoParameterCoversDate(): void
@@ -68,7 +69,7 @@ final class DatedRateProviderAdapterTest extends IntegrationTestCase
             new \DateTimeImmutable('2026-06-01'),
         );
 
-        self::assertTrue($rate->equals(Rate::fromPercentage('16.07')));
+        self::assertTrue($rate->rate()->equals(Rate::fromPercentage('16.07')));
     }
 
     public function testReturnsOtherContributionsFphRate(): void
@@ -91,7 +92,7 @@ final class DatedRateProviderAdapterTest extends IntegrationTestCase
             new \DateTimeImmutable('2026-06-01'),
         );
 
-        self::assertTrue($rate->equals(Rate::fromPercentage('17.13')));
+        self::assertTrue($rate->rate()->equals(Rate::fromPercentage('17.13')));
     }
 
     public function testReturnsRafpRate(): void
@@ -104,7 +105,7 @@ final class DatedRateProviderAdapterTest extends IntegrationTestCase
 
         $rate = $this->adapter()->rateAt('taux_rafp', new \DateTimeImmutable('2026-06-01'));
 
-        self::assertTrue($rate->equals(Rate::fromPercentage('5.00')));
+        self::assertTrue($rate->rate()->equals(Rate::fromPercentage('5.00')));
     }
 
     public function testThrowsForRafpBeforeStartDate(): void
@@ -120,9 +121,34 @@ final class DatedRateProviderAdapterTest extends IntegrationTestCase
         $this->adapter()->rateAt('taux_rafp', new \DateTimeImmutable('2025-12-31'));
     }
 
+    public function testExposesTracedInputAndCapturesSourceForTheEntry(): void
+    {
+        // #65 C2.1/J2 (infra) : le taux daté porte son entrée tracée (clé, valeur,
+        // unité, date d'effet) et la correspondance entrée → source est capturée.
+        $set = $this->currentSet();
+        $source = $this->newSource('retraites-etat-2026');
+        $this->newDatedParameter('taux_cas_civil', '82.28', '2026-01-01', null, $source, $set);
+        $this->em->flush();
+
+        $capture = new SourceCapture();
+        $adapter = new DatedRateProviderAdapter($this->repository(), new ParameterSetScope(), $capture);
+
+        $dated = $adapter->rateAt('taux_cas_civil', new \DateTimeImmutable('2026-06-01'));
+
+        $input = $dated->input();
+        self::assertSame('taux_cas_civil', $input->key());
+        self::assertSame('82.28', $input->value());
+        self::assertSame('UNIT', $input->unit());
+        self::assertSame('2026-01-01', $input->effectiveDate()->format('Y-m-d'));
+
+        $captured = $capture->sourceFor('taux_cas_civil', new \DateTimeImmutable('2026-01-01'));
+        self::assertNotNull($captured);
+        self::assertSame('retraites-etat-2026', $captured->code);
+    }
+
     private function adapter(): DatedRateProviderAdapter
     {
-        return new DatedRateProviderAdapter($this->repository(), new ParameterSetScope());
+        return new DatedRateProviderAdapter($this->repository(), new ParameterSetScope(), new SourceCapture());
     }
 
     private function repository(): DatedParameterRepository

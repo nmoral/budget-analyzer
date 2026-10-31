@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Cost;
 
 use App\Domain\Shared\Amount;
+use App\Domain\Shared\DatedAmount;
 use App\Domain\Shared\DatedAmountProvider;
 
 /**
@@ -23,6 +24,16 @@ final class IndexedSalaryCalculator
 
     public function compute(int $increasedIndex, \DateTimeImmutable $date): Amount
     {
-        return $this->amounts->amountAt(self::INDEX_POINT_KEY, $date)->multipliedByIndex($increasedIndex);
+        return $this->computeTraced($increasedIndex, $date)->amount();
+    }
+
+    /**
+     * TIB + l'entrée datée `point_indice` utilisée, pour la trace de calcul (#65).
+     */
+    public function computeTraced(int $increasedIndex, \DateTimeImmutable $date): DatedAmount
+    {
+        $point = $this->amounts->amountAt(self::INDEX_POINT_KEY, $date);
+
+        return new DatedAmount($point->amount()->multipliedByIndex($increasedIndex), $point->input());
     }
 }

@@ -29,7 +29,7 @@ final class PrivateEquivalentViewRule implements CostViewRule
 
     public function retirementCost(Amount $tib, \DateTimeImmutable $date, string $retirementRegimeCode): Amount
     {
-        return $tib->multipliedByRate($this->rates->rateAt(self::RATE_KEY, $date));
+        return $tib->multipliedByRate($this->rates->rateAt(self::RATE_KEY, $date)->rate());
     }
 
     public function definition(): string

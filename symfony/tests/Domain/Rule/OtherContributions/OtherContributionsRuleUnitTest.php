@@ -6,15 +6,17 @@ namespace App\Tests\Domain\Rule\OtherContributions;
 
 use App\Domain\Rule\OtherContributions\FpeOtherContributionsRule;
 use App\Domain\Rule\OtherContributions\FphOtherContributionsRule;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Règles « autres cotisations » (r_autres) par versant, isolées via un port
  * `DatedRateProvider` factice (aucun conteneur ni base) : chaque règle lit SA
- * clé de paramètre en dur et renvoie le `Rate` fourni, sans taux en dur (C4).
+ * clé de paramètre en dur et renvoie le `DatedRate` fourni, sans taux en dur (C4).
  * Les données réelles n'existant pas (sourcing #49), un taux fictif est injecté.
  */
 final class OtherContributionsRuleUnitTest extends TestCase
@@ -28,7 +30,7 @@ final class OtherContributionsRuleUnitTest extends TestCase
 
         self::assertSame('FPE', $rule->code());
         self::assertTrue(
-            $rule->rate(new \DateTimeImmutable('2026-06-01'))->equals(Rate::fromPercentage('10')),
+            $rule->rate(new \DateTimeImmutable('2026-06-01'))->rate()->equals(Rate::fromPercentage('10')),
         );
     }
 
@@ -41,7 +43,7 @@ final class OtherContributionsRuleUnitTest extends TestCase
 
         self::assertSame('FPH', $rule->code());
         self::assertTrue(
-            $rule->rate(new \DateTimeImmutable('2026-06-01'))->equals(Rate::fromPercentage('12')),
+            $rule->rate(new \DateTimeImmutable('2026-06-01'))->rate()->equals(Rate::fromPercentage('12')),
         );
     }
 
@@ -49,7 +51,7 @@ final class OtherContributionsRuleUnitTest extends TestCase
     {
         // C8 : donnée absente à D -> la règle propage l'exception (pas de défaut silencieux).
         $provider = new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 throw MissingDatedRateException::forKeyAndDate($key, $date);
             }
@@ -76,13 +78,13 @@ final class OtherContributionsRuleUnitTest extends TestCase
             ) {
             }
 
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== $this->expectedKey) {
                     throw MissingDatedRateException::forKeyAndDate($key, $date);
                 }
 
-                return $this->rate;
+                return Trace::datedRate($this->rate);
             }
         };
     }

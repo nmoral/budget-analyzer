@@ -6,15 +6,17 @@ namespace App\Tests\Domain\Rule\Retirement;
 
 use App\Domain\Rule\Retirement\CasCivilRule;
 use App\Domain\Rule\Retirement\CnraclRule;
+use App\Domain\Shared\DatedRate;
 use App\Domain\Shared\DatedRateProvider;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\Rate;
+use App\Tests\Support\Trace;
 use PHPUnit\Framework\TestCase;
 
 /**
  * Règles de retraite réelles, isolées via un port `DatedRateProvider` factice
  * (aucun conteneur ni base) : chaque règle lit SA clé de paramètre en dur et
- * renvoie le `Rate` fourni, sans taux en dur (C4/C5).
+ * renvoie le `DatedRate` fourni, sans taux en dur (C4/C5).
  */
 final class RetirementRuleUnitTest extends TestCase
 {
@@ -24,7 +26,7 @@ final class RetirementRuleUnitTest extends TestCase
 
         self::assertSame('CAS_CIVIL', $rule->code());
         self::assertTrue(
-            $rule->employerRate(new \DateTimeImmutable('2026-06-01'))->equals(Rate::fromPercentage('82.28')),
+            $rule->employerRate(new \DateTimeImmutable('2026-06-01'))->rate()->equals(Rate::fromPercentage('82.28')),
         );
     }
 
@@ -34,7 +36,7 @@ final class RetirementRuleUnitTest extends TestCase
 
         self::assertSame('CNRACL', $rule->code());
         self::assertTrue(
-            $rule->employerRate(new \DateTimeImmutable('2026-06-01'))->equals(Rate::fromPercentage('37.65')),
+            $rule->employerRate(new \DateTimeImmutable('2026-06-01'))->rate()->equals(Rate::fromPercentage('37.65')),
         );
     }
 
@@ -42,7 +44,7 @@ final class RetirementRuleUnitTest extends TestCase
     {
         // C5.2 : le port lève pour la clé/date non couverte -> la règle propage.
         $provider = new class () implements DatedRateProvider {
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 throw MissingDatedRateException::forKeyAndDate($key, $date);
             }
@@ -69,13 +71,13 @@ final class RetirementRuleUnitTest extends TestCase
             ) {
             }
 
-            public function rateAt(string $key, \DateTimeImmutable $date): Rate
+            public function rateAt(string $key, \DateTimeImmutable $date): DatedRate
             {
                 if ($key !== $this->expectedKey) {
                     throw MissingDatedRateException::forKeyAndDate($key, $date);
                 }
 
-                return $this->rate;
+                return Trace::datedRate($this->rate);
             }
         };
     }
