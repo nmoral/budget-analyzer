@@ -6,10 +6,14 @@ recrutements publics expose **aujourd'hui**, du point de vue de l'usage et du m�
 La brique Symfony porte, à terme, le moteur de calcul, l'API et le front de la V1.
 À ce stade, l'application fournit un point de santé, le **modèle de données** du
 simulateur avec ses règles de sélection des valeurs réglementaires datées, une
-**commande d'import** qui peuple ce modèle depuis le dépôt de données, et les
-**premières règles de calcul** de la famille retraite (taux employeur). Aucune
-interface utilisateur n'est encore exposée : ces règles ne sont consultables ni via
-une API ni via un écran ; elles ne sont exercées que par les tests.
+**commande d'import** qui peuple ce modèle depuis le dépôt de données, les **règles
+de calcul** du coût employeur (famille retraite, coût annuel, horizons, vues de coût)
+et une **API JSON** qui expose la création et la lecture de scénarios ainsi que leur
+**résultat de simulation** sur l'horizon « année 1 » (voir « API / scénarios et
+résultats »). Les autres capacités du moteur (horizons régime permanent et cohorte,
+vues de coût au-delà de ce qu'expose le résultat année 1) ne sont pas encore
+accessibles par l'API et ne sont exercées que par les tests ; aucun écran n'est
+encore exposé.
 
 ## Ce qui est disponible
 
@@ -119,6 +123,62 @@ caractère de repli de la valeur retenue est signalé. S'il n'existe aucune obse
 antérieure ou égale à Y dans le jeu, le résultat est vide — sans repli silencieux sur
 un autre jeu.
 
+### API / scénarios et résultats
+
+Une **API JSON** expose désormais la **création** et la **lecture** d'un scénario de
+recrutement, puis la **lecture de son résultat de simulation** sur l'horizon « année 1 ».
+C'est le premier usage réel du moteur de calcul exposé hors des tests.
+
+**Créer un scénario** : on fournit un **titre** et une ou plusieurs **lignes**, chaque
+ligne décrivant un recrutement — le **profil** visé, un **volume** (nombre d'agents),
+une **date de recrutement** et, optionnellement, un **étalement sur N années**. On peut
+aussi préciser la **version des paramètres** à épingler. À la création, le scénario est
+**rattaché à un jeu de paramètres** (voir « Rattachement à un jeu de paramètres ») : si
+aucune version n'est précisée, c'est le **dernier jeu importé** qui est épinglé ; si une
+version est précisée, c'est ce jeu-là. Une version demandée **inconnue** fait **rejeter**
+la création. La création renvoie l'**identifiant** du scénario et la **version des
+paramètres** effectivement épinglée.
+
+**Lire un scénario** : on retrouve son titre, la version des paramètres épinglée et ses
+lignes. Un scénario **inconnu** est signalé comme introuvable.
+
+**Lire le résultat d'un scénario** : on obtient, **par ligne** et **par vue de coût
+demandée**, le coût de l'horizon « année 1 » du recrutement, décomposé en trois fenêtres :
+
+- **année pleine** : le coût employeur annuel non proraté, en regard ;
+- **année 1** : le coût de l'année civile du recrutement, proraté au **nombre de mois
+  entiers** du mois de recrutement à décembre inclus (le jour du mois n'intervient pas) ;
+- **année scolaire** : proposée **uniquement pour les profils à calendrier scolaire**
+  (fenêtre 1er septembre → 31 août), absente sinon.
+
+Chaque fenêtre est valorisée selon les **vues de coût** choisies (voir « Vues de coût de
+la retraite ») : la vue **budgétaire** sert de référence et est la vue par **défaut**. Le
+résultat fournit en plus un **agrégat** qui additionne, pour chaque vue et chaque fenêtre,
+le coût de **chaque ligne multiplié par son volume** (Σ ligne × volume). Chaque coût est
+restitué en ses quatre termes (traitement + primes, retraite, autres cotisations, RAFP) et
+leur total, en pleine précision (sans arrondi d'affichage à ce stade).
+
+La **sélection** se fait au moment de la lecture du résultat : on choisit les **horizons**
+et les **vues** voulus ; à défaut, le résultat porte sur l'horizon **année 1** valorisé en
+vue **budgétaire**. Une **vue inconnue** ou un **horizon inconnu** (seul « année 1 » est
+disponible aujourd'hui) font **rejeter** la demande. Une vue ou un horizon **répété** dans
+la demande est **compté une seule fois** (l'agrégat n'est jamais doublé). L'**étalement sur
+N années** d'une ligne est **stocké mais ignoré** par l'horizon année 1.
+
+**Version épinglée, résultat rejouable** : le résultat est toujours calculé **contre la
+version des paramètres épinglée au scénario**, pas « le dernier jeu importé ». La réponse
+**expose cette version**, et deux demandes identiques (même scénario, même version, mêmes
+horizons et vues) renvoient un **résultat identique** — garantie de rejouabilité et de
+transparence. Si le scénario était épinglé à une **autre version** (taux différents), le
+résultat diffère en conséquence ; il n'y a **jamais de mélange** entre versions. Après un
+**nouvel import** des paramètres, les résultats précédents sont **recalculés** contre l'état
+courant (jamais de résultat périmé).
+
+**Hors de ce périmètre** : les horizons **régime permanent** et **cohorte** (non exposés
+par l'API, #20), le **détail de calcul par montant** (formule, entrées et sources de chaque
+montant — #20), le **ré-épinglage** d'un scénario vers une autre version et l'**édition des
+lignes** après création, le **front** et l'**authentification**.
+
 ## Ce qui n'est pas encore disponible
 
 Les capacités métier arrivent dans des livraisons ultérieures et ne sont pas
@@ -136,9 +196,12 @@ présentes aujourd'hui :
   ci-dessous), l'**horizon « cohorte »** (série année par année du coût d'une
   cohorte de N agents avec avancement d'échelon) également (issue #17, voir
   ci-dessous) et les **vues de coût** de la retraite (quatre méthodes de valorisation)
-  le sont désormais (issue #18, voir « Vues de coût de la retraite » ci-dessous), mais
-  les apports suivants restent à venir ;
-- l'API JSON exposant les résultats — issue #19 ;
+  le sont désormais (issue #18, voir « Vues de coût de la retraite » ci-dessous) et
+  l'**API JSON** des scénarios et de leur résultat « année 1 » est livrée (issue #19,
+  voir « API / scénarios et résultats » ci-dessous), mais les apports suivants restent
+  à venir ;
+- l'**exposition par l'API des autres horizons** (régime permanent, cohorte) et le
+  **détail de calcul par montant** — issue #20 ;
 - le front / les pages Twig — issue #20.
 
 La liste ci-dessus décrit des intentions tracées par leurs issues respectives ; leur

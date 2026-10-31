@@ -620,6 +620,183 @@ PHPUnit sans conteneur ni base) : ports et règles fournis en classes anonymes,
 `AgentSituation` et VO d'hypothèses construits à la main. Comme le reste du domaine de coût,
 couvert par Infection (mutation sur `src/Domain`, MSI ≥ 85 %).
 
+## API JSON scénarios/résultats + cache (#19)
+
+Première **couche HTTP métier** : une API JSON crée et lit des scénarios, puis sert leur
+**résultat de simulation** (horizon « année 1 », #15) valorisé par vue (#18), avec un
+**cache du résultat par (scénario, version des paramètres, sélection)**. Tout vit sous
+`src/Infrastructure/` (contrôleur, orchestrateur, cache, adapters, repositories) ; le
+**domaine reste pur** (seul ajout domaine : `Year1HorizonCalculator::computeFrom`, voir
+plus bas) et la **frontière Deptrac** est préservée.
+
+### Endpoints et contrôleur
+
+`App\Infrastructure\Controller\ScenarioController` (routé par **attributs**, découvert par
+`config/routes.yaml` comme `HealthController`) expose trois routes :
+
+| Route | Méthode | Rôle | Codes |
+|-------|---------|------|-------|
+| `/api/scenarios` | `POST` | créer un scénario | `201` / `422` |
+| `/api/scenarios/{id}` (`id` = `\d+`) | `GET` | lire un scénario | `200` / `404` |
+| `/api/scenarios/{id}/result?horizons=&views=` | `GET` | lire le résultat | `200` / `404` / `422` |
+
+- **`POST /api/scenarios`** attend `{title, lines:[{profileRef, volume, recruitmentDate,
+  spreadYears?}], parametersVersion?}`. `profileRef` est l'**id Doctrine** d'un `Profile`.
+  Le scénario est **épinglé à un `ParameterSet`** : `parametersVersion` absent → `latest()` ;
+  présent → `ParameterSetRepository::findByVersionId()`. Succès → `201` `{id,
+  parametersVersion}`. Entrée invalide (corps non-JSON, `title` vide/absent, `lines` vide,
+  ligne mal formée, `profileRef`/`volume`/`spreadYears` non entiers, `recruitmentDate`
+  illisible, version demandée inconnue, aucun jeu importé) → **`422`** `{error}`. Le
+  scénario reçoit `provenance = 'simulation'` par défaut (champ NOT NULL absent du corps).
+- **`GET /api/scenarios/{id}`** → `200` `{id, title, parametersVersion, lines:[{id,
+  profileRef, volume, recruitmentDate, spreadYears}]}` ; scénario inconnu → **`404`**.
+- **`GET /api/scenarios/{id}/result`** → `200` avec le résultat (structure ci-dessous) ;
+  scénario inconnu → `404` ; vue ou horizon inconnu → `422` (`InvalidSelectionException`).
+  En-tête **`X-Cache: MISS`** (calcul) ou **`HIT`** (servi du cache).
+
+Le **mapping JSON est manuel** (VO/entité → tableau → `JsonResponse`, style
+`HealthController`) : **pas de `symfony/serializer`** (décision Q3).
+
+### Sélection (`horizons`, `views`) et structure de la réponse résultat
+
+`ScenarioController::selection()` lit un paramètre `?a,b,c` : valeurs **triées dans l'ordre
+d'apparition, trimmées, vides ignorées et dédupliquées** (R1 : une répétition ne double ni
+l'agrégat ni la clé de cache) ; sélection vide → **défaut** (`horizons=year1`,
+`views=BUDGETAIRE`). La réponse résultat :
+
+```
+{
+  "scenarioId", "parametersVersion", "horizons": [...], "views": [...],
+  "lines": [ { "lineId", "profileRef", "volume",
+              "results": { "<vue>": { "<horizon>": { "fullYear", "year1", "schoolYear" } } } } ],
+  "aggregate": { "<vue>": { "<horizon>": { "fullYear", "year1", "schoolYear" } } }
+}
+```
+
+Chaque fenêtre (`fullYear`, `year1`, `schoolYear`) est un `AnnualCost` sérialisé en cinq
+chaînes décimales : `treatmentAndPrimes`, `retirement`, `otherContributions`, `rafp`,
+`total` (pleine précision, aucun arrondi d'affichage). `schoolYear` vaut `null` pour un
+profil à calendrier civil. Le seul horizon supporté est `year1` (constante
+`ScenarioResultCalculator::SUPPORTED_HORIZONS`).
+
+### Orchestrateur `ScenarioResultCalculator`
+
+`App\Infrastructure\Cost\ScenarioResultCalculator::compute(Scenario, horizons, views)`
+valide d'abord la sélection (`assertHorizons` contre `SUPPORTED_HORIZONS` ; `assertViews`
+en déléguant à `CostViewRuleResolver::resolve`, un code inconnu devenant
+`InvalidSelectionException`), puis, **pour chaque ligne et chaque vue** :
+
+1. construit la situation d'agent et le calendrier via `AgentSituationFactory` ;
+2. calcule le coût année pleine valorisé par la vue (`CostViewCalculator::compute`,
+   #18) **dans la portée du jeu épinglé** (voir « Scope ») ;
+3. applique le prorata année 1 au domaine via `Year1HorizonCalculator::computeFrom(...)`.
+
+L'**agrégat** est, par vue et par fenêtre, la somme `Σ(coût_ligne × volume)` **terme par
+terme** (`Amount::multipliedByIndex($volume)` puis `plus`, le total de l'`AnnualCost` se
+recomposant comme somme des termes). Une fenêtre `schoolYear` absente (ligne civile) n'est
+pas sommée.
+
+`App\Infrastructure\Cost\AgentSituationFactory` est l'**adapter** entité → domaine (seul
+point touchant les deux côtés) : `fromProfile()` construit l'`AgentSituation`
+(`body.code`, `body.versant`, `entryEchelon.increasedIndex`, `retirementScheme.code`) et
+`calendarFor()` mappe `Profile.referenceCalendar` (insensible à la casse) vers
+`ReferenceCalendar`, une valeur inconnue levant `\InvalidArgumentException`.
+
+### Ajout domaine : `Year1HorizonCalculator::computeFrom`
+
+Pour appliquer une **vue** à l'horizon année 1 sans dupliquer le prorata en infrastructure,
+`App\Domain\Cost\Year1HorizonCalculator` reçoit `computeFrom(AnnualCost $fullYear,
+\DateTimeImmutable $recruitment, ReferenceCalendar $calendar): Year1Horizon` : il prend un
+coût annuel **déjà valorisé** (par une vue), l'expose tel quel en `fullYear`, proratise
+l'année 1 (recrutement → décembre) et la vue scolaire (sept → août) si le calendrier est
+scolaire. L'ancien `compute(AgentSituation, ...)` (#15) délègue désormais à `computeFrom`.
+C'est le **seul ajout domaine** de #19 (reste pur, couvert par Infection).
+
+### Scope version : `ParameterSetScope` et adapters scopés
+
+Le calcul doit se faire **contre la version épinglée** du scénario, pas « le dernier jeu
+importé ». Plutôt que reconstruire les adapters, #19 introduit une **portée de requête**
+`App\Infrastructure\ParameterSet\ParameterSetScope` : `within(ParameterSet $set, callable
+$cb)` active `$set` le temps du calcul (restauré en `finally`), `current()` renvoyant le
+jeu actif ou `null`. Les adapters datés (`DatedRateProviderAdapter`,
+`DatedAmountProviderAdapter`, `PrimeRateProviderAdapter`) reçoivent la portée et passent
+`$this->scope->current()` au `?ParameterSet` de leurs repositories (`valueInEffectAt`,
+`forYear`). Hors portée active (`current() === null`), ils retombent sur le **dernier jeu
+importé** — comportement historique inchangé. L'architecture enfichable par tags est
+préservée (le domaine ignore la portée).
+
+`ParameterSetRepository::findByVersionId(string)` est ajouté pour résoudre une version
+demandée à la création.
+
+### Cache du résultat : `ScenarioResultCache` et pool
+
+`App\Infrastructure\Cost\ScenarioResultCache` enveloppe l'orchestrateur sur un pool PSR-6.
+La **clé** = `'scenario_result_' . sha256(scenarioId | versionId | horizons triés | vues
+triées)` : deux appels identiques partagent l'entrée (rejouabilité), une **sélection** ou
+une **version** différente a une clé distincte (jamais de cache croisé) ; le **tri** rend
+l'ordre des horizons/vues indifférent. `get()` renvoie un `CachedScenarioResult` (résultat
++ drapeau `hit()`), lu par le contrôleur pour l'en-tête `X-Cache`. Une sélection invalide
+(`InvalidSelectionException`) remonte au contrôleur et **n'est pas mise en cache** (422).
+
+Le **pool** `app.cache.scenario_result` est un `FilesystemAdapter` à **répertoire et
+namespace fixes** (`var/cache/scenario_result`, `config/services.yaml`), **hors**
+`%kernel.cache_dir%` donc **indépendant de l'environnement** résolu par le process (A1/J4) :
+le serveur web (résout `prod`) et la console `app:import` (résout `dev`) pointent le **même
+stockage**, condition pour que la purge à l'import atteigne le pool réellement lu par l'API.
+Il n'est **pas** déclaré sous `framework.cache.pools` (un pool framework dérive son
+répertoire/namespace du `kernel.cache_dir`, cf. commentaire de `config/packages/cache.yaml`)
+et son `clearer` est désactivé (`autoconfigure: false`) pour ne purger qu'au ré-import. Le
+pool est injecté par `bind` : `$pool` dans le service de cache, `$resultCache` dans la
+commande d'import.
+
+### Invalidation par `app:import`
+
+`ImportCommand` reçoit le pool (`$resultCache`) et appelle `clear()` **après un import
+réussi** : les résultats en cache dépendent des paramètres importés, on les purge pour qu'ils
+soient recalculés contre le nouvel état (jamais de cache périmé, y compris au ré-import
+idempotent du même commit — le `versionId` ne changeant pas, l'invalidation passe par la
+purge et non par la clé).
+
+### Idempotence de l'import préservant les FK d'objets utilisateur (A2/J4)
+
+La FK **NOT NULL** `scenario.parameter_set_id` introduite par #19 (et `profile.entry_echelon_id`)
+cassait le ré-import idempotent existant (`delete`/`recreate` du `ParameterSet` → violation
+de FK). `Importer` ne supprime plus les lignes **référencées par un objet utilisateur** : au
+ré-import du même commit, le `ParameterSet` est **réutilisé** (même id), `Grille` et `Echelon`
+sont mis à jour **en place par clé naturelle** (upsert : `{body}_{grade}_{version}`, puis
+`grilleKey#rank`), tandis que `DatedParameter` et `PrimeRate` — que rien ne référence — sont
+**remplacés** par rechargement, et `Source`/`Corps` restent en upsert sur `code`. La chaîne
+scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une seule
+transaction).
+
+### Repositories et câblage
+
+Ajoutés sous `src/Infrastructure/Repository/` : `ScenarioRepository` (`find`, `save` avec
+ses lignes), `ScenarioLineRepository` (`forScenario`), `ProfileRepository` (`find`), et
+`ParameterSetRepository::findByVersionId`. Les services (contrôleur, orchestrateur, cache,
+scope, adapters, repositories) sont autowirés ; `symfony/cache` est rendu **explicite** dans
+`composer.json` (déjà transitif). Aucune nouvelle commande de chaîne qualité ni nouveau port
+réseau : `make qa-symfony` est inchangé.
+
+### Tests
+
+HTTP (`tests/Infrastructure/Controller/` : `ScenarioApiTest`, `ScenarioResultApiTest`,
+`ScenarioResultCacheApiTest`), pool de cache (`tests/Infrastructure/Cache/ScenarioResultCachePoolTest`
+dont l'indépendance à l'environnement), import idempotent (`tests/Infrastructure/Import/ImportCommandTest`),
+repositories (`tests/Infrastructure/Persistence/ScenarioRepositoryTest`), domaine pur
+(`tests/Domain/Cost/Year1HorizonCalculatorTest::computeFrom`), avec le trait de fixtures
+`tests/Infrastructure/Fixture/ScenarioFixtureTrait`.
+
+### Hors périmètre
+
+Non exposés par #19 : les horizons **régime permanent** et **cohorte** (adapter `Career`
+reconstruit depuis la grille — issue ultérieure) ; le **détail de calcul par montant**
+(formule/entrées/sources par montant — #20 ; les métadonnées de vue restent disponibles mais
+la trace par montant n'est pas structurée) ; le **ré-épinglage** d'un scénario (`PATCH`) et
+l'édition de ses lignes ; le **hash de contenu** du jeu de paramètres (on s'appuie sur
+`versionId` + purge à l'import) ; le front, l'authentification et le listing/pagination des
+scénarios.
+
 ## Kernel et amorçage
 
 - `App\Kernel` utilise `MicroKernelTrait` ; la configuration est en YAML sous

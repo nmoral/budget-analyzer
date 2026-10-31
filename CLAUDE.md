@@ -13,7 +13,9 @@ des recrutements publics). Deux briques reliées par le seul dépôt `data/` :
   horizon cohorte — série annuelle avec avancement d'échelon mensuel, horizon ou
   carrière complète × N agents — #17, vues de coût enfichables — 4 méthodes de
   valorisation de la retraite (budgétaire par défaut, équivalent privé, équilibre
-  technique, actuarielle) — #18).
+  technique, actuarielle) — #18, API JSON scénarios/résultats + cache du résultat
+  par version des paramètres — création/lecture de scénario, résultat horizon
+  « année 1 » par vue, version épinglée au scénario pour la rejouabilité — #19).
 
 Ce fichier est la **source unique** des conventions et des seuils. La CI et le
 `Makefile` les appliquent ; ils doivent rester alignés avec le tableau ci-dessous.
