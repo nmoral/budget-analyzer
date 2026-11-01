@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Controller;
 
+use App\Infrastructure\Cost\InvalidSelectionException;
 use App\Infrastructure\Cost\ScenarioResultCalculator;
+use App\Infrastructure\Cost\UncomputableViewException;
 use App\Infrastructure\Repository\ParameterSetRepository;
 use App\Infrastructure\Repository\ScenarioLineRepository;
 use App\Infrastructure\Repository\ScenarioRepository;
@@ -67,7 +69,21 @@ final class ScenarioResultPageController
             ? null
             : $this->parameterSets->findByVersionId($requestedVersion);
 
-        $result = $this->calculator->compute($scenario, $horizons, $views, $detail, $parameterSet);
+        // Sélection pilotée par l'URL (C8, éditable/rejouable à la main) : une vue ou un
+        // horizon inconnu (`InvalidSelectionException`), ou une vue valide non valorisable
+        // (`UncomputableViewException`), fait partie du flux normal d'une URL retouchée. On
+        // rend une page lisible (jamais une 500 ni une trace, quel que soit APP_DEBUG), en
+        // miroir du 404 « scénario inconnu ». `assumptions()` peut aussi lever sur une vue
+        // inconnue : il est inclus dans le même rattrapage.
+        try {
+            $result = $this->calculator->compute($scenario, $horizons, $views, $detail, $parameterSet);
+            $assumptions = $this->calculator->assumptions($views);
+        } catch (InvalidSelectionException|UncomputableViewException) {
+            return new Response(
+                $this->twig->render('error/invalid_selection.html.twig', ['scenarioId' => $id]),
+                Response::HTTP_NOT_FOUND,
+            );
+        }
 
         // Financeur par ligne (C7) : Profile.funder, indexé par identifiant de ligne
         // pour être joint aux lignes du résultat côté template. Aucune part de budget.
@@ -83,7 +99,7 @@ final class ScenarioResultPageController
             'funders' => $funders,
             // Hypothèses appliquées (C4/C6) : nommées sur la fiche indépendamment du
             // dépliage par nombre (year1 seul), y compris sur permanent/cohorte allégés.
-            'assumptions' => $this->calculator->assumptions($views),
+            'assumptions' => $assumptions,
         ]));
     }
 

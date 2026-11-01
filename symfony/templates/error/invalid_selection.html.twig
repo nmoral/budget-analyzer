@@ -1,0 +1,19 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Sélection invalide{% endblock %}
+
+{% block body %}
+    <main>
+        <h1 data-testid="error-title">Sélection invalide</h1>
+        <p data-testid="error-message">
+            La ou les vues ou horizons demandés dans l'adresse n'existent pas ou ne
+            peuvent pas être affichés. Vérifiez les paramètres <code>views</code> et
+            <code>horizons</code> de l'URL, puis réessayez.
+        </p>
+        <p>
+            <a href="{{ path('web_scenario_result', { id: scenarioId }) }}">
+                Revenir à la fiche du scénario
+            </a>
+        </p>
+    </main>
+{% endblock %}
