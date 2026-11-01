@@ -241,6 +241,71 @@ vraies sources documentaires est hors de ce périmètre). Le dépliage `detail=f
 **limité à l'année 1** (permanent et cohorte sans trace), et la cohorte expose **toute la
 carrière** sans paramètre de borne.
 
+### Fiche de résultat d'un scénario (page web)
+
+Une **page web lisible** présente désormais le résultat d'une simulation : on ouvre
+`GET /scenarios/{id}` dans un navigateur et l'on obtient, pour le scénario `{id}`, une
+**fiche** qui reprend les chiffres du service de résultats (voir « API / scénarios et
+résultats ») en les rendant **transparents** — chaque nombre de l'année 1 se **déplie
+jusqu'à sa formule, ses valeurs d'entrée datées et ses sources officielles en clair**.
+La fiche s'ouvre toujours sur un **identifiant de scénario** existant : il n'y a **pas
+d'écran de création ni de liste** (un scénario se crée via l'API `POST /api/scenarios`).
+
+**En-tête.** La fiche affiche le **titre du scénario** et la **version du jeu de
+paramètres** réellement utilisée pour le calcul.
+
+**Vues et horizons.** Pour **chaque vue de coût** demandée (la vue **budgétaire** par
+défaut) et chaque **horizon** demandé, la fiche montre les montants **repris tels quels
+du service** (chaînes déjà formatées) : l'**année 1** (ses trois fenêtres — année pleine,
+année 1 proratisée, et année scolaire **masquée si le profil n'en a pas**), le **régime
+permanent** et la **cohorte** (série année par année + total). Un **agrégat** par vue et
+par horizon est affiché en plus des lignes. La ou les **vues affichées sont toujours
+nommées** ; quand plusieurs vues sont demandées, elles s'affichent **côte à côte**.
+
+**Dépliage jusqu'à la source (année 1 seulement).** Dans les fenêtres de l'**année 1**,
+chaque terme (traitement et primes, retraite, autres cotisations, RAFP) se **déplie** d'un
+clic pour révéler : la **formule** en clair, les **valeurs d'entrée datées** utilisées
+(clé, valeur, unité, **date d'effet**), le **prorata** de la fenêtre, et les **sources en
+clair** — « **éditeur — titre, édition, localisation** » puis le lien. Une source n'est
+**jamais** présentée comme un code brut ni comme un lien nu. Le dépliage reste **limité à
+l'année 1** : les horizons **régime permanent** et **cohorte** sont volontairement
+**allégés** (montants affichés, mais pas de dépliage par nombre), et la fiche le **mentionne
+explicitement**.
+
+**Hypothèses et version.** La fiche **nomme toutes les hypothèses appliquées** : les
+**hypothèses structurelles** du moteur (gel de la valeur du point, taux de primes moyen,
+population stationnaire) et, par vue, ses **hypothèses propres** (définition, question
+métier, hypothèses, sources de méthode). Ces hypothèses sont en **lecture seule** (leur
+**surcharge** n'est pas proposée à ce stade) et sont affichées avec la **version du jeu de
+paramètres**, y compris sur les horizons allégés.
+
+**Courbe de cohorte.** Quand l'horizon cohorte est affiché, la fiche trace une **courbe**
+(un graphique **SVG**) du coût année par année, **cohérente avec le tableau cohorte**
+(même nombre de points, mêmes extrêmes), une courbe par vue affichée.
+
+**Financeur, pas de part de budget.** Chaque ligne indique son **financeur**. Conformément
+au périmètre, **aucune part de budget** n'est affichée (une simulation FPH ne s'affiche
+jamais comme une part du budget de l'État) : la mise en regard budgétaire est différée
+(#21).
+
+**Adresse stable et rejouable.** L'adresse de la fiche **encode la sélection** : la
+**version des paramètres** (`parametersVersion`), les **vues** (`views`), les **horizons**
+(`horizons`) et le **dépliage** (`detail=full`). Rejouer la même adresse redonne la
+**même fiche**. Si l'adresse **épingle une version**, c'est **cette version** qui pilote le
+calcul et qui est affichée ; si elle n'en précise aucune (ou une version inconnue), la
+fiche retombe sur le **jeu épinglé au scénario** et affiche la version effectivement
+utilisée. On peut ainsi **partager** ou **archiver** l'adresse d'un résultat précis.
+
+**Pages d'erreur lisibles.** Un **scénario inconnu** (ou un identifiant non numérique)
+affiche une **page d'erreur lisible** (404), sans trace technique. De même, une **vue ou
+un horizon invalide** saisi dans l'adresse — ou une vue valide **non valorisable** faute de
+paramètre daté — affiche une **page « Sélection invalide »** lisible (404) invitant à
+corriger l'URL, jamais une erreur serveur opaque.
+
+**Sans JavaScript.** Tout le contenu (y compris les blocs de dépliage) est **rendu côté
+serveur** et présent dans la page : le dépliage fonctionne même **sans JavaScript** ;
+l'interactivité ne fait que montrer ou masquer un contenu déjà là.
+
 ## Ce qui n'est pas encore disponible
 
 Les capacités métier arrivent dans des livraisons ultérieures et ne sont pas

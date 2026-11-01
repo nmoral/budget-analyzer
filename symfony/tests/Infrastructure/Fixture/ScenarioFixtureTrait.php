@@ -131,6 +131,11 @@ trait ScenarioFixtureTrait
      * clé), et `$omitPrimeRate` d'omettre le taux de primes du corps : utile pour
      * reproduire un jeu sous-paramétré (vue valide mais non valorisable).
      *
+     * `$versant` permet de produire un profil hospitalier (`FPH`) : les « autres
+     * cotisations » sont alors résolues par la règle FPH et le taux daté
+     * `taux_autres_cotisations_fph` est seedé. `$funderCode`/`$funderLabel` nomment le
+     * financeur (défaut État) pour exercer l'affichage du financeur par ligne.
+     *
      * @param list<string> $omitKeys
      */
     private function persistComputableProfile(
@@ -140,11 +145,14 @@ trait ScenarioFixtureTrait
         string $corpsCode = 'PE',
         array $omitKeys = [],
         bool $omitPrimeRate = false,
+        string $versant = 'FPE',
+        string $funderCode = 'ETAT',
+        string $funderLabel = 'État',
     ): Profile {
         $corps = new Corps();
         $corps->code = $corpsCode;
         $corps->label = 'Professeur des écoles';
-        $corps->versant = 'FPE';
+        $corps->versant = $versant;
         $corps->category = 'A';
         $em->persist($corps);
 
@@ -183,11 +191,18 @@ trait ScenarioFixtureTrait
         $em->persist($scheme);
 
         $funder = new Funder();
-        $funder->code = 'ETAT';
-        $funder->label = 'État';
+        $funder->code = $funderCode;
+        $funder->label = $funderLabel;
         $em->persist($funder);
 
-        $this->persistEngineParameters($em, $set, $corps, omitKeys: $omitKeys, omitPrimeRate: $omitPrimeRate);
+        $this->persistEngineParameters(
+            $em,
+            $set,
+            $corps,
+            omitKeys: $omitKeys,
+            omitPrimeRate: $omitPrimeRate,
+            seedFphOtherContributions: $versant === 'FPH',
+        );
 
         $profile = new Profile();
         $profile->body = $corps;
@@ -210,7 +225,8 @@ trait ScenarioFixtureTrait
      * employeur privé. Permet d'attacher un second jeu de paramètres au même corps.
      *
      * `$omitKeys` liste des clés datées à NE PAS seeder, `$omitPrimeRate` omet le taux
-     * de primes : pour reproduire un jeu sous-paramétré.
+     * de primes : pour reproduire un jeu sous-paramétré. `$seedFphOtherContributions`
+     * ajoute `taux_autres_cotisations_fph` (profil hospitalier valorisable).
      *
      * @param list<string> $omitKeys
      */
@@ -221,6 +237,7 @@ trait ScenarioFixtureTrait
         string $casCivilPercentage = '82.28',
         array $omitKeys = [],
         bool $omitPrimeRate = false,
+        bool $seedFphOtherContributions = false,
     ): void {
         $source = new Source();
         $source->code = 'SRC-engine-' . $set->versionId;
@@ -240,6 +257,9 @@ trait ScenarioFixtureTrait
             'taux_rafp' => '5',
             'taux_employeur_prive' => '28',
         ];
+        if ($seedFphOtherContributions) {
+            $datedParameters['taux_autres_cotisations_fph'] = '15.0';
+        }
         foreach ($datedParameters as $key => $value) {
             if (\in_array($key, $omitKeys, true)) {
                 continue;

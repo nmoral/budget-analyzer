@@ -1,0 +1,12 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Scénario introuvable{% endblock %}
+
+{% block body %}
+    <main>
+        <h1 data-testid="error-title">Scénario introuvable</h1>
+        <p data-testid="error-message">
+            Le scénario demandé n'existe pas ou n'est plus disponible.
+        </p>
+    </main>
+{% endblock %}

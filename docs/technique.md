@@ -12,6 +12,8 @@ unique).
 - `doctrine/doctrine-bundle` avec **Doctrine ORM** (`doctrine/orm ^3.7`) et
   `doctrine/doctrine-migrations-bundle ^3.7` (voir « Persistance » plus bas).
 - Serveur web : **serveur PHP intégré**, pas de PHP-FPM / nginx à ce stade.
+- Front (#20) : **Twig** + **AssetMapper** + **Stimulus** (natif Symfony, sans chaîne JS
+  séparée) pour la fiche de résultat web (voir « Fiche de résultat web » plus bas).
 
 ## Organisation du code et séparation domaine / infrastructure
 
@@ -1026,6 +1028,127 @@ Tests : `tests/Infrastructure/Controller/ScenarioResultPermanentApiTest`,
 multi-horizon, year1 inchangé, `detail=full` year1-seul, cache par horizons, horizon inconnu
 → 422), `tests/Infrastructure/Cost/CareerFactoryTest`, et les extensions domaine
 `PermanentRegimeCalculatorTest`, `CohortHorizonCalculatorTest`, `ViewAwareStepCostTest`.
+
+## Fiche de résultat web : front Twig / AssetMapper / Stimulus (#20)
+
+La **fiche de résultat** (`GET /scenarios/{id}`) est une **page HTML rendue côté serveur**,
+sans SPA ni chaîne JS séparée et **sans appel HTTP interne à l'API**. Le front est bâti sur
+les briques **natives Symfony** : **Twig** pour le rendu, **AssetMapper** pour les assets, et
+**Stimulus** pour l'interactivité minimale. Tout vit en **`App\Infrastructure`** (la frontière
+Deptrac reste respectée : le domaine n'importe toujours ni Doctrine ni l'infra).
+
+### Pile front et câblage
+
+- Dépendances ajoutées (`composer.json`) : `symfony/twig-bundle`, `symfony/asset`,
+  `symfony/asset-mapper`, `symfony/stimulus-bundle`. Bundles enregistrés dans
+  `config/bundles.php` (`TwigBundle`, `StimulusBundle`).
+- `config/packages/twig.yaml` (`file_name_pattern: '*.twig'` ; `strict_variables: true`
+  en `when@test`) et `config/packages/asset_mapper.yaml` (un seul chemin de sources,
+  `assets/`).
+- `importmap.php` : point d'entrée `app` + socle Stimulus. Les dépendances distantes
+  (`@hotwired/stimulus` 3.2.2) sont **figées dans `assets/vendor/`** (sortie de
+  `bin/console importmap:install`, **versionnée**) → rendu et tests **sans accès réseau**.
+  `symfony/stimulus-bundle` tire `symfony/http-client` en transitif, **non utilisé** (aucun
+  appel HTTP interne).
+- `config/services.yaml` (`when@test`) : `logger` remplacé par `Psr\Log\NullLogger` en
+  test — le logger de debug de Symfony est très verbeux par requête WebTestCase et pouvait
+  saturer le pipe du run initial Infection (exit 143) ; sans effet applicatif.
+
+### Route et contrôleur
+
+La route web est portée par `App\Infrastructure\Controller\ScenarioResultPageController`
+(contrôleur invokable) :
+
+```php
+#[Route('/scenarios/{id}', name: 'web_scenario_result', methods: ['GET'], requirements: ['id' => '\d+'])]
+```
+
+- La contrainte `\d+` fait qu'un `{id}` **non numérique** n'apparie pas la route (404 du
+  framework).
+- **Scénario inconnu** → rendu **explicite** de `error/scenario_not_found.html.twig` en
+  **404** (pas `NotFoundHttpException`), pour garantir l'absence de trace quel que soit
+  `APP_DEBUG`.
+- **Rendu server-side via le service** : le contrôleur appelle
+  `ScenarioResultCalculator::compute(...)` et `::assumptions(...)` directement, puis rend
+  `scenario/result.html.twig`. Aucun appel à l'API `/api/...`.
+- **Financeur par ligne** (C7) : une **seconde requête** `ScenarioLineRepository::forScenario`
+  construit la table `id de ligne → Profile.funder->label`, jointe aux lignes côté template.
+  Aucune part de budget. (Exposer le financeur directement dans `compute()` est une piste
+  consignée — revue R3.)
+
+### Sélection pilotée par l'URL
+
+Le contrôleur lit les paramètres de requête, avec la **même sémantique que l'API résultat**
+(contrat d'URL rejouable commun) :
+
+- `views` et `horizons` : listes `?a,b,c` (ordre d'apparition préservé, vides ignorées,
+  **dédupliquées**) ; sélection vide → défaut (`BUDGETAIRE` / `year1`). Helper privé
+  `selection()`.
+- `detail=full` → calcul **avec détail** (dépliage par nombre, **année 1 seule**).
+- `parametersVersion` → **version épinglée** (C8) : si l'URL porte une version **connue**
+  (`ParameterSetRepository::findByVersionId`), le calcul est fait **contre ce jeu** ;
+  absente **ou inconnue**, on retombe sur le jeu épinglé du scénario (aucune version
+  inventée). La version **effectivement utilisée** (`result['parametersVersion']`) est
+  toujours affichée.
+
+Pour l'épinglage, `ScenarioResultCalculator::compute()` reçoit un paramètre **optionnel**
+`?ParameterSet $parameterSet = null` (rétro-compatible, API intacte) : `null` → jeu épinglé
+du scénario (comportement historique). Une méthode **`assumptions(array $views)`** a été
+ajoutée au calculateur : elle renvoie les **hypothèses de transparence** (structurelles +
+par vue : définition, question, hypothèses, sources de méthode) **indépendamment** du mode
+détaillé, pour alimenter la section hypothèses de la fiche même sur les horizons allégés.
+
+### Page d'erreur pour sélection invalide (revue R1)
+
+Une URL **éditable à la main** peut porter une vue ou un horizon **inconnu**
+(`InvalidSelectionException`), ou une vue valide **non valorisable**
+(`UncomputableViewException`). Le contrôleur **rattrape ces deux exceptions** autour de
+`compute()` et `assumptions()` et rend `error/invalid_selection.html.twig` en **404**
+lisible (en miroir du 404 « scénario inconnu »), **jamais une 500 ni une trace**. C'est une
+**décision structurante** (jalon C-R1) : côté API la même situation donne un **422**, mais
+sur une page web éditable, une sélection invalide relève du **flux normal** d'une URL
+retouchée et doit rester lisible. Le domaine et l'API restent inchangés.
+
+### Courbe de cohorte : SVG inline server-side
+
+`App\Infrastructure\Twig\CohortCurveExtension` expose la fonction Twig **`cohort_curve`**
+qui calcule, **côté serveur**, la **géométrie d'un SVG** à partir de la série `perYear` de
+l'horizon cohorte (année → coût `total`). Elle renvoie les **coordonnées d'une polyline**
+(un point par année, viewBox 300×100) et les **extrêmes** (min/max). Les extrêmes sont
+comparés de façon **décimale-sûre** (`bccomp` sur les chaînes canoniques `Amount`) ; seule
+la **géométrie** (positions des points, pure présentation) passe par le `float`. La courbe
+est donc **déterministe** et **cohérente par construction** avec le tableau cohorte (même
+nombre de points, mêmes extrêmes). Le template rend un `<svg>` accessible (`role="img"`,
+`<title>`, `aria-label`) avec une `<polyline>`, un SVG par vue affichée.
+
+### Templates et interactivité
+
+- `templates/base.html.twig` : gabarit de base (blocs `title`/`body`, socle Stimulus).
+- `templates/scenario/result.html.twig` : fiche (en-tête + version, vues côte à côte,
+  lignes, agrégat, section « Hypothèses appliquées »).
+- `templates/scenario/_horizons.html.twig` : rendu des horizons d'un couple (ligne|agrégat,
+  vue). Macro `amounts()` **détail-aware** — un terme devient **repliable** (contrôleur
+  Stimulus `disclosure`) **uniquement** quand le service fournit `cost.detail` (year1 +
+  `detail=full`) ; macro `sourceCitation()` « éditeur — titre, édition, localisation »
+  suivie du lien (jamais code ni URL nue). Le `total` n'est pas dépliable (somme sans trace).
+- `templates/error/scenario_not_found.html.twig`, `templates/error/invalid_selection.html.twig`.
+- `assets/controllers/disclosure_controller.js` (Stimulus) : bascule l'attribut `hidden` du
+  panneau détail et `aria-expanded` du déclencheur. Le contenu détaillé est **déjà présent
+  dans le HTML** (rendu server-side, lisible **sans JS**) ; Stimulus ne fait que montrer/masquer.
+
+Les éléments portent des `data-testid` / `data-*` stables pour le crawler (WebTestCase).
+
+### Frontière, hors périmètre et tests
+
+Deptrac reste vert (tout le front est en `App\Infrastructure`). Hors périmètre #20 :
+**part de budget / mise en regard** (#21), **faisabilité / calibrage PAP** (#22),
+**surcharge d'hypothèses** (backend non exposé → hypothèses en lecture seule) et toute
+**UI de création/sélection** de scénario (pas d'endpoint de liste). Tests WebTestCase
+(crawler) : `ScenarioResultPageTest` (C1), `ScenarioResultPageViewsTest` (C2/C7),
+`ScenarioResultPageDetailTest` (C3), `ScenarioResultPageTransparencyTest` (C4/C5/C6),
+`ScenarioResultPageUrlTest` (C8), `ScenarioResultPageErrorTest` (scénario inconnu +
+sélection invalide, R1) ; unitaire `Twig/CohortCurveExtensionTest` (C5). La fixture de test
+est étendue via `Fixture/ScenarioFixtureTrait`.
 
 ## Kernel et amorçage
 

@@ -1,0 +1,6 @@
+framework:
+    asset_mapper:
+        # Un seul répertoire de sources d'assets, servi par AssetMapper (natif
+        # Symfony, sans chaîne JS externe). L'interactivité Stimulus (J3) y vivra.
+        paths:
+            - assets/

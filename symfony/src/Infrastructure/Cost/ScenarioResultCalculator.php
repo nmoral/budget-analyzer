@@ -22,6 +22,7 @@ use App\Domain\Shared\CostInput;
 use App\Domain\Shared\MissingDatedAmountException;
 use App\Domain\Shared\MissingDatedRateException;
 use App\Domain\Shared\MissingPrimeRateException;
+use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\Source;
 use App\Infrastructure\ParameterSet\ParameterSetScope;
@@ -75,13 +76,16 @@ final class ScenarioResultCalculator
     /**
      * @param list<string> $horizons
      * @param list<string> $views
+     * @param ParameterSet|null $parameterSet jeu de paramètres épinglé pour CE calcul
+     *                                        (ex. version rejouée depuis l'URL, #20/C8) ;
+     *                                        `null` → jeu épinglé du scénario (défaut)
      *
      * @return array<string, mixed>
      *
      * @throws InvalidSelectionException  si une vue ou un horizon demandé est inconnu
      * @throws UncomputableViewException si une vue valide n'est pas valorisable (paramètre daté manquant)
      */
-    public function compute(Scenario $scenario, array $horizons, array $views, bool $detail = false): array
+    public function compute(Scenario $scenario, array $horizons, array $views, bool $detail = false, ?ParameterSet $parameterSet = null): array
     {
         $this->assertHorizons($horizons);
         $this->assertViews($views);
@@ -92,7 +96,10 @@ final class ScenarioResultCalculator
             $this->sourceCapture->reset();
         }
 
-        $set = $scenario->parameterSet;
+        // La version rejouée depuis l'URL (C8) épingle le calcul ; à défaut, on retombe
+        // sur le jeu épinglé du scénario (comportement historique inchangé). La version
+        // effectivement utilisée est exposée dans `parametersVersion`.
+        $set = $parameterSet ?? $scenario->parameterSet;
         $lines = $this->lines->forScenario($scenario);
 
         $wantYear1 = \in_array('year1', $horizons, true);
@@ -208,6 +215,25 @@ final class ScenarioResultCalculator
         }
 
         return $result;
+    }
+
+    /**
+     * Hypothèses appliquées (#20, C4/C6), indépendamment du mode détaillé : hypothèses
+     * structurelles nommées + hypothèses propres à chaque vue (définition, question,
+     * hypothèses, sources de méthode). Permet à la fiche web d'afficher ces hypothèses
+     * sur les horizons allégés (permanent/cohorte) sans activer le dépliage par nombre.
+     *
+     * @param list<string> $views
+     *
+     * @return array<string, mixed>
+     *
+     * @throws InvalidSelectionException si une vue demandée est inconnue
+     */
+    public function assumptions(array $views): array
+    {
+        $this->assertViews($views);
+
+        return $this->metaArray($views);
     }
 
     /**

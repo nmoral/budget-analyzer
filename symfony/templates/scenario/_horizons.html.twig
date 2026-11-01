@@ -1,0 +1,115 @@
+{# Rend les horizons demandés d'un couple (ligne|agrégat, vue).
+   `cells`   : bloc résultat de la vue (line.results[view] ou aggregate[view]) ;
+   `horizons`: liste des horizons demandés.
+   Les montants sont repris tels quels du service (chaînes déjà formatées).
+
+   Dépliage (C3) : quand le service fournit `cost.detail` (year1 seul, `detail=full`),
+   chaque terme devient repliable (Stimulus `disclosure`) ; le bloc détail — formule,
+   entrées datées, sources en clair — est rendu server-side et présent dans le HTML
+   (lisible sans JS, Stimulus ne fait que montrer/masquer). #}
+
+{% macro sourceCitation(s) %}{{ s.publisher }} — {{ s.label }}, {{ s.edition }}, {{ s.locator }}{% endmacro %}
+
+{% macro termDetail(entry) %}
+    <div class="term-detail" data-testid="term-detail" data-disclosure-target="panel" hidden>
+        <p class="formula" data-testid="detail-formula">{{ entry.formula }}</p>
+        <ul class="inputs" data-testid="detail-inputs">
+            {% for input in entry.inputs %}
+                <li data-testid="detail-input">
+                    <span data-field="key">{{ input.key }}</span>
+                    = <span data-field="value">{{ input.value }}</span>
+                    <span data-field="unit">{{ input.unit }}</span>
+                    (au <span data-field="effectiveDate">{{ input.effectiveDate }}</span>)
+                </li>
+            {% endfor %}
+        </ul>
+        <p class="prorata" data-testid="detail-prorata">
+            Prorata {{ entry.prorata.months }}/{{ entry.prorata.over }} ({{ entry.prorata.window }})
+        </p>
+        <ul class="sources" data-testid="detail-sources">
+            {% for s in entry.sources %}
+                <li data-testid="source">
+                    <span data-testid="source-citation">{{ _self.sourceCitation(s) }}</span>
+                    <a data-testid="source-link" href="{{ s.url }}" rel="noopener noreferrer">{{ s.label }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endmacro %}
+
+{% macro amounts(cost) %}
+    <ul class="amounts">
+        {% for term in ['treatmentAndPrimes', 'retirement', 'otherContributions', 'rafp'] %}
+            <li data-term="{{ term }}">
+                {% if cost.detail is defined %}
+                    <div class="term" data-controller="disclosure">
+                        <button type="button" class="term-toggle" data-testid="term-toggle"
+                                data-action="disclosure#toggle" data-disclosure-target="trigger"
+                                aria-expanded="false">{{ attribute(cost, term) }}</button>
+                        {{ _self.termDetail(attribute(cost.detail, term)) }}
+                    </div>
+                {% else %}
+                    <span class="amount">{{ attribute(cost, term) }}</span>
+                {% endif %}
+            </li>
+        {% endfor %}
+        <li data-term="total" data-testid="amount-total">{{ cost.total }}</li>
+    </ul>
+{% endmacro %}
+{% import _self as m %}
+
+{% if 'year1' in horizons and cells.year1 is defined %}
+    <div data-testid="horizon-year1">
+        <h4>Année 1</h4>
+        <div data-testid="window-fullYear">
+            <span class="window-label">Année pleine</span>
+            {{ m.amounts(cells.year1.fullYear) }}
+        </div>
+        <div data-testid="window-year1">
+            <span class="window-label">Année 1 (proratisée)</span>
+            {{ m.amounts(cells.year1.year1) }}
+        </div>
+        {% if cells.year1.schoolYear is not null %}
+            <div data-testid="window-schoolYear">
+                <span class="window-label">Année scolaire</span>
+                {{ m.amounts(cells.year1.schoolYear) }}
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+
+{% if 'permanent' in horizons and cells.permanent is defined and cells.permanent is not null %}
+    <div data-testid="horizon-permanent">
+        <h4>Régime permanent</h4>
+        {{ m.amounts(cells.permanent) }}
+        <p class="year1-only-notice" data-testid="year1-only-notice">
+            Horizon allégé : le dépliage par nombre (formule, entrées, sources) est limité à l'année 1.
+        </p>
+    </div>
+{% endif %}
+
+{% if 'cohorte' in horizons and cells.cohorte is defined and cells.cohorte is not null %}
+    {% set curve = cohort_curve(cells.cohorte.perYear) %}
+    <div data-testid="horizon-cohorte">
+        <h4>Cohorte</h4>
+        <ol data-testid="cohorte-series">
+            {% for year in cells.cohorte.perYear %}
+                <li data-testid="cohorte-year">{{ m.amounts(year) }}</li>
+            {% endfor %}
+        </ol>
+        <div data-testid="cohorte-total">
+            <span class="window-label">Total cohorte</span>
+            {{ m.amounts(cells.cohorte.total) }}
+        </div>
+        {# Courbe de cohorte (C5) : SVG inline généré server-side depuis `perYear`
+           (année → coût total). Un point par année, extrêmes = min/max des totaux :
+           cohérent, par construction, avec le tableau cohorte ci-dessus. #}
+        <svg data-testid="cohort-curve"{% if view is defined %} data-view="{{ view }}"{% endif %}
+             data-min="{{ curve.min }}" data-max="{{ curve.max }}"
+             viewBox="0 0 {{ curve.width }} {{ curve.height }}"
+             role="img" aria-label="Courbe du coût de cohorte année par année{% if view is defined %} ({{ view }}){% endif %}">
+            <title>Courbe du coût de cohorte année par année{% if view is defined %} — vue {{ view }}{% endif %}</title>
+            <polyline data-testid="cohort-curve-line" fill="none" stroke="currentColor" points="{{ curve.points }}"/>
+        </svg>
+    </div>
+{% endif %}
