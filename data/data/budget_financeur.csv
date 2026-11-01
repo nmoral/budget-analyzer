@@ -1,0 +1,5 @@
+funder_code,value,unit,start_date,end_date,source
+ETAT_P140,26842958249,EUR,2024-01-01,2024-12-31,pap-2024-ens-scolaire
+ETAT_P140,27490907364,EUR,2025-01-01,,pap-2025-ens-scolaire
+ONDAM,254900000000,EUR,2024-01-01,2024-12-31,ondam-2024-ralfss
+ONDAM,265900000000,EUR,2025-01-01,,ondam-2025-ralfss

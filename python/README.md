@@ -41,6 +41,16 @@ Coûts moyens chargés PAP par catégorie d'emploi, saisis à la main, chaque li
 
 `average_loaded_cost` est le **coût global** (coût moyen sur la carrière, et non entrée/sortie), en base **HCAS** (hors CAS Pensions) — seule valeur publiée par catégorie dans le PAP. Le coût « y compris CAS Pensions » n'est pas calculé ici : il relève de #22, qui appliquera `taux_cas_civil`. Une seule catégorie du programme 140 est saisie (celle du calibrage #22) ; les autres sont hors périmètre V0.
 
+### Budget de référence par financeur
+
+Budget de référence **daté par financeur**, trajectoire pluriannuelle sur le modèle de `taux_cnracl`, chaque ligne sourcée (règle de transparence n° 7) :
+
+- `budget_financeur` — budget total d'un financeur (schéma `budget_financeur`), colonnes `funder_code, value, unit, start_date, end_date (optionnel), source`. `unit = EUR`, `value` = montant total en euros (entier). Deux financeurs, deux millésimes chacun (2024 clos, 2025 à fin ouverte) :
+  - `ETAT_P140` (FPE) — crédits complets du programme 140 (LFI, total crédits de paiement, PAP annexe « Enseignement scolaire ») : 26 842 958 249 € en 2024, 27 490 907 364 € en 2025.
+  - `ONDAM` (FPH) — ONDAM global voté (LFSS, montant confirmé par la Cour des comptes, RALFSS 2025) : 254 900 000 000 € en 2024, 265 900 000 000 € en 2025.
+
+  Chaque valeur de `source` est un slug présent dans `data/sources.json`, dont le `fileHash` est le sha256 de la publication archivée sous `data/sources/publications/`.
+
 Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04).
 
 ## Contrôles de cohérence (`python -m checks`)

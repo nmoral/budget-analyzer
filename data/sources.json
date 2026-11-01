@@ -97,5 +97,41 @@
     "url": "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000607091",
     "retrievedAt": "2026-10-30",
     "fileHash": "4a802b4283e2d4dd949acd7520a47f0d3b56795a3e7b14d3b27683883c3bf284"
+  },
+  "pap-2024-ens-scolaire": {
+    "label": "PAP 2024 — annexe « Enseignement scolaire » (programme 140)",
+    "publisher": "Assemblée nationale",
+    "edition": "PLF 2024",
+    "locator": "programme 140, total crédits de paiement (LFI 2024) = 26 842 958 249 €",
+    "url": "https://www.assemblee-nationale.fr/dyn/content/download/705202/file/Enseignement%20scolaire.pdf",
+    "retrievedAt": "2026-11-01",
+    "fileHash": "40b873d2915dab02e869ce4da9f9f756d18d073eef9aecf3b6d7ef6e9a3c1125"
+  },
+  "pap-2025-ens-scolaire": {
+    "label": "PAP 2025 — annexe « Enseignement scolaire » (programme 140)",
+    "publisher": "Assemblée nationale",
+    "edition": "PLF 2025",
+    "locator": "programme 140, total crédits de paiement (LFI 2025) = 27 490 907 364 €",
+    "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf",
+    "retrievedAt": "2026-11-01",
+    "fileHash": "8d347c18a426ab0ebb7cb639801e083adfc265244f553bd41580ad1d56ecbb11"
+  },
+  "ondam-2024-ralfss": {
+    "label": "Cour des comptes, RALFSS 2025 — ONDAM voté par la LFSS 2024",
+    "publisher": "Cour des comptes",
+    "edition": "mai 2025",
+    "locator": "p. 43 (« la loi de financement de la sécurité sociale pour 2024 avait établi l'Ondam total 2024 [...] à 254,9 Md€ ») ; tableau n° 18, p. 92 (LFSS 254,9)",
+    "url": "https://www.ccomptes.fr/sites/default/files/2025-05/20250526-RALFSS-2025_0.pdf",
+    "retrievedAt": "2026-11-01",
+    "fileHash": "5ab311f7c27e167830b1960c58c274db5666d6f76cddaae7ecb67529d2264787"
+  },
+  "ondam-2025-ralfss": {
+    "label": "Cour des comptes, RALFSS 2025 — ONDAM voté par la LFSS 2025",
+    "publisher": "Cour des comptes",
+    "edition": "mai 2025",
+    "locator": "p. 50 (« l'objectif fixé pour les dépenses d'assurance maladie [...] est de 265,9 Md€ [...] par la loi de financement pour 2025 »)",
+    "url": "https://www.ccomptes.fr/sites/default/files/2025-05/20250526-RALFSS-2025_0.pdf",
+    "retrievedAt": "2026-11-01",
+    "fileHash": "5ab311f7c27e167830b1960c58c274db5666d6f76cddaae7ecb67529d2264787"
   }
 }
