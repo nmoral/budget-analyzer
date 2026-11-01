@@ -1,0 +1,56 @@
+{# Rend les horizons demandés d'un couple (ligne|agrégat, vue).
+   `cells`   : bloc résultat de la vue (line.results[view] ou aggregate[view]) ;
+   `horizons`: liste des horizons demandés.
+   Les montants sont repris tels quels du service (chaînes déjà formatées). #}
+{% macro amounts(cost) %}
+    <ul class="amounts">
+        <li data-term="treatmentAndPrimes">{{ cost.treatmentAndPrimes }}</li>
+        <li data-term="retirement">{{ cost.retirement }}</li>
+        <li data-term="otherContributions">{{ cost.otherContributions }}</li>
+        <li data-term="rafp">{{ cost.rafp }}</li>
+        <li data-term="total" data-testid="amount-total">{{ cost.total }}</li>
+    </ul>
+{% endmacro %}
+{% import _self as m %}
+
+{% if 'year1' in horizons and cells.year1 is defined %}
+    <div data-testid="horizon-year1">
+        <h4>Année 1</h4>
+        <div data-testid="window-fullYear">
+            <span class="window-label">Année pleine</span>
+            {{ m.amounts(cells.year1.fullYear) }}
+        </div>
+        <div data-testid="window-year1">
+            <span class="window-label">Année 1 (proratisée)</span>
+            {{ m.amounts(cells.year1.year1) }}
+        </div>
+        {% if cells.year1.schoolYear is not null %}
+            <div data-testid="window-schoolYear">
+                <span class="window-label">Année scolaire</span>
+                {{ m.amounts(cells.year1.schoolYear) }}
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+
+{% if 'permanent' in horizons and cells.permanent is defined and cells.permanent is not null %}
+    <div data-testid="horizon-permanent">
+        <h4>Régime permanent</h4>
+        {{ m.amounts(cells.permanent) }}
+    </div>
+{% endif %}
+
+{% if 'cohorte' in horizons and cells.cohorte is defined and cells.cohorte is not null %}
+    <div data-testid="horizon-cohorte">
+        <h4>Cohorte</h4>
+        <ol data-testid="cohorte-series">
+            {% for year in cells.cohorte.perYear %}
+                <li data-testid="cohorte-year">{{ m.amounts(year) }}</li>
+            {% endfor %}
+        </ol>
+        <div data-testid="cohorte-total">
+            <span class="window-label">Total cohorte</span>
+            {{ m.amounts(cells.cohorte.total) }}
+        </div>
+    </div>
+{% endif %}
