@@ -58,8 +58,9 @@ final class ImportCommandTest extends IntegrationTestCase
 
         self::assertSame(1, $this->rowCount('parameter_set'));
         self::assertSame(10, $this->rowCount('dated_parameter'));
-        // Les 11 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49).
-        self::assertSame(11, $this->rowCount('source'));
+        // Les 15 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49 ;
+        // +4 slugs budget_financeur pap/ondam depuis #70).
+        self::assertSame(15, $this->rowCount('source'));
     }
 
     /** #49 C4 — les 3 clés r_autres (FPE/FPH) et RAFP sont importées en base. */
@@ -138,14 +139,16 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(11, $this->rowCount('source'));
+        self::assertSame(15, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
+        self::assertSame(2, $this->rowCount('funder'));
+        self::assertSame(4, $this->rowCount('reference_budget'));
 
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
         self::assertGreaterThan(0, $setId);
 
         // Toutes les valeurs datées (scopées) portent la FK du ParameterSet du commit.
-        foreach (['dated_parameter', 'grille', 'prime_rate'] as $table) {
+        foreach (['dated_parameter', 'grille', 'prime_rate', 'reference_budget'] as $table) {
             self::assertSame(
                 $this->rowCount($table),
                 $this->rowCountWhere($table, 'parameter_set_id = ' . $setId),
@@ -286,6 +289,100 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame('A', $isg['category']);
     }
 
+    /** C5.1 — le budget daté est importé et chaque ligne pointe le bon financeur. */
+    public function testBudgetRowsResolveToTheirFunder(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        // 4 lignes de budget (2 millésimes × 2 financeurs), 2 financeurs upsertés.
+        self::assertSame(4, $this->rowCount('reference_budget'));
+        self::assertSame(2, $this->rowCount('funder'));
+
+        // FK financeur correctes : ETAT_P140 ↔ 2 lignes, ONDAM ↔ 2 lignes.
+        self::assertSame(
+            2,
+            $this->rowCountWhere(
+                'reference_budget rb JOIN funder f ON f.id = rb.funder_id',
+                "f.code = 'ETAT_P140'",
+            ),
+        );
+        self::assertSame(
+            2,
+            $this->rowCountWhere(
+                'reference_budget rb JOIN funder f ON f.id = rb.funder_id',
+                "f.code = 'ONDAM'",
+            ),
+        );
+
+        // Les colonnes de nomenclature du référentiel sont renseignées (reste nullable ailleurs).
+        $etat = $this->em->getConnection()->fetchAssociative(
+            "SELECT program, mission, ondam_sub_objective FROM funder WHERE code = 'ETAT_P140'",
+        );
+        self::assertIsArray($etat);
+        self::assertSame('140', $etat['program']);
+        self::assertSame('Enseignement scolaire', $etat['mission']);
+        self::assertNull($etat['ondam_sub_objective']);
+
+        $ondam = $this->em->getConnection()->fetchAssociative(
+            "SELECT program, mission, ondam_sub_objective FROM funder WHERE code = 'ONDAM'",
+        );
+        self::assertIsArray($ondam);
+        self::assertSame('global', $ondam['ondam_sub_objective']);
+        self::assertNull($ondam['program']);
+        self::assertNull($ondam['mission']);
+    }
+
+    /** C5.2 — réimport du même commit : budget et financeurs stables (purge/recharge scopée). */
+    public function testReimportingKeepsBudgetCountStable(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode());
+
+        self::assertSame(4, $this->rowCount('reference_budget'));
+        self::assertSame(2, $this->rowCount('funder'));
+        // Upsert global par `code` : pas de doublon de financeur.
+        self::assertSame(1, $this->rowCountWhere('funder', "code = 'ONDAM'"));
+
+        // Le budget reste scopé à l'unique ParameterSet du commit.
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+        self::assertSame(4, $this->rowCountWhere('reference_budget', 'parameter_set_id = ' . $setId));
+    }
+
+    /** C5.3 — `funder_code` du budget absent de `funders.json` : refus atomique (rollback). */
+    public function testUnknownFunderCodeIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/budget_financeur.csv', 'ETAT_P140,26842958249', 'FUNDER_INCONNU,26842958249');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('financeur inconnu `FUNDER_INCONNU`', $tester->getDisplay());
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('funder'));
+        self::assertSame(0, $this->rowCount('reference_budget'));
+        self::assertSame(0, $this->rowCount('source'));
+    }
+
+    /** C2.3 — `source` du budget absente du référentiel : refus atomique (rollback). */
+    public function testUnknownSourceInBudgetIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/budget_financeur.csv', 'pap-2024-ens-scolaire', 'source-inexistante');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('source inconnue `source-inexistante`', $tester->getDisplay());
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('reference_budget'));
+        self::assertSame(0, $this->rowCount('source'));
+    }
+
     /** C6.1 — réimport du même commit : état identique, aucun doublon ni accumulation. */
     public function testReimportingSameCommitIsIdempotent(): void
     {
@@ -301,12 +398,15 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(11, $this->rowCount('source'));
+        self::assertSame(15, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
+        self::assertSame(2, $this->rowCount('funder'));
+        self::assertSame(4, $this->rowCount('reference_budget'));
 
         // Upsert par `code` : aucun doublon sur les référentiels globaux.
         self::assertSame(1, $this->rowCountWhere('source', "code = 'decret-2023-519'"));
         self::assertSame(1, $this->rowCountWhere('corps', "code = 'PE'"));
+        self::assertSame(1, $this->rowCountWhere('funder', "code = 'ETAT_P140'"));
 
         // Les valeurs datées restent rattachées à l'unique ParameterSet du commit.
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
