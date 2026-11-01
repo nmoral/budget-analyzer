@@ -1,0 +1,13 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ scenario.title }} — Fiche de résultat{% endblock %}
+
+{% block body %}
+    <main>
+        <h1 data-testid="scenario-title">{{ scenario.title }}</h1>
+        <p class="parameters-version">
+            Version du jeu de paramètres :
+            <span data-testid="parameters-version">{{ parametersVersion }}</span>
+        </p>
+    </main>
+{% endblock %}

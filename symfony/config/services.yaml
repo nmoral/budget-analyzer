@@ -147,6 +147,14 @@ services:
 
 when@test:
     services:
+        # Logger silencieux en test : le logger par défaut de Symfony (debug activé)
+        # écrit un flot très verbeux sur stderr à chaque requête WebTestCase. Sous
+        # Infection, le run initial est piloté par pipes ; ce flot peut saturer le
+        # tampon du pipe et faire terminer le process (exit 143). Un NullLogger en
+        # test supprime ce bruit sans changer le comportement applicatif.
+        logger:
+            class: Psr\Log\NullLogger
+
         # Implémentations de TEST prouvant la découvrabilité par tag (aucune règle
         # métier réelle n'est livrée en #12 — ossature pure). Chaque fixture est taggée
         # dans sa famille avec son code comme clé d'index du locator : l'ajout d'une
