@@ -41,6 +41,16 @@ Coûts moyens chargés PAP par catégorie d'emploi, saisis à la main, chaque li
 
 `average_loaded_cost` est le **coût global** (coût moyen sur la carrière, et non entrée/sortie), en base **HCAS** (hors CAS Pensions) — seule valeur publiée par catégorie dans le PAP. Le coût « y compris CAS Pensions » n'est pas calculé ici : il relève de #22, qui appliquera `taux_cas_civil`. Une seule catégorie du programme 140 est saisie (celle du calibrage #22) ; les autres sont hors périmètre V0.
 
+### Budget de référence par financeur
+
+Budget de référence **daté par financeur**, trajectoire pluriannuelle sur le modèle de `taux_cnracl`, chaque ligne sourcée (règle de transparence n° 7) :
+
+- `budget_financeur` — budget total d'un financeur (schéma `budget_financeur`), colonnes `funder_code, value, unit, start_date, end_date (optionnel), source`. `unit = EUR`, `value` = montant total en euros (entier). Deux financeurs, deux millésimes chacun (2024 clos, 2025 à fin ouverte) :
+  - `ETAT_P140` (FPE) — crédits complets du programme 140 (LFI, total crédits de paiement, PAP annexe « Enseignement scolaire ») : 26 842 958 249 € en 2024, 27 490 907 364 € en 2025.
+  - `ONDAM` (FPH) — ONDAM global voté (LFSS, montant confirmé par la Cour des comptes, RALFSS 2025) : 254 900 000 000 € en 2024, 265 900 000 000 € en 2025.
+
+  Chaque valeur de `source` est un slug présent dans `data/sources.json`, dont le `fileHash` est le sha256 de la publication archivée sous `data/sources/publications/`.
+
 Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04).
 
 ## Contrôles de cohérence (`python -m checks`)
@@ -58,7 +68,7 @@ PYTHONPATH=src BUDGET_DATA_DIR=../data uv run python -m checks
 Invariants appliqués :
 
 - **Indices croissants** — dans chaque grille d'un fichier `echelon` (groupée par la colonne `grille`), `gross_index` et `increased_index` sont strictement croissants par `rank` croissant. Les deux colonnes sont contrôlées indépendamment.
-- **Périodes sans chevauchement** — les périodes d'effet d'une même clé ne se chevauchent pas : `parametre_date` groupé par `key`, `grille` par `body_code` + `grade`. Période `[start_date ; end_date]` bornes incluses, `end_date` vide = ouverte (∞) ; l'adjacence (fin le jour J, début le jour J+1) est autorisée.
+- **Périodes sans chevauchement** — les périodes d'effet d'une même clé ne se chevauchent pas : `parametre_date` groupé par `key`, `grille` par `body_code` + `grade`, `budget_financeur` par `funder_code`. Période `[start_date ; end_date]` bornes incluses, `end_date` vide = ouverte (∞) ; l'adjacence (fin le jour J, début le jour J+1) est autorisée.
 - **Valeurs dans les bornes** — chaque valeur soumise à bornes reste dans `[min ; max]` défini dans `coherence.toml` (voir ci-dessous).
 - **Source renseignée** — toute ligne d'un schéma portant une colonne `source` a une `source` non blanche (après `strip`). La présence de la colonne est dérivée du schéma livré, pas d'une liste codée en dur ; les schémas sans colonne `source` (ex. `echelon`, `couts_pap`) ne sont pas concernés.
 - **Source déclarée** — tout code `source` non blanc d'un CSV doit être déclaré dans `data/sources.json` (pas de source silencieuse) ; un code absent du référentiel est refusé. Les sources blanches relèvent de l'invariant précédent et ne sont pas signalées deux fois. Référentiel absent (`sources.json` manquant) → contrôle neutralisé, comme pour la liste blanche des bornes. La correspondance fine code ↔ `fileHash` ↔ brut reste vérifiée à l'import côté Symfony (`ManifestVerifier`).
@@ -69,6 +79,7 @@ Les bornes de l'invariant « valeurs dans les bornes » sont versionnées dans `
 
 - `[parametre_date.key]` — une table inline `{ min, max }` par valeur de la colonne `key` (la valeur contrôlée est la colonne `value`). Ex. `taux_cas_civil`, `taux_cas_militaire`, `taux_cnracl` en `[0 ; 200]` (admet les taux > 100 %, p. ex. 126,07 du versant militaire) ; `taux_autres_cotisations_fpe`, `taux_autres_cotisations_fph`, `taux_rafp` en `[0 ; 100]` ; `point_indice` avec `min = 0` seul.
 - `[taux_primes]` — une borne `value = { min, max }` appliquée à la colonne `value` de tout fichier du schéma `taux_primes` (ratio du TIB, `[0 ; 1]`).
+- `[budget_financeur]` — une borne `value = { min = 0 }` appliquée à la colonne `value` (montant en euros) de tout fichier du schéma `budget_financeur` : montant positif ou nul, sans plafond.
 
 Les bornes sont **incluses**. Une borne peut être omise : `min` seul = pas de plafond, `max` seul = pas de plancher.
 

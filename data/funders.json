@@ -1,0 +1,11 @@
+{
+  "ETAT_P140": {
+    "label": "État — programme 140 « Enseignement scolaire public du premier degré »",
+    "mission": "Enseignement scolaire",
+    "program": "140"
+  },
+  "ONDAM": {
+    "label": "ONDAM — Objectif national de dépenses d'assurance maladie",
+    "ondamSubObjective": "global"
+  }
+}
