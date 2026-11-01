@@ -34,6 +34,7 @@ final class MappingValidationTest extends KernelTestCase
         'App\Infrastructure\Entity\Scenario',
         'App\Infrastructure\Entity\ScenarioLine',
         'App\Infrastructure\Entity\ParameterSet',
+        'App\Infrastructure\Entity\ReferenceBudget',
     ];
 
     public function testAllSpecEntitiesAreMapped(): void

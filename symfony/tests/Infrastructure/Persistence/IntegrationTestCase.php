@@ -7,9 +7,11 @@ namespace App\Tests\Infrastructure\Persistence;
 use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\DatedParameter;
 use App\Infrastructure\Entity\Echelon;
+use App\Infrastructure\Entity\Funder;
 use App\Infrastructure\Entity\Grille;
 use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\PrimeRate;
+use App\Infrastructure\Entity\ReferenceBudget;
 use App\Infrastructure\Entity\Source;
 use Doctrine\ORM\EntityManagerInterface;
 use Doctrine\ORM\Tools\SchemaTool;
@@ -179,6 +181,37 @@ abstract class IntegrationTestCase extends KernelTestCase
         $this->em->persist($rate);
 
         return $rate;
+    }
+
+    protected function newFunder(string $code): Funder
+    {
+        $funder = new Funder();
+        $funder->code = $code;
+        $funder->label = 'Financeur ' . $code;
+        $this->em->persist($funder);
+
+        return $funder;
+    }
+
+    protected function newReferenceBudget(
+        string $value,
+        string $startDate,
+        ?string $endDate,
+        Funder $funder,
+        Source $source,
+        ParameterSet $set,
+    ): ReferenceBudget {
+        $budget = new ReferenceBudget();
+        $budget->value = $value;
+        $budget->unit = 'EUR';
+        $budget->startDate = new \DateTimeImmutable($startDate);
+        $budget->endDate = $endDate === null ? null : new \DateTimeImmutable($endDate);
+        $budget->funder = $funder;
+        $budget->source = $source;
+        $budget->parameterSet = $set;
+        $this->em->persist($budget);
+
+        return $budget;
     }
 
     /**
