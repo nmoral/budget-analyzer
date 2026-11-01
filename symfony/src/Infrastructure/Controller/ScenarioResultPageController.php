@@ -66,6 +66,9 @@ final class ScenarioResultPageController
             'result' => $result,
             'parametersVersion' => $result['parametersVersion'],
             'funders' => $funders,
+            // Hypothèses appliquées (C4/C6) : nommées sur la fiche indépendamment du
+            // dépliage par nombre (year1 seul), y compris sur permanent/cohorte allégés.
+            'assumptions' => $this->calculator->assumptions($views),
         ]));
     }
 

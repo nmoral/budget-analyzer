@@ -82,10 +82,14 @@
     <div data-testid="horizon-permanent">
         <h4>Régime permanent</h4>
         {{ m.amounts(cells.permanent) }}
+        <p class="year1-only-notice" data-testid="year1-only-notice">
+            Horizon allégé : le dépliage par nombre (formule, entrées, sources) est limité à l'année 1.
+        </p>
     </div>
 {% endif %}
 
 {% if 'cohorte' in horizons and cells.cohorte is defined and cells.cohorte is not null %}
+    {% set curve = cohort_curve(cells.cohorte.perYear) %}
     <div data-testid="horizon-cohorte">
         <h4>Cohorte</h4>
         <ol data-testid="cohorte-series">
@@ -97,5 +101,14 @@
             <span class="window-label">Total cohorte</span>
             {{ m.amounts(cells.cohorte.total) }}
         </div>
+        {# Courbe de cohorte (C5) : SVG inline généré server-side depuis `perYear`
+           (année → coût total). Un point par année, extrêmes = min/max des totaux :
+           cohérent, par construction, avec le tableau cohorte ci-dessus. #}
+        <svg data-testid="cohort-curve"{% if view is defined %} data-view="{{ view }}"{% endif %}
+             data-min="{{ curve.min }}" data-max="{{ curve.max }}"
+             viewBox="0 0 {{ curve.width }} {{ curve.height }}"
+             role="img" aria-label="Courbe du coût de cohorte année par année">
+            <polyline data-testid="cohort-curve-line" fill="none" stroke="currentColor" points="{{ curve.points }}"/>
+        </svg>
     </div>
 {% endif %}

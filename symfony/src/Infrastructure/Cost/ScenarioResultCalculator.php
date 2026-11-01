@@ -211,6 +211,25 @@ final class ScenarioResultCalculator
     }
 
     /**
+     * Hypothèses appliquées (#20, C4/C6), indépendamment du mode détaillé : hypothèses
+     * structurelles nommées + hypothèses propres à chaque vue (définition, question,
+     * hypothèses, sources de méthode). Permet à la fiche web d'afficher ces hypothèses
+     * sur les horizons allégés (permanent/cohorte) sans activer le dépliage par nombre.
+     *
+     * @param list<string> $views
+     *
+     * @return array<string, mixed>
+     *
+     * @throws InvalidSelectionException si une vue demandée est inconnue
+     */
+    public function assumptions(array $views): array
+    {
+        $this->assertViews($views);
+
+        return $this->metaArray($views);
+    }
+
+    /**
      * Métadonnées de transparence (C3) : par vue, sa définition/question/hypothèses/sources
      * de méthode (texte libre, distinctes des sources de valeurs) ; plus les hypothèses
      * structurelles nommées appliquées par le moteur.

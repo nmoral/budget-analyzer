@@ -29,7 +29,7 @@
                         {% for view in result.views %}
                             <div class="view-block" data-testid="line-view" data-view="{{ view }}">
                                 <h3 data-testid="view-name">{{ view }}</h3>
-                                {{ include('scenario/_horizons.html.twig', { cells: line.results[view], horizons: result.horizons }) }}
+                                {{ include('scenario/_horizons.html.twig', { cells: line.results[view], horizons: result.horizons, view: view }) }}
                             </div>
                         {% endfor %}
                     </div>
@@ -43,10 +43,51 @@
                 {% for view in result.views %}
                     <div class="view-block" data-testid="aggregate-view" data-view="{{ view }}">
                         <h3 data-testid="view-name">{{ view }}</h3>
-                        {{ include('scenario/_horizons.html.twig', { cells: result.aggregate[view], horizons: result.horizons }) }}
+                        {{ include('scenario/_horizons.html.twig', { cells: result.aggregate[view], horizons: result.horizons, view: view }) }}
                     </div>
                 {% endfor %}
             </div>
+        </section>
+
+        {# Hypothèses appliquées (C4/C6) : la fiche nomme toutes les hypothèses
+           (structurelles + de vue) et affiche la version du jeu de paramètres (en tête).
+           Rendu en lecture seule (surcharge différée, hors #20), indépendamment du
+           dépliage par nombre réservé à l'année 1. #}
+        <section data-testid="assumptions-section">
+            <h2>Hypothèses appliquées</h2>
+            <p class="assumptions-version">
+                Version du jeu de paramètres :
+                <span data-testid="assumptions-version">{{ parametersVersion }}</span>
+            </p>
+
+            <div data-testid="structural-assumptions">
+                <h3>Hypothèses structurelles</h3>
+                <ul>
+                    {% for assumption in assumptions.structuralAssumptions %}
+                        <li data-testid="structural-assumption">{{ assumption }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <h3>Hypothèses de vue</h3>
+            {% for view in result.views %}
+                {% set meta = assumptions.views[view] %}
+                <div data-testid="view-assumptions" data-view="{{ view }}">
+                    <h4 data-testid="view-assumptions-name">{{ view }}</h4>
+                    <p data-testid="view-definition">{{ meta.definition }}</p>
+                    <p data-testid="view-question">{{ meta.question }}</p>
+                    <ul data-testid="view-assumption-list">
+                        {% for assumption in meta.assumptions %}
+                            <li data-testid="view-assumption">{{ assumption }}</li>
+                        {% endfor %}
+                    </ul>
+                    <ul data-testid="view-method-sources">
+                        {% for source in meta.sources %}
+                            <li data-testid="view-method-source">{{ source }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
         </section>
     </main>
 {% endblock %}
