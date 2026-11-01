@@ -107,7 +107,8 @@
         <svg data-testid="cohort-curve"{% if view is defined %} data-view="{{ view }}"{% endif %}
              data-min="{{ curve.min }}" data-max="{{ curve.max }}"
              viewBox="0 0 {{ curve.width }} {{ curve.height }}"
-             role="img" aria-label="Courbe du coût de cohorte année par année">
+             role="img" aria-label="Courbe du coût de cohorte année par année{% if view is defined %} ({{ view }}){% endif %}">
+            <title>Courbe du coût de cohorte année par année{% if view is defined %} — vue {{ view }}{% endif %}</title>
             <polyline data-testid="cohort-curve-line" fill="none" stroke="currentColor" points="{{ curve.points }}"/>
         </svg>
     </div>

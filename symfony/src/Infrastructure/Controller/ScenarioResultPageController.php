@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Controller;
 
 use App\Infrastructure\Cost\ScenarioResultCalculator;
+use App\Infrastructure\Repository\ParameterSetRepository;
 use App\Infrastructure\Repository\ScenarioLineRepository;
 use App\Infrastructure\Repository\ScenarioRepository;
 use Symfony\Component\HttpFoundation\Request;
@@ -24,6 +25,12 @@ use Twig\Environment;
  * year1) demandés découlent de l'URL ; la fiche affiche les montants repris tels
  * quels du service, par vue (côte à côte) et horizon, l'agrégat, et le financeur de
  * chaque ligne (`Profile.funder`). Aucune part de budget (différée #21).
+ *
+ * J5 (C8) : l'URL est stable et rejouable. `?parametersVersion=<v>` épingle la version
+ * du jeu de paramètres pilotant le calcul (version rejouée) ; absente, on retombe sur
+ * le jeu épinglé du scénario (comportement actuel). Une version inconnue n'est jamais
+ * inventée : on retombe aussi sur le jeu du scénario. La version réellement utilisée
+ * est toujours affichée. Les vues/horizons/detail découlent eux aussi de l'URL.
  */
 final class ScenarioResultPageController
 {
@@ -32,6 +39,7 @@ final class ScenarioResultPageController
         private readonly ScenarioRepository $scenarios,
         private readonly ScenarioLineRepository $lines,
         private readonly ScenarioResultCalculator $calculator,
+        private readonly ParameterSetRepository $parameterSets,
     ) {
     }
 
@@ -52,7 +60,14 @@ final class ScenarioResultPageController
         // datées, sources en clair). Le contrat d'URL expose `detail=full`.
         $detail = $request->query->getString('detail') === 'full';
 
-        $result = $this->calculator->compute($scenario, $horizons, $views, $detail);
+        // Version rejouée (C8) : si l'URL épingle une version connue, le calcul est fait
+        // contre ce jeu ; sinon (absente ou inconnue) on garde le jeu épinglé du scénario.
+        $requestedVersion = trim($request->query->getString('parametersVersion'));
+        $parameterSet = $requestedVersion === ''
+            ? null
+            : $this->parameterSets->findByVersionId($requestedVersion);
+
+        $result = $this->calculator->compute($scenario, $horizons, $views, $detail, $parameterSet);
 
         // Financeur par ligne (C7) : Profile.funder, indexé par identifiant de ligne
         // pour être joint aux lignes du résultat côté template. Aucune part de budget.
