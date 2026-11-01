@@ -1,13 +1,58 @@
 {# Rend les horizons demandés d'un couple (ligne|agrégat, vue).
    `cells`   : bloc résultat de la vue (line.results[view] ou aggregate[view]) ;
    `horizons`: liste des horizons demandés.
-   Les montants sont repris tels quels du service (chaînes déjà formatées). #}
+   Les montants sont repris tels quels du service (chaînes déjà formatées).
+
+   Dépliage (C3) : quand le service fournit `cost.detail` (year1 seul, `detail=full`),
+   chaque terme devient repliable (Stimulus `disclosure`) ; le bloc détail — formule,
+   entrées datées, sources en clair — est rendu server-side et présent dans le HTML
+   (lisible sans JS, Stimulus ne fait que montrer/masquer). #}
+
+{% macro sourceCitation(s) %}{{ s.publisher }} — {{ s.label }}, {{ s.edition }}, {{ s.locator }}{% endmacro %}
+
+{% macro termDetail(entry) %}
+    <div class="term-detail" data-testid="term-detail" data-disclosure-target="panel" hidden>
+        <p class="formula" data-testid="detail-formula">{{ entry.formula }}</p>
+        <ul class="inputs" data-testid="detail-inputs">
+            {% for input in entry.inputs %}
+                <li data-testid="detail-input">
+                    <span data-field="key">{{ input.key }}</span>
+                    = <span data-field="value">{{ input.value }}</span>
+                    <span data-field="unit">{{ input.unit }}</span>
+                    (au <span data-field="effectiveDate">{{ input.effectiveDate }}</span>)
+                </li>
+            {% endfor %}
+        </ul>
+        <p class="prorata" data-testid="detail-prorata">
+            Prorata {{ entry.prorata.months }}/{{ entry.prorata.over }} ({{ entry.prorata.window }})
+        </p>
+        <ul class="sources" data-testid="detail-sources">
+            {% for s in entry.sources %}
+                <li data-testid="source">
+                    <span data-testid="source-citation">{{ _self.sourceCitation(s) }}</span>
+                    <a data-testid="source-link" href="{{ s.url }}" rel="noopener noreferrer">{{ s.label }}</a>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endmacro %}
+
 {% macro amounts(cost) %}
     <ul class="amounts">
-        <li data-term="treatmentAndPrimes">{{ cost.treatmentAndPrimes }}</li>
-        <li data-term="retirement">{{ cost.retirement }}</li>
-        <li data-term="otherContributions">{{ cost.otherContributions }}</li>
-        <li data-term="rafp">{{ cost.rafp }}</li>
+        {% for term in ['treatmentAndPrimes', 'retirement', 'otherContributions', 'rafp'] %}
+            <li data-term="{{ term }}">
+                {% if cost.detail is defined %}
+                    <div class="term" data-controller="disclosure">
+                        <button type="button" class="term-toggle" data-testid="term-toggle"
+                                data-action="disclosure#toggle" data-disclosure-target="trigger"
+                                aria-expanded="false">{{ attribute(cost, term) }}</button>
+                        {{ _self.termDetail(attribute(cost.detail, term)) }}
+                    </div>
+                {% else %}
+                    <span class="amount">{{ attribute(cost, term) }}</span>
+                {% endif %}
+            </li>
+        {% endfor %}
         <li data-term="total" data-testid="amount-total">{{ cost.total }}</li>
     </ul>
 {% endmacro %}

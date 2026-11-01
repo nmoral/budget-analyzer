@@ -48,8 +48,11 @@ final class ScenarioResultPageController
 
         $views = $this->selection($request->query->getString('views'), 'BUDGETAIRE');
         $horizons = $this->selection($request->query->getString('horizons'), 'year1');
+        // Dépliage par nombre (C3) : year1 seul porte le détail (formule, entrées
+        // datées, sources en clair). Le contrat d'URL expose `detail=full`.
+        $detail = $request->query->getString('detail') === 'full';
 
-        $result = $this->calculator->compute($scenario, $horizons, $views);
+        $result = $this->calculator->compute($scenario, $horizons, $views, $detail);
 
         // Financeur par ligne (C7) : Profile.funder, indexé par identifiant de ligne
         // pour être joint aux lignes du résultat côté template. Aucune part de budget.
