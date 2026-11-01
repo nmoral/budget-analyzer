@@ -13,6 +13,7 @@ use App\Domain\Cost\CohortCostSeries;
 use App\Domain\Cost\CohortHorizonCalculator;
 use App\Domain\Cost\IndexedSalaryCalculator;
 use App\Domain\Cost\RafpContributionCalculator;
+use App\Domain\Cost\StepCostCalculator;
 use App\Domain\Rule\OtherContributions\OtherContributionsRule;
 use App\Domain\Rule\OtherContributions\OtherContributionsRuleResolver;
 use App\Domain\Rule\Retirement\RetirementRule;
@@ -285,6 +286,45 @@ final class CohortHorizonCalculatorTest extends TestCase
         foreach (range(0, 4) as $year) {
             self::assertCostEquals($series->perYear()[$year], $series->forHeadcount()[$year]);
         }
+    }
+
+    public function testSeriesUsesTheProvidedStepCostStrategy(): void
+    {
+        // C2.3 : quand une stratégie de coût d'échelon est fournie, chaque année de la
+        // série est valorisée par SES coûts (ici fictifs : chaque terme = indice majoré),
+        // pas par le coût de base ; l'avancement d'échelon reste appliqué année par année.
+        $entry = new \DateTimeImmutable(self::ENTRY);
+        $career = $this->careerStepThenTerminal(); // step0 IM 395 (12 mois) + terminal IM 678
+
+        $series = (new CohortHorizonCalculator($this->annualCostCalculator()))
+            ->compute($career, $entry, 2, 1, $this->indexValuedStrategy())
+            ->perYear();
+
+        // Année 1 = step0 (IM 395), année 2 = terminal (IM 678), chaque terme = indice.
+        self::assertTrue(Amount::fromString('395')->equals($series[0]->retirement()));
+        self::assertTrue(Amount::fromString('395')->equals($series[0]->treatmentAndPrimes()));
+        self::assertTrue(Amount::fromString('678')->equals($series[1]->retirement()));
+        self::assertTrue(Amount::fromString('678')->equals($series[1]->rafp()));
+
+        // ... et ce n'est pas la série du coût de base (la stratégie est bien honorée).
+        $base = $this->compute($career, $entry, 2)->perYear();
+        self::assertFalse($base[0]->retirement()->equals($series[0]->retirement()));
+    }
+
+    /**
+     * Stratégie de coût d'échelon fictive : chaque terme vaut l'indice majoré de la
+     * situation, pour isoler que la série porte bien sur les coûts de la stratégie.
+     */
+    private function indexValuedStrategy(): StepCostCalculator
+    {
+        return new class () implements StepCostCalculator {
+            public function compute(AgentSituation $situation, \DateTimeImmutable $date): AnnualCost
+            {
+                $amount = Amount::fromString((string) $situation->increasedIndex());
+
+                return new AnnualCost($amount, $amount, $amount, $amount);
+            }
+        };
     }
 
     private function careerK(): Career

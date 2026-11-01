@@ -683,8 +683,10 @@ l'agrégat ni la clé de cache) ; sélection vide → **défaut** (`horizons=yea
 Chaque fenêtre (`fullYear`, `year1`, `schoolYear`) est un `AnnualCost` sérialisé en cinq
 chaînes décimales : `treatmentAndPrimes`, `retirement`, `otherContributions`, `rafp`,
 `total` (pleine précision, aucun arrondi d'affichage). `schoolYear` vaut `null` pour un
-profil à calendrier civil. Le seul horizon supporté est `year1` (constante
-`ScenarioResultCalculator::SUPPORTED_HORIZONS`).
+profil à calendrier civil. À la livraison de #19 le seul horizon supporté était `year1` ;
+depuis **#66** la constante `ScenarioResultCalculator::SUPPORTED_HORIZONS` vaut
+`['year1', 'permanent', 'cohorte']` (voir « Horizons régime permanent et cohorte dans l'API
+résultat (#66) »).
 
 ### Orchestrateur `ScenarioResultCalculator`
 
@@ -799,8 +801,9 @@ repositories (`tests/Infrastructure/Persistence/ScenarioRepositoryTest`), domain
 
 ### Hors périmètre
 
-Non exposés par #19 : les horizons **régime permanent** et **cohorte** (adapter `Career`
-reconstruit depuis la grille — #66) ; le **détail de calcul par montant**
+Non exposés par #19 (depuis exposés par **#66**, voir « Horizons régime permanent et
+cohorte dans l'API résultat (#66) ») : les horizons **régime permanent** et **cohorte**
+(adapter `Career` reconstruit depuis la grille) ; le **détail de calcul par montant**
 (formule/entrées/sources par montant — livré par **#65**, voir « Transparence du résultat
 (#65) ») ; le **ré-épinglage** d'un scénario (`PATCH`) et
 l'édition de ses lignes ; le **hash de contenu** du jeu de paramètres (on s'appuie sur
@@ -914,6 +917,115 @@ horizons **régime permanent/cohorte** (#66), et la transformation des sources d
 `tests/Infrastructure/Controller/ScenarioResultDetailApiTest` (réponse détaillée,
 réconciliation du prorata, non-régression sans flag), `tests/Domain/Shared/CostInputTest`,
 `tests/Support/Trace` (helpers), plus les extensions des tests de coût et d'import.
+
+## Horizons régime permanent et cohorte dans l'API résultat (#66)
+
+Prolonge l'API résultat (#19/#65) en exposant deux horizons de plus — **régime permanent**
+(#16) et **cohorte** (#17) — sélectionnables via le paramètre `horizons`, en **réutilisant
+les calculateurs de domaine purs** (`PermanentRegimeCalculator`, `CohortHorizonCalculator`)
+et une nouvelle **factory d'infrastructure `Profile(+Grille) → Career`**. Le **domaine reste
+pur** (frontière Deptrac préservée : la reconstruction de la carrière est en infra, les
+calculateurs sont réutilisés tels quels, agrémentés d'une stratégie de coût pour le
+view-aware). Aucune nouvelle route, aucune nouvelle commande, aucun nouveau port.
+
+### Horizons supportés et structure de la réponse
+
+`ScenarioResultCalculator::SUPPORTED_HORIZONS` vaut désormais `['year1', 'permanent',
+'cohorte']` ; `horizons` est combinable (`horizons=year1,permanent,cohorte`), un horizon
+inconnu levant `InvalidSelectionException` → **422** (inchangé). Les trois horizons ayant des
+**formes différentes**, chaque bloc `results[view]` et `aggregate[view]` porte une clé par
+horizon demandé :
+
+```
+results[view].year1     = { fullYear, year1, schoolYear }          (#19, inchangé)
+results[view].permanent = { treatmentAndPrimes, retirement, otherContributions, rafp, total }
+results[view].cohorte   = { perYear: [ {…5 termes…}, … ], total: {…5 termes…} }
+```
+
+- **`permanent`** : le **coût annuel moyen par agent** en régime permanent (`headcount = 1`,
+  moyenne pondérée par la durée des échelons), sérialisé en ses cinq montants décimaux.
+  `aggregate[view].permanent` = Σ sur les lignes de `coût_par_agent × volume`, terme par
+  terme (même pondération par volume que l'agrégat année 1).
+- **`cohorte`** : la **série année par année** sur **toute la carrière** (`computeFullCareer`,
+  pas de borne d'horizon) pour un agent — `perYear` (année _k_ = mois [(k−1)·12, k·12) depuis
+  l'entrée) et `total` = Σ des années terme par terme. `aggregate[view].cohorte` est **aligné
+  par index d'année** (helper `aggregateCohort`) : la série agrégée a pour longueur la
+  carrière la plus longue, chaque année _k_ = Σ sur les lignes de `perYear[k] × volume`, une
+  ligne plus courte ne contribuant **pas au-delà de sa carrière** (= 0) ; `total` = Σ de
+  toutes les contributions (année, volume).
+
+`permanent` et `cohorte` sont calculés **par agent** à la **date de recrutement** de la
+ligne, le volume n'étant appliqué qu'à l'agrégat (décision A2). Une vue qui ne porte aucune
+ligne donne `aggregate[view].permanent|cohorte = null`.
+
+### View-aware : stratégie de coût d'échelon (domaine)
+
+Les calculateurs `PermanentRegimeCalculator` et `CohortHorizonCalculator` étaient
+**base-only** (ils valorisaient chaque échelon via `AnnualCostCalculator`, sans vue). Pour
+rendre les deux horizons **view-aware** — le **terme retraite suit la vue** comme pour
+year1, les trois autres termes restant le coût de base — sans dupliquer la moyenne pondérée
+ni la série, une **stratégie de coût d'échelon** est introduite dans le domaine :
+
+- `App\Domain\Cost\StepCostCalculator` — interface `compute(AgentSituation, \DateTimeImmutable):
+  AnnualCost` : stratégie de valorisation d'un échelon.
+- `App\Domain\Cost\ViewAwareStepCost` — implémentation déléguant à `CostViewCalculator`
+  (#18) pour un code de vue donné ; seul le terme retraite diffère entre vues.
+- `PermanentRegimeCalculator::compute(...)` et `CohortHorizonCalculator::compute(...)` /
+  `computeFullCareer(...)` reçoivent un **paramètre optionnel** `?StepCostCalculator
+  $stepCost` (défaut `null` ⇒ repli sur l'`AnnualCostCalculator` interne = coût de base, donc
+  **non-régression** du comportement base-only). L'orchestrateur injecte un
+  `new ViewAwareStepCost($viewCalculator, $view)` par vue. Les calculateurs restent **purs**
+  et l'interface est dans `src/Domain`.
+
+### Factory `Profile(+Grille) → Career` (infrastructure)
+
+`App\Infrastructure\Cost\CareerFactory::fromProfile(Profile): Career` construit la carrière
+de domaine à partir de l'échelon d'entrée du profil et de sa grille :
+
+- `App\Infrastructure\Repository\EchelonRepository::forGrilleFromRank(Grille, int $fromRank):
+  list<Echelon>` charge les échelons de la grille à partir du rang d'entrée (inclus),
+  **ordonnés par rang croissant** (la grille est lue via `entryEchelon->grille` ; il n'y a pas
+  de FK grille sur `Profile`).
+- Pour chaque échelon, la factory compose une `AgentSituation` (`body.code`, `body.versant`,
+  `echelon.increasedIndex`, `retirementScheme.code`) et un `CareerStep` avec sa durée.
+- **Durée du terminal** : le dernier échelon a `durationMonths` null en base. La factory lui
+  applique alors la durée `$terminalDurationMonths`, **injectée au câblage**
+  (`config/services.yaml`) et valant par défaut `CareerFactory::DEFAULT_TERMINAL_DURATION_MONTHS
+  = 60` (mois). C'est une **hypothèse de modélisation tunable** (documentée côté fonctionnel).
+  La cohorte n'est pas sensible à cette durée (le terminal est stationnaire).
+
+La factory ne produit **aucune référence** à l'entité ni à Doctrine : l'objet rendu est une
+`Career` de domaine. _Note de revue (R2)_ : le repli 60 mois s'applique à **tout** échelon
+`durationMonths` null, pas uniquement au dernier (piste de durcissement consignée en PR).
+
+### Orchestration, 422 et cache
+
+`ScenarioResultCalculator::compute(Scenario, horizons, views, bool $detail = false)` boucle
+désormais sur les horizons demandés. Par ligne, la `Career` n'est construite qu'**une fois**
+(indépendante de la vue) si `permanent` ou `cohorte` est demandé, puis valorisée par vue. Les
+appels aux calculateurs restent **dans la portée du jeu épinglé** (`ParameterSetScope`) ;
+les exceptions de domaine `MissingDated{Rate,Amount}Exception` / `MissingPrimeRateException`
+sont enveloppées en `UncomputableViewException` → **422** (jamais 500) **pour tous les
+horizons**, avant toute mise en cache.
+
+Le **détail `detail=full` ne déplie que l'année 1** : `permanent` et `cohorte` sont
+sérialisés sans bloc `detail` (ces horizons sont des moyennes/sommes sans `CostTrace` —
+limite assumée). La **clé de cache** intègre déjà les horizons triés (#19) : aucune
+modification du contrat de cache, les sélections `year1` / `year1,permanent,cohorte` / etc.
+ont des entrées distinctes et l'ordre des horizons reste indifférent.
+
+### Frontière, hors périmètre et tests
+
+Deptrac reste vert : la reconstruction de la carrière et la boucle d'horizons sont en
+`src/Infrastructure`, le domaine (`PermanentRegimeCalculator`, `CohortHorizonCalculator`,
+`StepCostCalculator`, `ViewAwareStepCost`) n'importe ni Doctrine ni entité. Hors périmètre
+#66 : le **front** (#20), un **paramètre de borne** de la série cohorte (toute la carrière
+exposée), le **calibrage PAP** (#22) et l'**extension des profils/programmes** (#25/#26).
+Tests : `tests/Infrastructure/Controller/ScenarioResultPermanentApiTest`,
+`ScenarioResultCohortApiTest`, `ScenarioResultMultiHorizonApiTest` (non-régression
+multi-horizon, year1 inchangé, `detail=full` year1-seul, cache par horizons, horizon inconnu
+→ 422), `tests/Infrastructure/Cost/CareerFactoryTest`, et les extensions domaine
+`PermanentRegimeCalculatorTest`, `CohortHorizonCalculatorTest`, `ViewAwareStepCostTest`.
 
 ## Kernel et amorçage
 

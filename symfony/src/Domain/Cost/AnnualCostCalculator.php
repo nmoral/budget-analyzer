@@ -19,7 +19,7 @@ use App\Domain\Shared\PrimeRateProvider;
  * précision : chaque produit est arrondi half-up à 6 décimales dans `Amount`, le
  * total est la somme exacte des quatre termes (aucun arrondi métier).
  */
-final class AnnualCostCalculator
+final class AnnualCostCalculator implements StepCostCalculator
 {
     public function __construct(
         private readonly IndexedSalaryCalculator $indexedSalary,
