@@ -20,7 +20,7 @@ final class ConcoursSessionPersistenceTest extends IntegrationTestCase
         $concours = $this->newConcoursSession(
             2025,
             'externe',
-            ['postes' => 8117, 'inscrits' => 43525, 'presents' => 18524, 'admis' => 7576],
+            ['postes' => 8102, 'inscrits' => 43276, 'presents' => 18387, 'admis' => 7561],
             $corps,
             $source,
             $set,
@@ -38,10 +38,10 @@ final class ConcoursSessionPersistenceTest extends IntegrationTestCase
 
         self::assertSame(2025, $reread->session);
         self::assertSame('externe', $reread->voie);
-        self::assertSame(8117, $reread->postes);
-        self::assertSame(43525, $reread->inscrits);
-        self::assertSame(18524, $reread->presents);
-        self::assertSame(7576, $reread->admis);
+        self::assertSame(8102, $reread->postes);
+        self::assertSame(43276, $reread->inscrits);
+        self::assertSame(18387, $reread->presents);
+        self::assertSame(7561, $reread->admis);
 
         // Rattachements (FK) correctement relus.
         self::assertSame('PE', $reread->body->code);

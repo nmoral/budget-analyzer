@@ -1,5 +1,5 @@
 body_code,session,voie,postes,inscrits,presents,admis,source
-PE,2021,externe,8694,84131,26657,8294,menj-crpe-2021
+PE,2021,externe,8684,83736,26537,8284,menj-crpe-2021
 PE,2021,externe_supplementaire,300,5579,3137,300,menj-crpe-2021
 PE,2021,externe_special,190,569,268,114,menj-crpe-2021
 PE,2021,troisieme,689,11358,3057,700,menj-crpe-2021
@@ -25,7 +25,7 @@ PE,2024,troisieme,1199,13543,4182,952,menj-crpe-2024
 PE,2024,second_interne,581,4691,1470,299,menj-crpe-2024
 PE,2024,second_interne_special,26,58,15,4,menj-crpe-2024
 PE,2024,interne_exceptionnel,370,745,343,183,menj-crpe-2024
-PE,2025,externe,8117,43525,18524,7576,menj-crpe-2025
+PE,2025,externe,8102,43276,18387,7561,menj-crpe-2025
 PE,2025,externe_supplementaire,500,2982,1381,393,menj-crpe-2025
 PE,2025,externe_special,174,360,175,65,menj-crpe-2025
 PE,2025,troisieme,1027,13274,3728,991,menj-crpe-2025

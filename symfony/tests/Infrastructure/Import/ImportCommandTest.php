@@ -501,10 +501,10 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame([
             'session' => 2025,
             'voie' => 'externe',
-            'postes' => 8117,
-            'inscrits' => 43525,
-            'presents' => 18524,
-            'admis' => 7576,
+            'postes' => 8102,
+            'inscrits' => 43276,
+            'presents' => 18387,
+            'admis' => 7561,
             'source' => 'menj-crpe-2025',
         ], $row);
     }
@@ -556,7 +556,7 @@ final class ImportCommandTest extends IntegrationTestCase
     public function testUnknownSourceInConcoursIsRejected(): void
     {
         $dir = $this->copyData();
-        $this->replaceInFile($dir . '/data/concours_admis.csv', '7576,menj-crpe-2025', '7576,inexistant');
+        $this->replaceInFile($dir . '/data/concours_admis.csv', '7561,menj-crpe-2025', '7561,inexistant');
 
         $tester = $this->runImport('deadbeef', $dir);
 
@@ -582,7 +582,7 @@ final class ImportCommandTest extends IntegrationTestCase
     public function testUnknownSourceInConcoursRaisesUnknownSourceException(): void
     {
         $dir = $this->copyData();
-        $this->replaceInFile($dir . '/data/concours_admis.csv', '7576,menj-crpe-2025', '7576,inexistant');
+        $this->replaceInFile($dir . '/data/concours_admis.csv', '7561,menj-crpe-2025', '7561,inexistant');
 
         $this->expectException(UnknownSourceException::class);
         $this->expectExceptionMessage('source inconnue `inexistant`');

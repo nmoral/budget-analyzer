@@ -3,7 +3,7 @@
   "retrieved_at": "2026-11-16",
   "script": "sources.concours_admis",
   "script_version": "1",
-  "sha256": "6d00f6e11a11fbebd51490d2dddf47ee942bb376663b5697932909f015870ec0",
+  "sha256": "fa60e40ac7261baf47740b513ba84d7bff79a6919fcfc116f6391abeff827e04",
   "source": "Admis aux concours de recrutement de professeurs des écoles (CRPE, enseignement public) — totaux nationaux par voie, sessions 2021 à 2025",
   "url": "https://www.devenirenseignant.gouv.fr/statistiques"
 }

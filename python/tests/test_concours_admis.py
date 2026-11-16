@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import unicodedata
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -24,7 +25,7 @@ PUBLICATIONS = REAL_DATA / "sources" / "publications"
 RETRIEVED_AT = "2026-11-16"
 HEADER = "body_code,session,voie,postes,inscrits,presents,admis,source"
 COUNT_COLUMNS = ("session", "postes", "inscrits", "presents", "admis")
-LINE_2025_EXTERNE = "PE,2025,externe,8117,43525,18524,7576,menj-crpe-2025"
+LINE_2025_EXTERNE = "PE,2025,externe,8102,43276,18387,7561,menj-crpe-2025"
 SESSIONS = ("2021", "2022", "2023", "2024", "2025")
 VOIES_2025 = [
     "externe",
@@ -38,6 +39,14 @@ VOIES_2025 = [
 PUBLIC_SECTION = "Données chiffrées des concours de l'enseignement public"
 PRIVATE_SECTION = "Données chiffrées des concours de l'enseignement privé"
 POLYNESIE = "Polynésie française"
+FIGURES = ("postes", "inscrits", "presents", "admis")
+CELL = "|"
+LINE_2021_EXTERNE = "PE,2021,externe,8684,83736,26537,8284,menj-crpe-2021"
+EXTERNE = "Concours externe de recrutement de professeurs des écoles"
+POLYNESIE_BLOCK = (
+    "Concours externe de recrutement de professeurs des écoles du corps de "
+    "l’Etat créé pour la Polynésie française"
+)
 
 
 @pytest.fixture
@@ -73,7 +82,11 @@ def _registry() -> dict[str, dict[str, str]]:
 
 
 class _TextLines(HTMLParser):
-    """Texte visible d'une page HTML, une ligne par bloc (hors script/style)."""
+    """Texte visible d'une page HTML, une ligne par bloc (hors script/style).
+
+    Chaque cellule ``<td>`` est précédée de ``CELL`` : une ligne de tableau par
+    académie se lit ``|Académie|postes|inscrits|…``.
+    """
 
     _BREAKS = frozenset({"p", "li", "h1", "h2", "h3", "h4", "tr", "div", "table"})
 
@@ -87,6 +100,8 @@ class _TextLines(HTMLParser):
             self._skip += 1
         if tag in self._BREAKS:
             self._parts.append("\n")
+        if tag == "td":
+            self._parts.append(CELL)
 
     def handle_endtag(self, tag: str) -> None:
         if tag in ("script", "style"):
@@ -125,6 +140,54 @@ def _block_figures(section: list[str], block: str) -> dict[str, str]:
     return figures
 
 
+def _block_lines(section: list[str], block: str) -> list[str]:
+    """Lignes d'un bloc publié, de son intitulé (exclu) au bloc suivant."""
+    start = section.index(block) + 1
+    end = next(
+        (
+            index
+            for index in range(start, len(section))
+            if "recrutement de professeurs des écoles" in section[index]
+        ),
+        len(section),
+    )
+    return section[start:end]
+
+
+def _academy_rows(section: list[str], block: str) -> dict[str, dict[str, str]]:
+    """Lignes « Résultats par académies » d'un bloc : académie → effectifs."""
+    rows: dict[str, dict[str, str]] = {}
+    for line in _block_lines(section, block):
+        if not line.startswith(CELL):
+            continue
+        name, *counts = line.split(CELL)[1:]
+        postes, inscrits, presents, _admissibles, admis = (
+            count.replace(" ", "") for count in counts[:5]
+        )
+        rows[name] = dict(
+            zip(FIGURES, (postes, inscrits, presents, admis), strict=True)
+        )
+    return rows
+
+
+def _is_polynesie(name: str) -> bool:
+    """« Polynésie Française », « POLYNÉSIE FRANCAISE »… (casse et accents)."""
+    decomposed = unicodedata.normalize("NFKD", name)
+    plain = "".join(char for char in decomposed if not unicodedata.combining(char))
+    return "polynesie" in plain.lower()
+
+
+def _sum(parts: list[dict[str, str]]) -> dict[str, str]:
+    return {key: str(sum(int(part[key]) for part in parts)) for key in FIGURES}
+
+
+def _minus(total: dict[str, str], parts: list[dict[str, str]]) -> dict[str, str]:
+    return {
+        key: str(int(total[key]) - sum(int(part[key]) for part in parts))
+        for key in FIGURES
+    }
+
+
 # --- C1.1 : schéma ----------------------------------------------------------
 
 
@@ -158,24 +221,27 @@ def test_schema_columns_integer_counts_all_required() -> None:
 
 
 def test_nominal_2025_externe_line_is_accepted(data_dir: Path) -> None:
-    """C2.1 — `PE,2025,externe,8117,43525,18524,7576,menj-crpe-2025` acceptée."""
+    """C2.1 — `PE,2025,externe,8102,43276,18387,7561,menj-crpe-2025` acceptée."""
     out = run_concours()
     assert LINE_2025_EXTERNE in out.read_text("utf-8").splitlines()
     assert validate_csv(out, "concours_admis").valid
 
 
 def test_concours_rows_keep_schema_columns_only() -> None:
-    """Le libellé du bloc source (traçabilité du brut) n'entre pas dans le CSV."""
+    """Bloc source et retranchements (traçabilité du brut) hors du CSV."""
     raw = [
         {
             "body_code": "PE",
             "session": "2025",
             "voie": "externe",
             "block": "Concours externe de recrutement de professeurs des écoles",
-            "postes": "8117",
-            "inscrits": "43525",
-            "presents": "18524",
-            "admis": "7576",
+            "published_total": {"postes": "8117"},
+            "excluded": [{"kind": "bloc", "postes": "15"}],
+            "note": "retranchement",
+            "postes": "8102",
+            "inscrits": "43276",
+            "presents": "18387",
+            "admis": "7561",
             "source": "menj-crpe-2025",
         }
     ]
@@ -184,10 +250,10 @@ def test_concours_rows_keep_schema_columns_only() -> None:
             "body_code": "PE",
             "session": "2025",
             "voie": "externe",
-            "postes": "8117",
-            "inscrits": "43525",
-            "presents": "18524",
-            "admis": "7576",
+            "postes": "8102",
+            "inscrits": "43276",
+            "presents": "18387",
+            "admis": "7561",
             "source": "menj-crpe-2025",
         }
     ]
@@ -237,27 +303,177 @@ def test_polynesie_and_private_blocks_excluded() -> None:
         assert row["block"] in section, row["block"]
 
 
-def test_polynesie_figures_not_retained(data_dir: Path) -> None:
-    """C2.3 — 2025 : le bloc Polynésie (15 postes, 249 inscrits) n'est pas repris."""
+def test_2025_externe_total_excludes_polynesie_block(data_dir: Path) -> None:
+    """C2.1 / C2.3 — 2025 externe : le bloc Polynésie est retranché du total.
+
+    Recalculé depuis la page archivée : total national publié moins le bloc
+    séparé « … corps de l'Etat créé pour la Polynésie française » (15 / 249 /
+    137 / 15), compté dans ce total ; égal à la somme des académies.
+    """
+    section = _public_section("2025")
+    published = _block_figures(section, EXTERNE)
+    polynesie = _block_figures(section, POLYNESIE_BLOCK)
+    assert polynesie == {
+        "postes": "15",
+        "inscrits": "249",
+        "presents": "137",
+        "admis": "15",
+    }
+    expected = _minus(published, [polynesie])
+    assert expected == _sum(list(_academy_rows(section, EXTERNE).values()))
+    line = ",".join(["PE", "2025", "externe", *expected.values(), "menj-crpe-2025"])
+    assert line == LINE_2025_EXTERNE
     rows = _generated_rows(data_dir)
     assert not [
-        row for row in rows if (row["postes"], row["inscrits"]) == ("15", "249")
+        row
+        for row in rows
+        if (row["postes"], row["inscrits"]) in (("15", "249"), ("8117", "43525"))
     ]
+
+
+def test_2021_externe_total_excludes_polynesie_academy_row(data_dir: Path) -> None:
+    """C2.3 — 2021 externe : la ligne académie Polynésie est retranchée du total.
+
+    Recalculé depuis la page archivée : total national publié moins la ligne
+    « Polynésie Française » du tableau « Résultats par académies ».
+    """
+    section = _public_section("2021")
+    published = _block_figures(section, EXTERNE)
+    polynesie = _academy_rows(section, EXTERNE)["Polynésie Française"]
+    assert polynesie == {
+        "postes": "10",
+        "inscrits": "395",
+        "presents": "120",
+        "admis": "10",
+    }
+    expected = _minus(published, [polynesie])
+    line = ",".join(["PE", "2021", "externe", *expected.values(), "menj-crpe-2021"])
+    assert line == LINE_2021_EXTERNE
+    csv_lines = (REAL_DATA / "data" / "concours_admis.csv").read_text("utf-8")
+    assert LINE_2021_EXTERNE in csv_lines.splitlines()
+    assert LINE_2021_EXTERNE in run_concours().read_text("utf-8").splitlines()
+
+
+def test_retranchements_documented_in_raw() -> None:
+    """C2.3 — le brut garde le total publié et l'élément Polynésie retranché."""
+    by_key = {(raw["session"], raw["voie"]): raw for raw in _raw_rows()}
+    assert {key for key, raw in by_key.items() if "excluded" in raw} == {
+        ("2021", "externe"),
+        ("2025", "externe"),
+    }
+    assert by_key[("2021", "externe")]["published_total"] == {
+        "postes": "8694",
+        "inscrits": "84131",
+        "presents": "26657",
+        "admis": "8294",
+    }
+    assert by_key[("2021", "externe")]["excluded"] == [
+        {
+            "kind": "academie",
+            "label": "Polynésie Française",
+            "postes": "10",
+            "inscrits": "395",
+            "presents": "120",
+            "admis": "10",
+        }
+    ]
+    assert by_key[("2025", "externe")]["published_total"] == {
+        "postes": "8117",
+        "inscrits": "43525",
+        "presents": "18524",
+        "admis": "7576",
+    }
+    assert by_key[("2025", "externe")]["excluded"] == [
+        {
+            "kind": "bloc",
+            "label": POLYNESIE_BLOCK,
+            "postes": "15",
+            "inscrits": "249",
+            "presents": "137",
+            "admis": "15",
+        }
+    ]
+    for raw in by_key.values():
+        assert ("published_total" in raw) == ("excluded" in raw) == ("note" in raw)
+
+
+def test_no_polynesie_academy_row_counted_in_retained_blocks() -> None:
+    """C2.3 — toutes sessions : aucune ligne académie Polynésie n'est comptée.
+
+    Pour chaque bloc public repris doté d'un tableau « Résultats par
+    académies », la valeur retenue est la somme des académies hors toute ligne
+    Polynésie (casse et accents indifférents). 2024 externe : la ligne figure
+    au tableau sans être comptée dans le total publié, rien n'est retranché.
+    """
+    tables_with_polynesie = []
+    for row in _raw_rows():
+        academies = _academy_rows(_public_section(row["session"]), row["block"])
+        if not academies:
+            continue
+        kept = [
+            figures for name, figures in academies.items() if not _is_polynesie(name)
+        ]
+        retained = {key: row[key] for key in FIGURES}
+        assert _sum(kept) == retained, (row["session"], row["voie"])
+        if len(kept) < len(academies):
+            tables_with_polynesie.append((row["session"], row["voie"]))
+    assert tables_with_polynesie == [("2021", "externe"), ("2024", "externe")]
+
+
+def test_polynesie_name_matched_whatever_case_and_accents() -> None:
+    assert _is_polynesie("Polynésie Française")
+    assert _is_polynesie("POLYNÉSIE FRANCAISE")
+    assert _is_polynesie("polynesie")
+    assert not _is_polynesie("Poitiers")
+
+
+def test_academy_rows_parsed_from_each_retained_table() -> None:
+    """Le tableau par académies de chaque bloc doté d'un tableau est bien lu."""
+    section = _public_section("2021")
+    rows = _academy_rows(
+        section, "Concours externe de recrutement de professeurs des écoles"
+    )
+    assert len(rows) == 32
+    assert rows["Créteil"] == {
+        "postes": "1420",
+        "inscrits": "4735",
+        "presents": "1640",
+        "admis": "1056",
+    }
+    assert "Bordeaux" not in _academy_rows(
+        section,
+        "Concours externe supplémentaire de recrutement de professeurs des écoles "
+        "(académie de Créteil)",
+    )
 
 
 # --- C2 : données réelles transcrites des pages archivées -------------------
 
 
 def test_every_row_matches_its_archived_public_block() -> None:
-    """C2 — chaque ligne reprend les totaux nationaux de son bloc sur la page."""
+    """C2 — chaque ligne = total publié de son bloc − retranchements Polynésie.
+
+    Le total publié et chaque élément retranché (ligne académie ou bloc) sont
+    relus sur la page archivée.
+    """
     rows = _raw_rows()
     assert len(rows) == 33
     for row in rows:
-        figures = _block_figures(_public_section(row["session"]), row["block"])
-        expected = {
-            key: row[key] for key in ("postes", "inscrits", "presents", "admis")
-        }
-        assert figures == expected, (row["session"], row["voie"])
+        section = _public_section(row["session"])
+        figures = _block_figures(section, row["block"])
+        retained = {key: row[key] for key in FIGURES}
+        excluded = row.get("excluded", [])
+        published = row.get("published_total", retained)
+        assert figures == published, (row["session"], row["voie"])
+        assert _minus(figures, excluded) == retained, (row["session"], row["voie"])
+        for entry in excluded:
+            assert _is_polynesie(entry["label"]), entry["label"]
+            on_page = (
+                _academy_rows(section, row["block"])[entry["label"]]
+                if entry["kind"] == "academie"
+                else _block_figures(section, entry["label"])
+            )
+            assert on_page == {key: entry[key] for key in FIGURES}, entry["label"]
 
 
 def test_every_public_block_of_each_session_is_transcribed() -> None:

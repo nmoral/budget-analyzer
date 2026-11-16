@@ -5,10 +5,27 @@
       "session": "2021",
       "voie": "externe",
       "block": "Concours externe de recrutement de professeurs des écoles",
-      "postes": "8694",
-      "inscrits": "84131",
-      "presents": "26657",
-      "admis": "8294",
+      "published_total": {
+        "postes": "8694",
+        "inscrits": "84131",
+        "presents": "26657",
+        "admis": "8294"
+      },
+      "excluded": [
+        {
+          "kind": "academie",
+          "label": "Polynésie Française",
+          "postes": "10",
+          "inscrits": "395",
+          "presents": "120",
+          "admis": "10"
+        }
+      ],
+      "note": "Total national publié moins la ligne académie « Polynésie Française » du tableau « Résultats par académies » (corps distinct, sans bloc séparé en 2021) ; retenu = somme des académies hors Polynésie.",
+      "postes": "8684",
+      "inscrits": "83736",
+      "presents": "26537",
+      "admis": "8284",
       "source": "menj-crpe-2021"
     },
     {
@@ -291,10 +308,27 @@
       "session": "2025",
       "voie": "externe",
       "block": "Concours externe de recrutement de professeurs des écoles",
-      "postes": "8117",
-      "inscrits": "43525",
-      "presents": "18524",
-      "admis": "7576",
+      "published_total": {
+        "postes": "8117",
+        "inscrits": "43525",
+        "presents": "18524",
+        "admis": "7576"
+      },
+      "excluded": [
+        {
+          "kind": "bloc",
+          "label": "Concours externe de recrutement de professeurs des écoles du corps de l’Etat créé pour la Polynésie française",
+          "postes": "15",
+          "inscrits": "249",
+          "presents": "137",
+          "admis": "15"
+        }
+      ],
+      "note": "Total national publié moins le bloc séparé Polynésie française (corps distinct), compté dans ce total mais absent du tableau « Résultats par académies » ; retenu = somme des académies.",
+      "postes": "8102",
+      "inscrits": "43276",
+      "presents": "18387",
+      "admis": "7561",
       "source": "menj-crpe-2025"
     },
     {

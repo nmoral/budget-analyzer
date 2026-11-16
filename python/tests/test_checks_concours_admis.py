@@ -14,7 +14,7 @@ ONE_ANOMALY = "Récapitulatif : 1 anomalie(s) détectée(s)."
 
 HEADER = "body_code,session,voie,postes,inscrits,presents,admis,source"
 SOURCES_JSON = '{"menj-crpe-2024": {"label": "x"}, "menj-crpe-2025": {"label": "x"}}'
-LINE_2025_EXTERNE = "PE,2025,externe,8117,43525,18524,7576,menj-crpe-2025"
+LINE_2025_EXTERNE = "PE,2025,externe,8102,43276,18387,7561,menj-crpe-2025"
 LINE_2025_TROISIEME = "PE,2025,troisieme,1027,13274,3728,991,menj-crpe-2025"
 LINE_2024_EXTERNE = "PE,2024,externe,7917,42145,18385,6961,menj-crpe-2024"
 

@@ -4,7 +4,10 @@ Professeurs des écoles (``PE``) : totaux nationaux des CRPE de l'enseignement
 public (postes offerts, candidats inscrits, présents aux épreuves écrites,
 admis), transcrits des pages statistiques de devenirenseignant.gouv.fr, une page
 par session. Le brut versionné garde, pour traçabilité, le libellé exact du bloc
-source (``block``), qui n'entre pas dans le CSV.
+source (``block``), qui n'entre pas dans le CSV, et, quand la Polynésie française
+(corps distinct) a été retranchée du total publié (externe 2021 : ligne académie ;
+externe 2025 : bloc séparé), ce total (``published_total``) et l'élément retranché
+(``excluded``).
 """
 
 from __future__ import annotations
