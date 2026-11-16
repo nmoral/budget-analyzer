@@ -81,6 +81,86 @@ class Violation:
 Invariant = Callable[[Sequence[LoadedFile]], list[Violation]]
 
 
+@dataclass(frozen=True)
+class _Format:
+    """Forme attendue d'une cellule : motif strict, plus une validation calendaire
+    pour les dates ; ``blank_allowed`` admet la cellule blanche (``end_date``)."""
+
+    label: str
+    pattern: re.Pattern[str]
+    is_date: bool = False
+    blank_allowed: bool = False
+
+    def accepts(self, raw: str) -> bool:
+        if self.blank_allowed and not raw.strip():
+            return True
+        if self.pattern.fullmatch(raw) is None:
+            return False
+        return not self.is_date or _is_calendar_date(raw)
+
+
+def _is_calendar_date(raw: str) -> bool:
+    try:
+        date.fromisoformat(raw)
+    except ValueError:
+        return False
+    return True
+
+
+_INTEGER = _Format("un entier", re.compile(r"-?[0-9]+"))
+_DECIMAL = _Format("un décimal", re.compile(r"-?[0-9]+(?:\.[0-9]+)?"))
+_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_DATE = _Format("une date AAAA-MM-JJ", _DATE_PATTERN, is_date=True)
+_END_DATE = _Format(
+    "une date AAAA-MM-JJ", _DATE_PATTERN, is_date=True, blank_allowed=True
+)
+
+_CONCOURS_COUNTS = ("postes", "inscrits", "presents", "admis")
+_COUNTS_FORMATS = dict.fromkeys(_CONCOURS_COUNTS, _INTEGER)
+_ECHELON_COLUMNS = ("rank", "gross_index", "increased_index")
+_PERIOD_COLUMNS = ("start_date", "end_date")
+_PERIOD_FORMATS = dict(zip(_PERIOD_COLUMNS, (_DATE, _END_DATE), strict=True))
+
+# Colonnes lues par un invariant numérique ou de dates, par schéma.
+_FORMATS: dict[str, dict[str, _Format]] = {
+    "concours_admis": _COUNTS_FORMATS,
+    "concours_admis_academie": _COUNTS_FORMATS,
+    "echelon": dict.fromkeys(_ECHELON_COLUMNS, _INTEGER),
+    "parametre_date": {"value": _DECIMAL, **_PERIOD_FORMATS},
+    "grille": _PERIOD_FORMATS,
+    "budget_financeur": {"value": _DECIMAL, **_PERIOD_FORMATS},
+    "masse_salariale_corps": {"value": _DECIMAL, **_PERIOD_FORMATS},
+    "taux_primes": {"value": _DECIMAL},
+}
+
+
+def _well_formed(schema: str, row: dict[str, str], columns: Sequence[str]) -> bool:
+    """Vrai si les ``columns`` lues par un invariant sont bien formées."""
+    formats = _FORMATS[schema]
+    return all(formats[column].accepts(row[column]) for column in columns)
+
+
+def check_formats(files: Sequence[LoadedFile]) -> list[Violation]:
+    """Format — chaque cellule lue par un invariant numérique ou de dates est un
+    entier, un décimal ou une date ``AAAA-MM-JJ`` stricts (une anomalie par
+    cellule) ; les autres invariants ignorent la ligne fautive."""
+    violations: list[Violation] = []
+    for loaded in files:
+        formats = _FORMATS.get(loaded.schema, {})
+        for line, row in loaded.rows:
+            violations.extend(
+                Violation(
+                    invariant="format",
+                    file=loaded.filename,
+                    line=line,
+                    message=f"{column} : « {row[column]} » n'est pas {fmt.label}",
+                )
+                for column, fmt in formats.items()
+                if not fmt.accepts(row[column])
+            )
+    return violations
+
+
 def check_source_not_blank(files: Sequence[LoadedFile]) -> list[Violation]:
     """C4 — toute ligne d'un schéma à colonne ``source`` a une source non blanche."""
     violations: list[Violation] = []
@@ -116,7 +196,8 @@ def check_indices_strictly_increasing(files: Sequence[LoadedFile]) -> list[Viola
 def _echelon_index_violations(loaded: LoadedFile) -> list[Violation]:
     grilles: dict[str, list[tuple[int, dict[str, str]]]] = {}
     for line, row in loaded.rows:
-        grilles.setdefault(row["grille"], []).append((line, row))
+        if _well_formed(loaded.schema, row, _ECHELON_COLUMNS):
+            grilles.setdefault(row["grille"], []).append((line, row))
 
     violations: list[Violation] = []
     for grille, entries in grilles.items():
@@ -197,6 +278,8 @@ def _period_violations(
 ) -> list[Violation]:
     groups: dict[str, list[_Period]] = {}
     for line, row in loaded.rows:
+        if not _well_formed(loaded.schema, row, _PERIOD_COLUMNS):
+            continue
         end_raw = row["end_date"]
         period = _Period(
             line=line,
@@ -318,7 +401,7 @@ def check_values_within_bounds(bounds: _Bounds) -> Invariant:
         violations: list[Violation] = []
         for loaded in files:
             if loaded.schema == "parametre_date":
-                for line, row in loaded.rows:
+                for line, row in _rows_with_value(loaded):
                     bound = bounds.parametre_date_by_key.get(row["key"])
                     if bound is not None:
                         violations.extend(
@@ -330,7 +413,7 @@ def check_values_within_bounds(bounds: _Bounds) -> Invariant:
             schema_bound = bounds.value_bound_of(loaded.schema)
             if schema_bound is None:
                 continue
-            for line, row in loaded.rows:
+            for line, row in _rows_with_value(loaded):
                 violations.extend(
                     _bound_violations(
                         loaded,
@@ -343,6 +426,15 @@ def check_values_within_bounds(bounds: _Bounds) -> Invariant:
         return violations
 
     return invariant
+
+
+def _rows_with_value(loaded: LoadedFile) -> list[tuple[int, dict[str, str]]]:
+    """Lignes dont la colonne ``value`` est un décimal bien formé."""
+    return [
+        (line, row)
+        for line, row in loaded.rows
+        if _well_formed(loaded.schema, row, ("value",))
+    ]
 
 
 def _bound_violations(
@@ -403,8 +495,6 @@ def check_sources_declared(declared: frozenset[str] | None) -> Invariant:
     return invariant
 
 
-_CONCOURS_COUNTS = ("postes", "inscrits", "presents", "admis")
-
 # Clé d'unicité de chaque schéma de sessions de concours (national, par académie).
 _CONCOURS_KEYS: dict[str, tuple[str, ...]] = {
     "concours_admis": ("body_code", "session", "voie"),
@@ -434,6 +524,8 @@ def check_concours_counts(files: Sequence[LoadedFile]) -> list[Violation]:
     violations: list[Violation] = []
     for loaded in _concours_files(files):
         for line, row in loaded.rows:
+            if not _well_formed(loaded.schema, row, _CONCOURS_COUNTS):
+                continue
             violations.extend(
                 Violation(
                     invariant="concours",
@@ -498,9 +590,13 @@ def check_concours_cross_totals(files: Sequence[LoadedFile]) -> list[Violation]:
     academies = by_schema.get("concours_admis_academie")
     if national is None or academies is None:
         return []
+    academy_rows = [row for _, row in academies.rows if row["academie"] != _POLYNESIE]
+    national_rows = [row for _, row in national.rows]
+    skipped = _malformed_count_keys(academies.schema, academy_rows)
+    skipped |= _malformed_count_keys(national.schema, national_rows)
     sums: dict[str, dict[str, int]] = {}
-    for _, row in academies.rows:
-        if row["academie"] == _POLYNESIE:
+    for row in academy_rows:
+        if _concours_key("concours_admis", row) in skipped:
             continue
         totals = sums.setdefault(
             _concours_key("concours_admis", row), dict.fromkeys(_CONCOURS_COUNTS, 0)
@@ -510,6 +606,8 @@ def check_concours_cross_totals(files: Sequence[LoadedFile]) -> list[Violation]:
     violations: list[Violation] = []
     for line, row in national.rows:
         key = _concours_key("concours_admis", row)
+        if key in skipped:
+            continue
         totals = sums.get(key, dict.fromkeys(_CONCOURS_COUNTS, 0))
         violations.extend(
             Violation(
@@ -525,6 +623,15 @@ def check_concours_cross_totals(files: Sequence[LoadedFile]) -> list[Violation]:
             if totals[column] != int(row[column])
         )
     return violations
+
+
+def _malformed_count_keys(schema: str, rows: list[dict[str, str]]) -> set[str]:
+    """Clés (``body_code``, ``session``, ``voie``) d'au moins un effectif mal formé."""
+    return {
+        _concours_key("concours_admis", row)
+        for row in rows
+        if not _well_formed(schema, row, _CONCOURS_COUNTS)
+    }
 
 
 def academie_codes(entries: list[AcademieEntry] | None) -> frozenset[str] | None:
@@ -665,6 +772,7 @@ def _entry_breach(entry: AcademieEntry) -> str:
 
 # Registre des invariants sans configuration externe (C3 est fabriqué dans run()).
 STATELESS_INVARIANTS: tuple[Invariant, ...] = (
+    check_formats,
     check_source_not_blank,
     check_indices_strictly_increasing,
     check_periods_no_overlap,
