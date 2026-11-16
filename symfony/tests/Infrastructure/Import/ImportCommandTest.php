@@ -12,6 +12,7 @@ use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\ScenarioLine;
 use App\Infrastructure\Import\Importer;
+use App\Infrastructure\Import\UnknownAcademieException;
 use App\Infrastructure\Import\UnknownCorpsException;
 use App\Infrastructure\Import\UnknownSourceException;
 use App\Tests\Infrastructure\Persistence\IntegrationTestCase;
@@ -63,8 +64,9 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(10, $this->rowCount('dated_parameter'));
         // Les 22 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49 ;
         // +4 slugs budget_financeur pap/ondam depuis #70 ; +2 slugs masse salariale #71 ;
-        // +5 slugs menj-crpe-<session> des concours #72).
-        self::assertSame(22, $this->rowCount('source'));
+        // +5 slugs menj-crpe-<session> des concours #72 ; +5 slugs
+        // menj-crpe-<session>-academies et +2 slugs du référentiel des académies #80).
+        self::assertSame(29, $this->rowCount('source'));
     }
 
     /** #49 C4 — les 3 clés r_autres (FPE/FPH) et RAFP sont importées en base. */
@@ -143,7 +145,7 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(22, $this->rowCount('source'));
+        self::assertSame(29, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
         self::assertSame(2, $this->rowCount('funder'));
         self::assertSame(4, $this->rowCount('reference_budget'));
@@ -589,6 +591,177 @@ final class ImportCommandTest extends IntegrationTestCase
         $this->importer()->import('deadbeef', $dir);
     }
 
+    /** #80 C5.1 — 533 lignes par académie, toutes rattachées à `PE` et à leur académie. */
+    public function testConcoursAcademiesResolveToCorpsAndAcademie(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        self::assertSame(533, $this->rowCount('concours_academie'));
+        self::assertSame(
+            533,
+            $this->rowCountWhere(
+                'concours_academie ca JOIN corps c ON c.id = ca.body_id JOIN academie a ON a.id = ca.academie_id',
+                "c.code = 'PE'",
+            ),
+        );
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+        self::assertSame(533, $this->rowCountWhere('concours_academie', 'parameter_set_id = ' . $setId));
+
+        // Outre-mer : 95 lignes DROM + 6 COM (Polynésie 2021-2025, Saint-Pierre 2024).
+        $join = 'concours_academie ca JOIN academie a ON a.id = ca.academie_id';
+        self::assertSame(101, $this->rowCountWhere($join, "a.statut <> 'metropole'"));
+        self::assertSame(95, $this->rowCountWhere($join, "a.statut = 'drom'"));
+        self::assertSame(5, $this->rowCountWhere($join, "a.code = '41' AND ca.voie = 'externe'"));
+
+        $row = $this->em->getConnection()->fetchAssociative(
+            'SELECT ca.session, ca.voie, a.code AS academie, a.label, a.statut, ca.postes, ca.inscrits, '
+            . 'ca.presents, ca.admis, s.code AS source '
+            . 'FROM concours_academie ca JOIN academie a ON a.id = ca.academie_id '
+            . 'JOIN source s ON s.id = ca.source_id '
+            . "WHERE ca.session = 2025 AND ca.voie = 'externe' AND a.code = '32'",
+        );
+        self::assertSame([
+            'session' => 2025,
+            'voie' => 'externe',
+            'academie' => '32',
+            'label' => 'Guadeloupe',
+            'statut' => 'drom',
+            'postes' => 26,
+            'inscrits' => 442,
+            'presents' => 165,
+            'admis' => 26,
+            'source' => 'menj-crpe-2025-academies',
+        ], $row);
+    }
+
+    /** #80 C5.1 — le référentiel complet des académies est chargé, sourcé (upsert sur `code`). */
+    public function testAcademieReferentialIsLoadedWithItsSource(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        self::assertSame(35, $this->rowCount('academie'));
+        $rows = $this->em->getConnection()->fetchAllAssociative(
+            'SELECT a.code, a.label, a.statut, s.code AS source FROM academie a '
+            . "JOIN source s ON s.id = a.source_id WHERE a.code IN ('05', '28', '40') ORDER BY a.code",
+        );
+        self::assertSame([
+            ['code' => '05', 'label' => 'Caen', 'statut' => 'metropole', 'source' => 'data-education-dnb-academies'],
+            ['code' => '28', 'label' => 'La Réunion', 'statut' => 'drom', 'source' => 'data-education-annuaire-academies'],
+            ['code' => '40', 'label' => 'Nouvelle Calédonie', 'statut' => 'com', 'source' => 'data-education-annuaire-academies'],
+        ], $rows);
+    }
+
+    /** #80 C5.2 — réimport du même commit : mêmes nombres de lignes et d'académies. */
+    public function testReimportingKeepsConcoursAcademieCountStable(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+        $academieId = $this->fetchInt("SELECT id FROM academie WHERE code = '41'");
+
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode());
+
+        self::assertSame(533, $this->rowCount('concours_academie'));
+        self::assertSame(35, $this->rowCount('academie'));
+        self::assertSame(1, $this->rowCountWhere('academie', "code = '41'"));
+        self::assertSame($academieId, $this->fetchInt("SELECT id FROM academie WHERE code = '41'"));
+    }
+
+    /** #80 C5.3 — académie `ZZ` absente de `academies.json` : rollback total. */
+    public function testUnknownAcademieIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis_academie.csv', 'PE,2025,externe,32,', 'PE,2025,externe,ZZ,');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('académie inconnue `ZZ`', $tester->getDisplay());
+        $this->assertNothingImported();
+    }
+
+    /** #80 C5.3 — l'import d'une ligne à l'académie inconnue lève `UnknownAcademieException`. */
+    public function testUnknownAcademieRaisesUnknownAcademieException(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis_academie.csv', 'PE,2025,externe,32,', 'PE,2025,externe,ZZ,');
+
+        $this->expectException(UnknownAcademieException::class);
+        $this->expectExceptionMessage('académie inconnue `ZZ`');
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /** #80 C5.3 — corps `XX` d'une ligne par académie : rollback total (`UnknownCorpsException`). */
+    public function testUnknownCorpsInConcoursAcademieIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis_academie.csv', 'PE,2025,externe,32,', 'XX,2025,externe,32,');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('corps inconnu `XX`', $tester->getDisplay());
+        $this->assertNothingImported();
+    }
+
+    /** #80 C5.3 — corps `XX` d'une ligne par académie : `UnknownCorpsException`. */
+    public function testUnknownCorpsInConcoursAcademieRaisesUnknownCorpsException(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis_academie.csv', 'PE,2025,externe,32,', 'XX,2025,externe,32,');
+
+        $this->expectException(UnknownCorpsException::class);
+        $this->expectExceptionMessage('corps inconnu `XX`');
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /** #80 C5.3 — source `inexistant` d'une ligne par académie : rollback total (`UnknownSourceException`). */
+    public function testUnknownSourceInConcoursAcademieIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile(
+            $dir . '/data/concours_admis_academie.csv',
+            'PE,2025,externe,32,26,442,165,26,menj-crpe-2025-academies',
+            'PE,2025,externe,32,26,442,165,26,inexistant',
+        );
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('source inconnue `inexistant`', $tester->getDisplay());
+        $this->assertNothingImported();
+    }
+
+    /** #80 C5.3 — source `inexistant` d'une ligne par académie : `UnknownSourceException`. */
+    public function testUnknownSourceInConcoursAcademieRaisesUnknownSourceException(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile(
+            $dir . '/data/concours_admis_academie.csv',
+            'PE,2025,externe,32,26,442,165,26,menj-crpe-2025-academies',
+            'PE,2025,externe,32,26,442,165,26,inexistant',
+        );
+
+        $this->expectException(UnknownSourceException::class);
+        $this->expectExceptionMessage('source inconnue `inexistant`');
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /** #80 C5.3 — source d'une académie du référentiel absente de `sources.json` : rollback total. */
+    public function testUnknownSourceInAcademieReferentialIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/academies.json', '"source": "data-education-dnb-academies"', '"source": "inexistant"');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('source inconnue `inexistant`', $tester->getDisplay());
+        $this->assertNothingImported();
+    }
+
     /** C6.1 — réimport du même commit : état identique, aucun doublon ni accumulation. */
     public function testReimportingSameCommitIsIdempotent(): void
     {
@@ -604,12 +777,14 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(22, $this->rowCount('source'));
+        self::assertSame(29, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
         self::assertSame(2, $this->rowCount('funder'));
         self::assertSame(4, $this->rowCount('reference_budget'));
         self::assertSame(2, $this->rowCount('corps_payroll'));
         self::assertSame(33, $this->rowCount('concours_session'));
+        self::assertSame(35, $this->rowCount('academie'));
+        self::assertSame(533, $this->rowCount('concours_academie'));
 
         // Upsert par `code` : aucun doublon sur les référentiels globaux.
         self::assertSame(1, $this->rowCountWhere('source', "code = 'decret-2023-519'"));
@@ -712,6 +887,16 @@ final class ImportCommandTest extends IntegrationTestCase
         $command = $application->find('app:import');
 
         self::assertSame('app:import', $command->getName());
+    }
+
+    private function assertNothingImported(): void
+    {
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('academie'));
+        self::assertSame(0, $this->rowCount('concours_academie'));
+        self::assertSame(0, $this->rowCount('concours_session'));
+        self::assertSame(0, $this->rowCount('corps'));
+        self::assertSame(0, $this->rowCount('source'));
     }
 
     private function dataDir(): string
