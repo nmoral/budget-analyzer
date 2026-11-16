@@ -36,6 +36,7 @@ final class MappingValidationTest extends KernelTestCase
         'App\Infrastructure\Entity\ParameterSet',
         'App\Infrastructure\Entity\ReferenceBudget',
         'App\Infrastructure\Entity\CorpsPayroll',
+        'App\Infrastructure\Entity\ConcoursSession',
     ];
 
     public function testAllSpecEntitiesAreMapped(): void

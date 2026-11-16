@@ -778,8 +778,8 @@ cassait le ré-import idempotent existant (`delete`/`recreate` du `ParameterSet`
 de FK). `Importer` ne supprime plus les lignes **référencées par un objet utilisateur** : au
 ré-import du même commit, le `ParameterSet` est **réutilisé** (même id), `Grille` et `Echelon`
 sont mis à jour **en place par clé naturelle** (upsert : `{body}_{grade}_{version}`, puis
-`grilleKey#rank`), tandis que `DatedParameter`, `PrimeRate`, `ReferenceBudget` (#70) et
-`CorpsPayroll` (#71) — que rien ne référence — sont **remplacés** par rechargement (purge scopée au `ParameterSet` via
+`grilleKey#rank`), tandis que `DatedParameter`, `PrimeRate`, `ReferenceBudget` (#70),
+`CorpsPayroll` (#71) et `ConcoursSession` (#72) — que rien ne référence — sont **remplacés** par rechargement (purge scopée au `ParameterSet` via
 `purgeReplaceableScoped`), et `Source`/`Corps`/`Funder` restent en upsert global sur `code`.
 La chaîne scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une
 seule transaction).
@@ -1179,7 +1179,7 @@ namespace `App\Migrations` → `symfony/migrations/`). La migration initiale
 
 ### Modèle de données
 
-Le modèle de persistance comprend **14 entités** dans `src/Infrastructure/Entity/`.
+Le modèle de persistance comprend **15 entités** dans `src/Infrastructure/Entity/`.
 Le code est en anglais, aligné sur les colonnes CSV du dépôt `data/` ; les noms de
 domaine français (Corps, Grille, Échelon) sont conservés comme noms d'entité. Les
 identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (mappés en
@@ -1215,6 +1215,10 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   période ouverte), `body` (FK Corps), `source` (FK), `parameterSet` (FK). Valeur datée,
   bornes de validité **incluses** `[startDate, endDate]`, scopée au jeu de paramètres. Table
   `corps_payroll` créée par la migration `Version20261116140416`.
+- **ConcoursSession** — session de concours par corps et voie (#72) : `session` (année),
+  `voie` (`VARCHAR(64)`), `postes`, `inscrits`, `presents`, `admis` (entiers), `body` (FK
+  Corps), `source` (FK), `parameterSet` (FK). Scopée au jeu de paramètres. Table
+  `concours_session` créée par la migration `Version20261116152632`.
   Base HCAS retenue car c'est le seul chiffre publié par catégorie d'emploi (PAP) ; un
   consommateur (#21) doit la comparer à un coût de même périmètre (hors CAS Pensions).
 - **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
@@ -1226,7 +1230,7 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   `spreadYears`.
 - **ParameterSet** — jeu de paramètres pour la reproductibilité : `versionId` (unique,
   commit du dépôt de données), `importedAt`. Les valeurs datées (DatedParameter, Grille,
-  Echelon via sa grille, PrimeRate, ReferenceBudget, CorpsPayroll) et les Scénarios portent
+  Echelon via sa grille, PrimeRate, ReferenceBudget, CorpsPayroll, ConcoursSession) et les Scénarios portent
   une FK vers ce jeu.
 
 Les entités sont **purement déclaratives** (aucun `repositoryClass`, aucune logique) ;
@@ -1381,8 +1385,8 @@ Sous `src/Infrastructure/Import/` :
 Le mapping fichier → schéma est la constante `Importer::FILE_TO_SCHEMA`, alignée sur le
 `FILE_TO_SCHEMA` Python **hors `couts_pap`** (non importé, aucune entité cible — hors
 périmètre #11). Avant tout chargement, l'`Importer` valide le schéma **et** vérifie
-l'empreinte de **chacun** des 14 fichiers du mapping (C3 « avant tout chargement », C4 ;
-`budget_financeur` ajouté en #70, `masse_salariale_corps` en #71).
+l'empreinte de **chacun** des 15 fichiers du mapping (C3 « avant tout chargement », C4 ;
+`budget_financeur` ajouté en #70, `masse_salariale_corps` en #71, `concours_admis` en #72).
 
 Le chargement peuple ensuite, dans l'ordre :
 
@@ -1400,11 +1404,14 @@ Le chargement peuple ensuite, dans l'ordre :
    et `end_date` (vide = période ouverte) convertis en `DateTimeImmutable` ;
 6. `CorpsPayroll` (`masse_salariale_corps`, #71) — FK `body` (Corps, résolu par
    `resolveCorps()`), `source` et `parameterSet` ; mêmes conversions que `ReferenceBudget`.
-   Un corps du référentiel sans ligne de masse salariale (`ISG`) n'est pas une erreur.
+   Un corps du référentiel sans ligne de masse salariale (`ISG`) n'est pas une erreur ;
+7. `ConcoursSession` (`concours_admis`, #72) — FK `body` (Corps, résolu par
+   `resolveCorps()`), `source` et `parameterSet` ; `session` et effectifs convertis en
+   entiers, `voie` reprise telle quelle. Un corps sans concours (`ISG`) n'est pas une erreur.
 
 Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
-`echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `corps_payroll` = 2, `source` = 17,
-`corps` = 2, `funder` = 2.
+`echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `corps_payroll` = 2,
+`concours_session` = 33, `source` = 22, `corps` = 2, `funder` = 2.
 
 ### Résolution des FK et référentiels
 

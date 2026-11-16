@@ -11,6 +11,9 @@ use App\Infrastructure\Entity\Profile;
 use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\ScenarioLine;
+use App\Infrastructure\Import\Importer;
+use App\Infrastructure\Import\UnknownCorpsException;
+use App\Infrastructure\Import\UnknownSourceException;
 use App\Tests\Infrastructure\Persistence\IntegrationTestCase;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Command\Command;
@@ -58,9 +61,10 @@ final class ImportCommandTest extends IntegrationTestCase
 
         self::assertSame(1, $this->rowCount('parameter_set'));
         self::assertSame(10, $this->rowCount('dated_parameter'));
-        // Les 17 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49 ;
-        // +4 slugs budget_financeur pap/ondam depuis #70 ; +2 slugs masse salariale #71).
-        self::assertSame(17, $this->rowCount('source'));
+        // Les 22 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49 ;
+        // +4 slugs budget_financeur pap/ondam depuis #70 ; +2 slugs masse salariale #71 ;
+        // +5 slugs menj-crpe-<session> des concours #72).
+        self::assertSame(22, $this->rowCount('source'));
     }
 
     /** #49 C4 — les 3 clés r_autres (FPE/FPH) et RAFP sont importées en base. */
@@ -139,17 +143,18 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(17, $this->rowCount('source'));
+        self::assertSame(22, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
         self::assertSame(2, $this->rowCount('funder'));
         self::assertSame(4, $this->rowCount('reference_budget'));
         self::assertSame(2, $this->rowCount('corps_payroll'));
+        self::assertSame(33, $this->rowCount('concours_session'));
 
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
         self::assertGreaterThan(0, $setId);
 
         // Toutes les valeurs datées (scopées) portent la FK du ParameterSet du commit.
-        foreach (['dated_parameter', 'grille', 'prime_rate', 'reference_budget', 'corps_payroll'] as $table) {
+        foreach (['dated_parameter', 'grille', 'prime_rate', 'reference_budget', 'corps_payroll', 'concours_session'] as $table) {
             self::assertSame(
                 $this->rowCount($table),
                 $this->rowCountWhere($table, 'parameter_set_id = ' . $setId),
@@ -476,6 +481,114 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(0, $this->rowCount('source'));
     }
 
+    /** #72 C5.1 — 33 sessions de concours importées, toutes rattachées au corps `PE`. */
+    public function testConcoursSessionsResolveToTheirCorps(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        self::assertSame(33, $this->rowCount('concours_session'));
+        self::assertSame(
+            33,
+            $this->rowCountWhere('concours_session cs JOIN corps c ON c.id = cs.body_id', "c.code = 'PE'"),
+        );
+
+        $row = $this->em->getConnection()->fetchAssociative(
+            'SELECT cs.session, cs.voie, cs.postes, cs.inscrits, cs.presents, cs.admis, s.code AS source '
+            . 'FROM concours_session cs JOIN source s ON s.id = cs.source_id '
+            . "WHERE cs.session = 2025 AND cs.voie = 'externe'",
+        );
+        self::assertSame([
+            'session' => 2025,
+            'voie' => 'externe',
+            'postes' => 8117,
+            'inscrits' => 43525,
+            'presents' => 18524,
+            'admis' => 7576,
+            'source' => 'menj-crpe-2025',
+        ], $row);
+    }
+
+    /** #72 C2.4 — aucune ligne ISG : l'import réussit, ISG existe sans concours. */
+    public function testCorpsWithoutConcoursIsNotAnError(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        self::assertSame(1, $this->rowCountWhere('corps', "code = 'ISG'"));
+        self::assertSame(
+            0,
+            $this->rowCountWhere('concours_session cs JOIN corps c ON c.id = cs.body_id', "c.code = 'ISG'"),
+        );
+    }
+
+    /** #72 C5.2 — réimport du même commit : toujours 33 sessions de concours. */
+    public function testReimportingKeepsConcoursCountStable(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode());
+
+        self::assertSame(33, $this->rowCount('concours_session'));
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+        self::assertSame(33, $this->rowCountWhere('concours_session', 'parameter_set_id = ' . $setId));
+    }
+
+    /** #72 C5.3 — `body_code` d'un concours absent de `corps.json` : rollback total. */
+    public function testUnknownCorpsInConcoursIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis.csv', 'PE,2025,externe,', 'XX,2025,externe,');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('corps inconnu `XX`', $tester->getDisplay());
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('corps'));
+        self::assertSame(0, $this->rowCount('concours_session'));
+        self::assertSame(0, $this->rowCount('source'));
+    }
+
+    /** #72 C5.3 — `source` d'un concours absente du référentiel : rollback total. */
+    public function testUnknownSourceInConcoursIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis.csv', '7576,menj-crpe-2025', '7576,inexistant');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('source inconnue `inexistant`', $tester->getDisplay());
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('concours_session'));
+        self::assertSame(0, $this->rowCount('source'));
+    }
+
+    /** #72 C5.3 — l'import d'un concours au corps inconnu lève `UnknownCorpsException`. */
+    public function testUnknownCorpsInConcoursRaisesUnknownCorpsException(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis.csv', 'PE,2025,externe,', 'XX,2025,externe,');
+
+        $this->expectException(UnknownCorpsException::class);
+        $this->expectExceptionMessage('corps inconnu `XX`');
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /** #72 C5.3 — l'import d'un concours à la source inconnue lève `UnknownSourceException`. */
+    public function testUnknownSourceInConcoursRaisesUnknownSourceException(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/concours_admis.csv', '7576,menj-crpe-2025', '7576,inexistant');
+
+        $this->expectException(UnknownSourceException::class);
+        $this->expectExceptionMessage('source inconnue `inexistant`');
+        $this->importer()->import('deadbeef', $dir);
+    }
+
     /** C6.1 — réimport du même commit : état identique, aucun doublon ni accumulation. */
     public function testReimportingSameCommitIsIdempotent(): void
     {
@@ -491,11 +604,12 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(17, $this->rowCount('source'));
+        self::assertSame(22, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
         self::assertSame(2, $this->rowCount('funder'));
         self::assertSame(4, $this->rowCount('reference_budget'));
         self::assertSame(2, $this->rowCount('corps_payroll'));
+        self::assertSame(33, $this->rowCount('concours_session'));
 
         // Upsert par `code` : aucun doublon sur les référentiels globaux.
         self::assertSame(1, $this->rowCountWhere('source', "code = 'decret-2023-519'"));
@@ -627,6 +741,14 @@ final class ImportCommandTest extends IntegrationTestCase
         $updated = str_replace($search, $replace, $contents);
         self::assertNotSame($contents, $updated);
         file_put_contents($path, $updated);
+    }
+
+    private function importer(): Importer
+    {
+        $importer = self::getContainer()->get(Importer::class);
+        self::assertInstanceOf(Importer::class, $importer);
+
+        return $importer;
     }
 
     private function runImport(string $commit, string $dataDir): CommandTester
