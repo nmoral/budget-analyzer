@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -566,6 +567,69 @@ def check_academies_declared(declared: frozenset[str] | None) -> Invariant:
     return invariant
 
 
+@dataclass(frozen=True)
+class AcademieEntry:
+    """Une entrée de ``academies.json`` : code, ligne de sa clé, ``statut`` brut."""
+
+    code: str
+    line: int
+    statut: str | None
+
+
+# Clé d'une entrée (valeur objet) : ``"<code>": {``.
+_ACADEMIE_KEY = re.compile(r'"([^"]+)"\s*:\s*\{')
+
+
+def load_academie_entries(root: Path) -> list[AcademieEntry] | None:
+    """Entrées de ``root/academies.json`` localisées sur la ligne de leur clé
+
+    (``None`` si le référentiel est absent ; ``statut`` absent → ``None``).
+    """
+    path = root / "academies.json"
+    if not path.exists():
+        return None
+    text = path.read_text("utf-8")
+    lines: dict[str, int] = {}
+    for match in _ACADEMIE_KEY.finditer(text):
+        lines.setdefault(match.group(1), text.count("\n", 0, match.start()) + 1)
+    referential: dict[str, dict[str, Any]] = json.loads(text)
+    return [
+        AcademieEntry(code=code, line=lines[code], statut=data.get("statut"))
+        for code, data in referential.items()
+    ]
+
+
+ACADEMIE_STATUTS = ("metropole", "drom", "com")
+
+
+def check_academie_statuts(entries: list[AcademieEntry] | None) -> Invariant:
+    """Le ``statut`` de chaque entrée de ``academies.json`` vaut exactement
+
+    ``metropole``, ``drom`` ou ``com`` (absent, vide, casse ou espaces différents →
+    anomalie sur la ligne de la clé). Référentiel absent → aucun contrôle.
+    """
+
+    def invariant(files: Sequence[LoadedFile]) -> list[Violation]:
+        return [
+            Violation(
+                invariant="academie_statut",
+                file="academies.json",
+                line=entry.line,
+                message=f"{entry.code} : {_statut_breach(entry.statut)}",
+            )
+            for entry in entries or []
+            if entry.statut not in ACADEMIE_STATUTS
+        ]
+
+    return invariant
+
+
+def _statut_breach(statut: str | None) -> str:
+    if statut is None:
+        return "statut absent"
+    return f"statut « {statut} » hors {'/'.join(ACADEMIE_STATUTS)}"
+
+
 # Registre des invariants sans configuration externe (C3 est fabriqué dans run()).
 STATELESS_INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
@@ -633,6 +697,7 @@ def run(root: Path) -> tuple[int, str]:
         check_values_within_bounds(load_bounds(root)),
         check_sources_declared(load_declared_sources(root)),
         check_academies_declared(load_academies(root)),
+        check_academie_statuts(load_academie_entries(root)),
     )
     violations: list[Violation] = []
     for invariant in invariants:

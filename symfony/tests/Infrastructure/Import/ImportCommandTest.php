@@ -12,10 +12,12 @@ use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Scenario;
 use App\Infrastructure\Entity\ScenarioLine;
 use App\Infrastructure\Import\Importer;
+use App\Infrastructure\Import\InvalidAcademieStatutException;
 use App\Infrastructure\Import\UnknownAcademieException;
 use App\Infrastructure\Import\UnknownCorpsException;
 use App\Infrastructure\Import\UnknownSourceException;
 use App\Tests\Infrastructure\Persistence\IntegrationTestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -762,6 +764,100 @@ final class ImportCommandTest extends IntegrationTestCase
         $this->assertNothingImported();
     }
 
+    /** #82 C2.1 — référentiel valide : 35 académies, statut de chacune repris du JSON. */
+    public function testAcademieStatutsMatchReferential(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        $expected = [];
+        foreach ($this->loadAcademies($this->dataDir()) as $code => $data) {
+            $expected[(string) $code] = $data['statut'] ?? null;
+        }
+        ksort($expected, SORT_STRING);
+        self::assertCount(35, $expected);
+        self::assertSame($expected, $this->academieStatuts());
+    }
+
+    /** #82 C2.2 — statut hors liste : exit 1, message dédié, rien d'importé. */
+    public function testAcademieStatutOutsideListIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->alterAcademieStatut($dir, '32', 'outremer');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString("statut d'académie invalide « outremer » (32)", $tester->getDisplay());
+        $this->assertNothingImported();
+    }
+
+    /** #82 C2.2 — statut hors liste : `InvalidAcademieStatutException`. */
+    public function testAcademieStatutOutsideListRaisesInvalidAcademieStatutException(): void
+    {
+        $dir = $this->copyData();
+        $this->alterAcademieStatut($dir, '32', 'outremer');
+
+        $this->expectException(InvalidAcademieStatutException::class);
+        $this->expectExceptionMessage("statut d'académie invalide « outremer » (32)");
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /** #82 C2.3 / C2.4 — statut absent, vide ou de casse différente : même refus, rollback total. */
+    #[DataProvider('invalidAcademieStatuts')]
+    public function testInvalidAcademieStatutIsRejected(string $code, ?string $statut, string $message): void
+    {
+        $dir = $this->copyData();
+        $this->alterAcademieStatut($dir, $code, $statut);
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString($message, $tester->getDisplay());
+        $this->assertNothingImported();
+    }
+
+    /** #82 C2.3 / C2.4 — chaque statut invalide lève `InvalidAcademieStatutException`. */
+    #[DataProvider('invalidAcademieStatuts')]
+    public function testInvalidAcademieStatutRaisesInvalidAcademieStatutException(string $code, ?string $statut, string $message): void
+    {
+        $dir = $this->copyData();
+        $this->alterAcademieStatut($dir, $code, $statut);
+
+        $this->expectException(InvalidAcademieStatutException::class);
+        $this->expectExceptionMessage($message);
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /**
+     * @return iterable<string, array{string, string|null, string}>
+     */
+    public static function invalidAcademieStatuts(): iterable
+    {
+        yield 'C2.3 absent' => ['41', null, "statut d'académie absent (41)"];
+        yield 'C2.3 vide' => ['28', '', "statut d'académie invalide «  » (28)"];
+        yield 'C2.4 casse' => ['32', 'DROM', "statut d'académie invalide « DROM » (32)"];
+        yield 'espaces' => ['43', ' drom ', "statut d'académie invalide «  drom  » (43)"];
+    }
+
+    /** #82 C2.5 — réimport d'un commit déjà importé avec un statut invalide : exit 1, référentiel intact. */
+    public function testReimportWithInvalidAcademieStatutKeepsReferentialIntact(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+        $before = $this->academieStatuts();
+
+        $dir = $this->copyData();
+        $this->alterAcademieStatut($dir, '32', 'outremer');
+        $second = $this->runImport('9f3a1c2', $dir);
+
+        self::assertSame(Command::FAILURE, $second->getStatusCode());
+        self::assertStringContainsString("statut d'académie invalide « outremer » (32)", $second->getDisplay());
+        self::assertSame($before, $this->academieStatuts());
+        self::assertSame('drom', $before['32'] ?? null);
+        self::assertSame(533, $this->rowCount('concours_academie'));
+    }
+
     /** C6.1 — réimport du même commit : état identique, aucun doublon ni accumulation. */
     public function testReimportingSameCommitIsIdempotent(): void
     {
@@ -917,6 +1013,46 @@ final class ImportCommandTest extends IntegrationTestCase
         $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
 
         return $decoded;
+    }
+
+    /**
+     * @return array<int|string, array{statut?: string}>
+     */
+    private function loadAcademies(string $dir): array
+    {
+        $raw = file_get_contents($dir . '/academies.json');
+        self::assertIsString($raw);
+        /** @var array<int|string, array{statut?: string}> $decoded */
+        $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+
+        return $decoded;
+    }
+
+    /** Réécrit `academies.json` : statut de `$code` remplacé, ou clé supprimée si `null`. */
+    private function alterAcademieStatut(string $dir, string $code, ?string $statut): void
+    {
+        $referential = $this->loadAcademies($dir);
+        self::assertArrayHasKey($code, $referential);
+        if ($statut === null) {
+            unset($referential[$code]['statut']);
+        } else {
+            $referential[$code]['statut'] = $statut;
+        }
+        file_put_contents(
+            $dir . '/academies.json',
+            json_encode($referential, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+        );
+    }
+
+    /**
+     * @return array<int|string, string> code → statut des académies en base, triées par code
+     */
+    private function academieStatuts(): array
+    {
+        /** @var array<int|string, string> $rows */
+        $rows = $this->em->getConnection()->fetchAllKeyValue('SELECT code, statut FROM academie ORDER BY code');
+
+        return $rows;
     }
 
     private function replaceInFile(string $path, string $search, string $replace): void

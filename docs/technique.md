@@ -1228,7 +1228,8 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   (`admis ≤ presents ≤ inscrits`) sont contrôlées en amont par `python -m checks`.
 - **Academie** — référentiel global des académies (#80) : `code` (unique, code officiel
   data.education.gouv.fr, ex. `41` Polynésie française), `label`, `statut` (`metropole`,
-  `drom`, `com` ; `VARCHAR(16)`), `source` (FK NOT NULL, source du code officiel). Non scopée
+  `drom`, `com` ; `VARCHAR(16)` sans contrainte, valeur contrôlée à l'import et par
+  `python -m checks`, #82), `source` (FK NOT NULL, source du code officiel). Non scopée
   au jeu de paramètres, upsert par `code` à l'import. Table `academie`.
 - **ConcoursAcademie** — session de concours par corps, voie et académie (#80) : mêmes
   colonnes que `ConcoursSession` plus `academie` (FK Academie) ; FK `body`, `academie`,
@@ -1397,6 +1398,13 @@ Sous `src/Infrastructure/Import/` :
 - **`AcademieReferential`** (#80) : charge `data/academies.json` (code officiel →
   `label`/`statut`/`source`, `aliases` optionnels, non persistés). Les colonnes de
   `Academie` étant NOT NULL, chaque entrée doit fournir `label`, `statut` et `source`.
+  Le `statut` doit valoir exactement `metropole`, `drom` ou `com` (casse et espaces
+  compris, #82) ; absent, vide ou autre → `InvalidAcademieStatutException` (sous-classe
+  d'`ImportException`, exit 1, rollback total). Le contrôle porte sur toutes les entrées au
+  chargement du référentiel et s'arrête à la première fautive : message
+  `statut d'académie invalide « <valeur> » (<code>)` ou `statut d'académie absent (<code>)`
+  (un `statut` null ou une entrée non objet comptent comme absents). Aucune contrainte en
+  base (pas de CHECK, décision Q1).
   Référentiel introuvable ou invalide → `ImportException` (contrairement à
   `python -m checks`, qui neutralise le contrôle d'académie en son absence).
 

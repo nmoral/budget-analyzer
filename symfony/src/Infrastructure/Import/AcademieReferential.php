@@ -9,10 +9,14 @@ namespace App\Infrastructure\Import;
  * (`label`, `statut` ∈ metropole/drom/com, `source`, `aliases` éventuels).
  *
  * Tous les champs de l'entité `Academie` étant NOT NULL, ce référentiel doit fournir
- * `label`, `statut` et `source` pour chaque entrée. Un code absent → refus.
+ * `label`, `statut` et `source` pour chaque entrée. Un code absent → refus. Le `statut`
+ * doit valoir exactement `metropole`, `drom` ou `com` (casse et espaces compris) ;
+ * absent ou autre → `InvalidAcademieStatutException`.
  */
 final class AcademieReferential
 {
+    private const STATUTS = ['metropole', 'drom', 'com'];
+
     /**
      * @return array<string, array{label: string, statut: string, source: string, aliases?: list<string>}>
      */
@@ -30,7 +34,26 @@ final class AcademieReferential
             throw new ImportException(sprintf('référentiel des académies invalide : %s', $path));
         }
 
+        foreach ($decoded as $code => $entry) {
+            $this->assertStatut((string) $code, $entry);
+        }
+
         /** @var array<string, array{label: string, statut: string, source: string, aliases?: list<string>}> $decoded */
         return $decoded;
+    }
+
+    private function assertStatut(string $code, mixed $entry): void
+    {
+        if (!is_array($entry) || !isset($entry['statut'])) {
+            throw new InvalidAcademieStatutException(sprintf("statut d'académie absent (%s)", $code));
+        }
+        $statut = $entry['statut'];
+        if (!in_array($statut, self::STATUTS, true)) {
+            throw new InvalidAcademieStatutException(sprintf(
+                "statut d'académie invalide « %s » (%s)",
+                is_string($statut) ? $statut : json_encode($statut, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                $code,
+            ));
+        }
     }
 }
