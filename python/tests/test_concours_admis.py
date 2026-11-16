@@ -284,7 +284,10 @@ def test_publications_archived_match_registry_hash() -> None:
 
 
 def test_source_locator_cites_page_and_block() -> None:
-    """C2 — `locator` cite la page (titre de session) et la section/les blocs."""
+    """C2 — `locator` cite la page (titre de session) et la section publique.
+
+    Le libellé exact de chaque bloc est porté ligne à ligne par le brut (`block`).
+    """
     registry = _registry()
     for session in SESSIONS:
         locator = registry[f"menj-crpe-{session}"]["locator"]
@@ -294,9 +297,13 @@ def test_source_locator_cites_page_and_block() -> None:
         )
         assert title in locator, session
         assert PUBLIC_SECTION in locator, session
-        blocks = {row["block"] for row in _raw_rows() if row["session"] == session}
-        for block in blocks:
-            assert block in locator, (session, block)
+        assert "totaux nationaux par concours" in locator, session
+
+
+def test_every_registry_locator_fits_source_column() -> None:
+    """Chaque `locator` de sources.json tient dans `source.locator` (VARCHAR 255)."""
+    for slug, entry in _registry().items():
+        assert len(entry["locator"]) <= 255, slug
 
 
 def test_each_source_is_a_known_slug_of_its_session() -> None:
