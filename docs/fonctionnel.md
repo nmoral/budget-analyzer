@@ -114,7 +114,10 @@ suivantes.
   postes offerts, candidats inscrits, présents aux épreuves écrites et admis, avec leur
   source. Pour les professeurs des écoles (`PE`) : CRPE de l'enseignement public, sessions
   2021 à 2025 (devenirenseignant.gouv.fr), hors Polynésie française et enseignement privé ;
-  une voie non ouverte une année n'a pas de ligne. Le nombre d'admis peut dépasser celui des
+  une voie non ouverte une année n'a pas de ligne. Le périmètre est le même chaque année :
+  quand le total national publié compte la Polynésie (sessions 2021 et 2025, concours
+  externe), la part Polynésie en est retranchée. Les données de Polynésie et d'outre-mer par
+  territoire relèvent de #80. Le nombre d'admis peut dépasser celui des
   postes (report des emplois non pourvus entre concours). Le corps `ISG` n'a pas encore de
   concours (#78). Cette donnée est **exposée en base pour un usage futur** (indicateur de
   faisabilité, #21) ; elle n'est à ce stade ni calculée ni affichée.

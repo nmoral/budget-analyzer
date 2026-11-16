@@ -1189,7 +1189,9 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   unique, slug référencé par la colonne `source` des CSV, ex. `decret-2023-519`, résolu
   à l'import #11), `label`, `publisher`, `edition` (édition/année du document, NOT NULL,
   #65), `locator` (localisation précise — page/tableau/article, NOT NULL, #65), `url`,
-  `retrievedAt`, `fileHash`. `edition` et `locator` rendent la source « en clair
+  `retrievedAt`, `fileHash`. `locator` reste en `VARCHAR(255)` : un `locator` de
+  `data/sources.json` doit tenir en 255 caractères, le détail plus fin restant dans le brut
+  du dataset (ex. `block` pour `concours_admis`, #72). `edition` et `locator` rendent la source « en clair
   complète » exposée par `detail=full` (voir « Transparence du résultat (#65) »).
 - **Corps** — `code` (unique), `label`, `versant`, `category` (A/B/C).
 - **Grille** — version d'une grille indiciaire : `body` (FK Corps), `grade`, `version`,
@@ -1215,12 +1217,15 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   période ouverte), `body` (FK Corps), `source` (FK), `parameterSet` (FK). Valeur datée,
   bornes de validité **incluses** `[startDate, endDate]`, scopée au jeu de paramètres. Table
   `corps_payroll` créée par la migration `Version20261116140416`.
-- **ConcoursSession** — session de concours par corps et voie (#72) : `session` (année),
-  `voie` (`VARCHAR(64)`), `postes`, `inscrits`, `presents`, `admis` (entiers), `body` (FK
-  Corps), `source` (FK), `parameterSet` (FK). Scopée au jeu de paramètres. Table
-  `concours_session` créée par la migration `Version20261116152632`.
   Base HCAS retenue car c'est le seul chiffre publié par catégorie d'emploi (PAP) ; un
   consommateur (#21) doit la comparer à un coût de même périmètre (hors CAS Pensions).
+- **ConcoursSession** — session de concours par corps et voie (#72) : `session` (année),
+  `voie` (`VARCHAR(64)`), `postes`, `inscrits`, `presents`, `admis` (entiers), `body` (FK
+  Corps), `source` (FK), `parameterSet` (FK), toutes les FK NOT NULL. Scopée au jeu de
+  paramètres. Table `concours_session` créée par la migration `Version20261116152632`.
+  Aucune contrainte d'unicité en base sur (jeu de paramètres, corps, session, voie) :
+  l'unicité (`body_code`, `session`, `voie`) et la cohérence des effectifs
+  (`admis ≤ presents ≤ inscrits`) sont contrôlées en amont par `python -m checks`.
 - **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
   `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité dédiée,
   les primes V1 passent par `PrimeRate`), `funder` (FK), `status`, `referenceCalendar`.
