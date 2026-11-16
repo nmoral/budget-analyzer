@@ -53,7 +53,7 @@ Budget de référence **daté par financeur**, trajectoire pluriannuelle sur le 
 
 ### Masse salariale par corps
 
-Masse salariale **datée par corps**, en coût chargé **HCAS** (hors CAS Pensions), chaque ligne sourcée (règle de transparence n° 7) :
+Masse salariale **datée par corps**, en coût chargé **HCAS** (hors CAS Pensions) — seul chiffre publié par catégorie d'emploi dans le PAP ; les variantes « avec CAS Pensions » ou « rémunérations d'activité seules » ne sont pas produites —, chaque ligne sourcée (règle de transparence n° 7) :
 
 - `masse_salariale_corps` — masse salariale annuelle d'un corps (schéma `masse_salariale_corps`), colonnes `body_code, value, unit, start_date, end_date (optionnel), source`. `unit = EUR`, `value` = montant en euros (entier). Un corps, deux millésimes (2024 clos, 2025 à fin ouverte) :
   - `PE` — ETPT de la catégorie d'emploi 1106 « Enseignants du 1er degré » × coût moyen chargé HCAS global de cette catégorie, les deux lus dans le PAP « Enseignement scolaire » (programme 140) du millésime : 327 302 × 47 634 = 15 590 703 468 € en 2024 (PAP 2024, p. 47 et 53) ; 324 990 × 46 139 = 14 994 713 610 € en 2025 (PAP 2025, p. 47 et 52).

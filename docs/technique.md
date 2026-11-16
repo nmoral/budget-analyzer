@@ -1212,6 +1212,8 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   période ouverte), `body` (FK Corps), `source` (FK), `parameterSet` (FK). Valeur datée,
   bornes de validité **incluses** `[startDate, endDate]`, scopée au jeu de paramètres. Table
   `corps_payroll` créée par la migration `Version20261116140416`.
+  Base HCAS retenue car c'est le seul chiffre publié par catégorie d'emploi (PAP) ; un
+  consommateur (#21) doit la comparer à un coût de même périmètre (hors CAS Pensions).
 - **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
   `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité dédiée,
   les primes V1 passent par `PrimeRate`), `funder` (FK), `status`, `referenceCalendar`.
