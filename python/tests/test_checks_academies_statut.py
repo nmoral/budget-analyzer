@@ -3,6 +3,8 @@
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ import pytest
 from checks import AcademieEntry, load_academie_entries, main, run
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
+SRC = Path(__file__).resolve().parents[1] / "src"
 NO_ANOMALY = "Contrôles de cohérence : aucune anomalie."
 
 
@@ -330,4 +333,82 @@ def test_load_academie_entries_shows_non_ascii_value_as_written(tmp_path: Path) 
     (tmp_path / "academies.json").write_text('{\r\n\t"28" :\t"Réunion"\r\n}', "utf-8")
     assert load_academie_entries(tmp_path) == [
         AcademieEntry(code="28", line=2, statut=None, non_objet='"Réunion"'),
+    ]
+
+
+# --- #84 J2 : décodage complet par json.loads -------------------------------
+
+
+def test_84_c2_3_invalid_json_fails_like_main(real_copy: Path) -> None:
+    path = real_copy / "academies.json"
+    path.write_text(path.read_text("utf-8") + " garbage", "utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "checks"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONPATH": str(SRC)},
+    )
+
+    assert result.returncode != 0
+    assert "json.decoder.JSONDecodeError: Extra data" in result.stderr
+    assert NO_ANOMALY not in result.stdout
+
+
+def test_84_c2_3_invalid_json_raises_in_run(real_copy: Path) -> None:
+    path = real_copy / "academies.json"
+    path.write_text(path.read_text("utf-8") + " garbage", "utf-8")
+
+    with pytest.raises(json.JSONDecodeError, match="Extra data"):
+        run(real_copy)
+
+
+def test_84_c2_4_duplicate_key_keeps_last_occurrence(real_copy: Path) -> None:
+    path = real_copy / "academies.json"
+    text = path.read_text("utf-8")
+    duplicate = '  "32": {\n    "label": "Doublon",\n    "statut": "outremer"\n  }\n}'
+    path.write_text(text.rstrip()[:-1].rstrip() + ",\n" + duplicate + "\n", "utf-8")
+    lines = path.read_text("utf-8").splitlines()
+    first, last = (n for n, line in enumerate(lines, 1) if line.startswith('  "32":'))
+    assert first < last
+
+    entries = load_academie_entries(real_copy) or []
+    assert [entry for entry in entries if entry.code == "32"] == [
+        AcademieEntry(code="32", line=last, statut="outremer")
+    ]
+    code, report = run(real_copy)
+
+    assert code == 1
+    assert report.splitlines() == [
+        (
+            f"academies.json:{last} [academie_statut] "
+            "32 : statut « outremer » hors metropole/drom/com"
+        ),
+        "Récapitulatif : 1 anomalie(s) détectée(s).",
+    ]
+
+
+def test_load_academie_entries_duplicate_key_single_last_entry(tmp_path: Path) -> None:
+    (tmp_path / "academies.json").write_text(
+        '{\n  "01": {"statut": "drom"},\n  "02": "x",\n  "01": {"statut": "com"}\n}',
+        "utf-8",
+    )
+    assert load_academie_entries(tmp_path) == [
+        AcademieEntry(code="01", line=4, statut="com"),
+        AcademieEntry(code="02", line=3, statut=None, non_objet='"x"'),
+    ]
+
+
+def test_load_academie_entries_escaped_key_and_brackets_in_strings(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "academies.json").write_text(
+        '{\n  "\\u0030\\u0031": {"label": "a}\\"]{", "x": [{"03": 1}]},\n'
+        '  "02": ["{", "\\"03\\": "]\n}',
+        "utf-8",
+    )
+    assert load_academie_entries(tmp_path) == [
+        AcademieEntry(code="01", line=2, statut=None),
+        AcademieEntry(code="02", line=3, statut=None, non_objet='["{", "\\"03\\": "]'),
     ]

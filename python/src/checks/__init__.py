@@ -17,6 +17,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 import tomllib
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
@@ -586,15 +587,17 @@ def load_academie_entries(root: Path) -> list[AcademieEntry] | None:
     """Entrées de ``root/academies.json`` localisées sur la ligne de leur clé
 
     (``None`` si le référentiel est absent ; ``statut`` absent → ``None``).
-    Fichier lu et décodé une seule fois.
+    Fichier lu une fois et décodé par ``json.loads`` : un JSON invalide lève
+    ``JSONDecodeError`` ; une clé en double garde sa dernière occurrence.
     """
     path = root / "academies.json"
     if not path.exists():
         return None
     text = path.read_text("utf-8")
+    referential: dict[str, Any] = json.loads(text)
+    lines = dict(_root_key_lines(text))
     return [
-        _academie_entry(code, text.count("\n", 0, position) + 1, value)
-        for position, code, value in _root_members(text)
+        _academie_entry(code, lines[code], value) for code, value in referential.items()
     ]
 
 
@@ -605,20 +608,25 @@ def _academie_entry(code: str, line: int, value: Any) -> AcademieEntry:
     return AcademieEntry(code=code, line=line, statut=None, non_objet=shown)
 
 
-def _root_members(text: str) -> Iterator[tuple[int, str, Any]]:
-    """``(position de la clé, clé, valeur)`` de chaque membre de l'objet racine.
+_JSON_TOKEN = re.compile(r'"(?:[^"\\]|\\.)*"|[{}\[\]]')
 
-    Seules les clés de premier niveau sont repérées : chaque valeur est décodée
-    d'un bloc, ses clés imbriquées ne sont donc jamais confondues avec un code.
+
+def _root_key_lines(text: str) -> Iterator[tuple[str, int]]:
+    """``(clé, ligne)`` de chaque clé de l'objet racine, dans l'ordre du texte.
+
+    ``text`` est un JSON déjà validé : seules les chaînes et les crochets sont
+    parcourus, sans décoder les valeurs ; une chaîne suivie de ``:`` au premier
+    niveau d'imbrication est une clé racine.
     """
-    decode = json.JSONDecoder().raw_decode
-    position = _skip_blank(text, _skip_blank(text, 0) + 1)
-    while text[position : position + 1] == '"':
-        key, after_key = decode(text, position)
-        colon = _skip_blank(text, after_key)
-        value, after_value = decode(text, _skip_blank(text, colon + 1))
-        yield position, key, value
-        position = _skip_blank(text, _skip_blank(text, after_value) + 1)
+    depth = 0
+    for token in _JSON_TOKEN.finditer(text):
+        lexeme = token.group()
+        if lexeme in "{[":
+            depth += 1
+        elif lexeme in "}]":
+            depth -= 1
+        elif depth == 1 and text[_skip_blank(text, token.end())] == ":":
+            yield json.loads(lexeme), text.count("\n", 0, token.start()) + 1
 
 
 def _skip_blank(text: str, position: int) -> int:
