@@ -55,9 +55,10 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **intégrité des fichiers sources** : l'empreinte du fichier brut archivé de chaque
   source est comparée à celle enregistrée dans son manifeste ; toute divergence fait
   échouer l'import ;
-- **complétude des référentiels** : toute source, tout corps et tout financeur cités par
-  les données doivent figurer dans les référentiels curatés du dépôt (`data/sources.json`,
-  `data/corps.json`, `data/funders.json`) ; une référence inconnue fait échouer l'import.
+- **complétude des référentiels** : toute source, tout corps, tout financeur et toute
+  académie cités par les données doivent figurer dans les référentiels curatés du dépôt
+  (`data/sources.json`, `data/corps.json`, `data/funders.json`, `data/academies.json`) ;
+  une référence inconnue fait échouer l'import.
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le

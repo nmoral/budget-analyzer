@@ -1394,6 +1394,11 @@ Sous `src/Infrastructure/Import/` :
   `data/funders.json` (code → `label` requis, puis les codes de nomenclature optionnels
   `mission`/`program`/`action`/`ondamSubObjective`/`cofog` ; introduit en #70). Un
   référentiel introuvable ou invalide lève `ImportException`.
+- **`AcademieReferential`** (#80) : charge `data/academies.json` (code officiel →
+  `label`/`statut`/`source`, `aliases` optionnels, non persistés). Les colonnes de
+  `Academie` étant NOT NULL, chaque entrée doit fournir `label`, `statut` et `source`.
+  Référentiel introuvable ou invalide → `ImportException` (contrairement à
+  `python -m checks`, qui neutralise le contrôle d'académie en son absence).
 
 ### Périmètre, mapping et ordre de chargement
 
@@ -1432,7 +1437,7 @@ Le chargement peuple ensuite, dans l'ordre :
 
 Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
 `echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `corps_payroll` = 2,
-`concours_session` = 33, `academie` = 35, `concours_academie` = 533, `source` = 29, `corps` = 2,
+`concours_session` = 33, `academie` = 35 (dont la Nouvelle-Calédonie, sans ligne de concours), `concours_academie` = 533, `source` = 29, `corps` = 2,
 `funder` = 2.
 
 ### Résolution des FK et référentiels
