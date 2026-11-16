@@ -133,5 +133,23 @@
     "url": "https://www.ccomptes.fr/sites/default/files/2025-05/20250526-RALFSS-2025_0.pdf",
     "retrievedAt": "2026-11-01",
     "fileHash": "5ab311f7c27e167830b1960c58c274db5666d6f76cddaae7ecb67529d2264787"
+  },
+  "pap-2024-ens-scolaire-masse-1106": {
+    "label": "PAP 2024 — annexe « Enseignement scolaire » (programme 140), masse salariale des professeurs des écoles",
+    "publisher": "Assemblée nationale",
+    "edition": "PLF 2024",
+    "locator": "programme 140, masse salariale PE (coût chargé HCAS) = ETPT catégorie 1106 « Enseignants du 1er degré » (p. 47 : 327 302 ETPT) × coût moyen chargé HCAS global « Enseignants du 1er degré » (p. 53 : 47 634 €) = 15 590 703 468 €",
+    "url": "https://www.assemblee-nationale.fr/dyn/content/download/705202/file/Enseignement%20scolaire.pdf",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "40b873d2915dab02e869ce4da9f9f756d18d073eef9aecf3b6d7ef6e9a3c1125"
+  },
+  "pap-2025-ens-scolaire-masse-1106": {
+    "label": "PAP 2025 — annexe « Enseignement scolaire » (programme 140), masse salariale des professeurs des écoles",
+    "publisher": "Assemblée nationale",
+    "edition": "PLF 2025",
+    "locator": "programme 140, masse salariale PE (coût chargé HCAS) = ETPT catégorie 1106 « Enseignants du 1er degré » (p. 47 : 324 990 ETPT) × coût moyen chargé HCAS global « Enseignants du 1er degré » (p. 52 : 46 139 €) = 14 994 713 610 €",
+    "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "8d347c18a426ab0ebb7cb639801e083adfc265244f553bd41580ad1d56ecbb11"
   }
 }

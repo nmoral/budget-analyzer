@@ -58,9 +58,9 @@ final class ImportCommandTest extends IntegrationTestCase
 
         self::assertSame(1, $this->rowCount('parameter_set'));
         self::assertSame(10, $this->rowCount('dated_parameter'));
-        // Les 15 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49 ;
-        // +4 slugs budget_financeur pap/ondam depuis #70).
-        self::assertSame(15, $this->rowCount('source'));
+        // Les 17 slugs de l'ensemble des CSV chargés sont résolus et persistés (J2, #49 ;
+        // +4 slugs budget_financeur pap/ondam depuis #70 ; +2 slugs masse salariale #71).
+        self::assertSame(17, $this->rowCount('source'));
     }
 
     /** #49 C4 — les 3 clés r_autres (FPE/FPH) et RAFP sont importées en base. */
@@ -139,16 +139,17 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(15, $this->rowCount('source'));
+        self::assertSame(17, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
         self::assertSame(2, $this->rowCount('funder'));
         self::assertSame(4, $this->rowCount('reference_budget'));
+        self::assertSame(2, $this->rowCount('corps_payroll'));
 
         $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
         self::assertGreaterThan(0, $setId);
 
         // Toutes les valeurs datées (scopées) portent la FK du ParameterSet du commit.
-        foreach (['dated_parameter', 'grille', 'prime_rate', 'reference_budget'] as $table) {
+        foreach (['dated_parameter', 'grille', 'prime_rate', 'reference_budget', 'corps_payroll'] as $table) {
             self::assertSame(
                 $this->rowCount($table),
                 $this->rowCountWhere($table, 'parameter_set_id = ' . $setId),
@@ -383,6 +384,98 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(0, $this->rowCount('source'));
     }
 
+    /** #71 C5.1 — la masse salariale datée est importée et rattachée au corps `PE`. */
+    public function testPayrollRowsResolveToTheirCorps(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        self::assertSame(2, $this->rowCount('corps_payroll'));
+        self::assertSame(
+            2,
+            $this->rowCountWhere('corps_payroll cp JOIN corps c ON c.id = cp.body_id', "c.code = 'PE'"),
+        );
+
+        $rows = $this->em->getConnection()->fetchAllAssociative(
+            'SELECT cp.value, cp.unit, cp.start_date, cp.end_date, s.code AS source '
+            . 'FROM corps_payroll cp JOIN source s ON s.id = cp.source_id ORDER BY cp.start_date',
+        );
+        self::assertSame([
+            [
+                'value' => '15590703468.00',
+                'unit' => 'EUR',
+                'start_date' => '2024-01-01',
+                'end_date' => '2024-12-31',
+                'source' => 'pap-2024-ens-scolaire-masse-1106',
+            ],
+            [
+                'value' => '14994713610.00',
+                'unit' => 'EUR',
+                'start_date' => '2025-01-01',
+                'end_date' => null,
+                'source' => 'pap-2025-ens-scolaire-masse-1106',
+            ],
+        ], $rows);
+    }
+
+    /** #71 C2.3 — aucune ligne ISG : l'import réussit, ISG existe sans masse salariale. */
+    public function testCorpsWithoutPayrollIsNotAnError(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode());
+
+        self::assertSame(1, $this->rowCountWhere('corps', "code = 'ISG'"));
+        self::assertSame(
+            0,
+            $this->rowCountWhere('corps_payroll cp JOIN corps c ON c.id = cp.body_id', "c.code = 'ISG'"),
+        );
+    }
+
+    /** #71 C5.2 — réimport du même commit : toujours 2 lignes de masse salariale. */
+    public function testReimportingKeepsPayrollCountStable(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode());
+
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode());
+
+        self::assertSame(2, $this->rowCount('corps_payroll'));
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+        self::assertSame(2, $this->rowCountWhere('corps_payroll', 'parameter_set_id = ' . $setId));
+    }
+
+    /** #71 C5.3 — `body_code` de la masse salariale absent de `corps.json` : rollback total. */
+    public function testUnknownCorpsInPayrollIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/masse_salariale_corps.csv', 'PE,15590703468', 'XX,15590703468');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('corps inconnu `XX`', $tester->getDisplay());
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('corps'));
+        self::assertSame(0, $this->rowCount('corps_payroll'));
+        self::assertSame(0, $this->rowCount('source'));
+    }
+
+    /** #71 C5.4 — `source` de la masse salariale absente du référentiel : rollback total. */
+    public function testUnknownSourceInPayrollIsRejected(): void
+    {
+        $dir = $this->copyData();
+        $this->replaceInFile($dir . '/data/masse_salariale_corps.csv', 'pap-2024-ens-scolaire-masse-1106', 'inexistant');
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertNotSame(Command::SUCCESS, $tester->getStatusCode());
+        self::assertStringContainsString('source inconnue `inexistant`', $tester->getDisplay());
+        self::assertSame(0, $this->rowCount('parameter_set'));
+        self::assertSame(0, $this->rowCount('corps_payroll'));
+        self::assertSame(0, $this->rowCount('source'));
+    }
+
     /** C6.1 — réimport du même commit : état identique, aucun doublon ni accumulation. */
     public function testReimportingSameCommitIsIdempotent(): void
     {
@@ -398,10 +491,11 @@ final class ImportCommandTest extends IntegrationTestCase
         self::assertSame(2, $this->rowCount('grille'));
         self::assertSame(22, $this->rowCount('echelon'));
         self::assertSame(2, $this->rowCount('prime_rate'));
-        self::assertSame(15, $this->rowCount('source'));
+        self::assertSame(17, $this->rowCount('source'));
         self::assertSame(2, $this->rowCount('corps'));
         self::assertSame(2, $this->rowCount('funder'));
         self::assertSame(4, $this->rowCount('reference_budget'));
+        self::assertSame(2, $this->rowCount('corps_payroll'));
 
         // Upsert par `code` : aucun doublon sur les référentiels globaux.
         self::assertSame(1, $this->rowCountWhere('source', "code = 'decret-2023-519'"));

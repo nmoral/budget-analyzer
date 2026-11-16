@@ -1,0 +1,9 @@
+{
+  "raw": "masse_salariale_corps.json",
+  "retrieved_at": "2026-11-16",
+  "script": "sources.masse_salariale_corps",
+  "script_version": "1",
+  "sha256": "767d38332f3f45e9048f8ca986e7c8de5ce5a898671c39e0218d2338f2b541b8",
+  "source": "Masse salariale par corps — PAP « Enseignement scolaire » (programme 140) : ETPT de la catégorie d'emploi × coût moyen chargé HCAS global",
+  "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf"
+}

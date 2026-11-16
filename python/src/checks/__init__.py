@@ -44,6 +44,7 @@ FILE_TO_SCHEMA: dict[str, str] = {
     "taux_primes": "taux_primes",
     "couts_pap": "couts_pap",
     "budget_financeur": "budget_financeur",
+    "masse_salariale_corps": "masse_salariale_corps",
 }
 
 
@@ -163,13 +164,17 @@ def _budget_key(row: dict[str, str]) -> str:
     return row["funder_code"]
 
 
+def _body_key(row: dict[str, str]) -> str:
+    return row["body_code"]
+
+
 def check_periods_no_overlap(files: Sequence[LoadedFile]) -> list[Violation]:
     """C2 — les périodes d'effet d'une même clé ne se chevauchent pas.
 
     ``parametre_date`` est groupé par ``key``, ``grille`` par ``body_code`` +
-    ``grade``, ``budget_financeur`` par ``funder_code``. Bornes incluses,
-    ``end_date`` vide = période ouverte ; l'adjacence (fin le jour J, début le
-    jour J+1) est autorisée.
+    ``grade``, ``budget_financeur`` par ``funder_code``, ``masse_salariale_corps``
+    par ``body_code``. Bornes incluses, ``end_date`` vide = période ouverte ;
+    l'adjacence (fin le jour J, début le jour J+1) est autorisée.
     """
     violations: list[Violation] = []
     for loaded in files:
@@ -179,6 +184,8 @@ def check_periods_no_overlap(files: Sequence[LoadedFile]) -> list[Violation]:
             violations.extend(_period_violations(loaded, _grille_key))
         elif loaded.schema == "budget_financeur":
             violations.extend(_period_violations(loaded, _budget_key))
+        elif loaded.schema == "masse_salariale_corps":
+            violations.extend(_period_violations(loaded, _body_key))
     return violations
 
 
@@ -240,6 +247,15 @@ class _Bounds:
     parametre_date_by_key: dict[str, _Bound]
     taux_primes_value: _Bound | None
     budget_financeur_value: _Bound | None
+    masse_salariale_corps_value: _Bound | None
+
+    def value_bound_of(self, schema: str) -> _Bound | None:
+        """Borne unique sur la colonne ``value`` d'un schéma (``None`` si non listé)."""
+        return {
+            "taux_primes": self.taux_primes_value,
+            "budget_financeur": self.budget_financeur_value,
+            "masse_salariale_corps": self.masse_salariale_corps_value,
+        }.get(schema)
 
 
 def _as_float(raw: float | None, default: float) -> float:
@@ -261,6 +277,7 @@ def load_bounds(root: Path) -> _Bounds:
             parametre_date_by_key={},
             taux_primes_value=None,
             budget_financeur_value=None,
+            masse_salariale_corps_value=None,
         )
     with path.open("rb") as handle:
         config: dict[str, Any] = tomllib.load(handle)
@@ -272,6 +289,9 @@ def load_bounds(root: Path) -> _Bounds:
         parametre_date_by_key=by_key,
         taux_primes_value=_schema_value_bound(config, "taux_primes"),
         budget_financeur_value=_schema_value_bound(config, "budget_financeur"),
+        masse_salariale_corps_value=_schema_value_bound(
+            config, "masse_salariale_corps"
+        ),
     )
 
 
@@ -286,9 +306,9 @@ def check_values_within_bounds(bounds: _Bounds) -> Invariant:
     déjà chargés depuis ``root/coherence.toml`` (liste blanche de la racine contrôlée).
 
     Liste blanche : pour ``parametre_date`` les bornes sont indexées par la colonne
-    ``key`` (valeur contrôlée : ``value``) ; pour ``taux_primes`` et
-    ``budget_financeur`` une borne unique s'applique à la colonne ``value``. Clé ou
-    schéma non listé = non contrôlé.
+    ``key`` (valeur contrôlée : ``value``) ; pour ``taux_primes``,
+    ``budget_financeur`` et ``masse_salariale_corps`` une borne unique s'applique
+    à la colonne ``value``. Clé ou schéma non listé = non contrôlé.
     """
 
     def invariant(files: Sequence[LoadedFile]) -> list[Violation]:
@@ -303,33 +323,20 @@ def check_values_within_bounds(bounds: _Bounds) -> Invariant:
                                 loaded, line, row["key"], row["value"], bound
                             )
                         )
-            elif (
-                loaded.schema == "taux_primes" and bounds.taux_primes_value is not None
-            ):
-                for line, row in loaded.rows:
-                    violations.extend(
-                        _bound_violations(
-                            loaded,
-                            line,
-                            "taux_primes.value",
-                            row["value"],
-                            bounds.taux_primes_value,
-                        )
+                continue
+            schema_bound = bounds.value_bound_of(loaded.schema)
+            if schema_bound is None:
+                continue
+            for line, row in loaded.rows:
+                violations.extend(
+                    _bound_violations(
+                        loaded,
+                        line,
+                        f"{loaded.schema}.value",
+                        row["value"],
+                        schema_bound,
                     )
-            elif (
-                loaded.schema == "budget_financeur"
-                and bounds.budget_financeur_value is not None
-            ):
-                for line, row in loaded.rows:
-                    violations.extend(
-                        _bound_violations(
-                            loaded,
-                            line,
-                            "budget_financeur.value",
-                            row["value"],
-                            bounds.budget_financeur_value,
-                        )
-                    )
+                )
         return violations
 
     return invariant

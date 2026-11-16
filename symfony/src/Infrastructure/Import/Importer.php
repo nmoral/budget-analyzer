@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Import;
 
 use App\Infrastructure\Entity\Corps;
+use App\Infrastructure\Entity\CorpsPayroll;
 use App\Infrastructure\Entity\DatedParameter;
 use App\Infrastructure\Entity\Echelon;
 use App\Infrastructure\Entity\Funder;
@@ -23,8 +24,8 @@ use Doctrine\ORM\EntityManagerInterface;
  * (C4), puis création du `ParameterSet` versionné (C1) et chargement complet du
  * dépôt réel (C5) : valeurs datées (`DatedParameter`), grilles (`Grille`), échelons
  * (`Echelon`, rattachés à leur grille par la clé `{body_code}_{grade}_{version}`),
- * taux de primes (`PrimeRate`) et budgets de référence datés par financeur
- * (`ReferenceBudget`), avec résolution des FK vers les référentiels `Source`
+ * taux de primes (`PrimeRate`), budgets de référence datés par financeur
+ * (`ReferenceBudget`) et masse salariale datée par corps (`CorpsPayroll`), avec résolution des FK vers les référentiels `Source`
  * (`data/sources.json`), `Corps` (`data/corps.json`) et `Funder` (`data/funders.json`)
  * et vers le `ParameterSet`.
  *
@@ -33,7 +34,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Réimport idempotent du même commit (C6, décisions Q2/Q5) : le `ParameterSet` est
  * réutilisé (jamais supprimé — un scénario l'épingle), `Grille`/`Echelon` sont mis à
  * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`,
- * `PrimeRate` et `ReferenceBudget` — que rien ne référence — sont remplacés par
+ * `PrimeRate`, `ReferenceBudget` et `CorpsPayroll` — que rien ne référence — sont remplacés par
  * rechargement, et les référentiels globaux `Source`/`Corps`/`Funder` sont mis à jour par
  * upsert sur `code`. Aucune FK d'objet utilisateur (scénario, profil) n'est donc cassée
  * par un ré-import.
@@ -62,6 +63,7 @@ final class Importer
         'grille_isg' => 'grille',
         'taux_primes' => 'taux_primes',
         'budget_financeur' => 'budget_financeur',
+        'masse_salariale_corps' => 'masse_salariale_corps',
     ];
 
     /** @var list<string> */
@@ -86,6 +88,9 @@ final class Importer
 
     /** @var list<string> */
     private const BUDGET_FILES = ['budget_financeur'];
+
+    /** @var list<string> */
+    private const PAYROLL_FILES = ['masse_salariale_corps'];
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -150,6 +155,7 @@ final class Importer
             $this->loadEchelons($parsed, $grilles, $existingEchelons);
             $this->loadPrimeRates($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
             $this->loadBudgets($parsed, $set, $sourceReferential, $funderReferential, $sources, $funders);
+            $this->loadPayrolls($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
 
             $this->em->flush();
         });
@@ -328,6 +334,39 @@ final class Importer
     }
 
     /**
+     * Masse salariale datée par corps. Un corps du référentiel sans ligne (ISG) n'est
+     * pas une erreur : seuls les corps cités sont résolus.
+     *
+     * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, versant: string, category: string}>                         $corpsReferential
+     * @param array<string, Source>                                                                           $sources
+     * @param array<string, Corps>                                                                            $corps
+     */
+    private function loadPayrolls(
+        array $parsed,
+        ParameterSet $set,
+        array $sourceReferential,
+        array $corpsReferential,
+        array &$sources,
+        array &$corps,
+    ): void {
+        foreach (self::PAYROLL_FILES as $file) {
+            foreach ($parsed[$file]['rows'] as $row) {
+                $payroll = new CorpsPayroll();
+                $payroll->value = $row['value'];
+                $payroll->unit = $row['unit'];
+                $payroll->startDate = new \DateTimeImmutable($row['start_date']);
+                $payroll->endDate = $row['end_date'] === '' ? null : new \DateTimeImmutable($row['end_date']);
+                $payroll->source = $this->resolveSource($row['source'], $sourceReferential, $sources);
+                $payroll->body = $this->resolveCorps($row['body_code'], $corpsReferential, $corps);
+                $payroll->parameterSet = $set;
+                $this->em->persist($payroll);
+            }
+        }
+    }
+
+    /**
      * Le ParameterSet déjà présent pour ce commit (ré-import), ou null au premier import.
      */
     private function findExistingSet(string $commit): ?ParameterSet
@@ -342,7 +381,7 @@ final class Importer
 
     /**
      * Purge les seules entités scopées que RIEN ne référence (DatedParameter, PrimeRate,
-     * ReferenceBudget) : elles sont remplacées par rechargement. Grille/Echelon (référencés
+     * ReferenceBudget, CorpsPayroll) : elles sont remplacées par rechargement. Grille/Echelon (référencés
      * par les profils) et le ParameterSet (référencé par les scénarios) ne sont jamais
      * supprimés ici — ils sont mis à jour en place par upsert, pour ne casser aucune FK
      * d'objet utilisateur. Le référentiel global `Funder` (upsert par `code`) n'est pas purgé.
@@ -355,6 +394,7 @@ final class Importer
             'DELETE App\Infrastructure\Entity\DatedParameter p WHERE IDENTITY(p.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\PrimeRate r WHERE IDENTITY(r.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\ReferenceBudget b WHERE IDENTITY(b.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\CorpsPayroll m WHERE IDENTITY(m.parameterSet) = :set',
         ];
         foreach ($deletes as $dql) {
             $this->em->createQuery($dql)->setParameter('set', $setId)->execute();
