@@ -527,11 +527,6 @@ def check_concours_cross_totals(files: Sequence[LoadedFile]) -> list[Violation]:
     return violations
 
 
-def load_academies(root: Path) -> frozenset[str] | None:
-    """Codes du référentiel ``root/academies.json`` (``None`` si absent)."""
-    return academie_codes(load_academie_entries(root))
-
-
 def academie_codes(entries: list[AcademieEntry] | None) -> frozenset[str] | None:
     """Codes déclarés par les entrées (objet ou non) ; ``None`` sans référentiel."""
     if entries is None:
