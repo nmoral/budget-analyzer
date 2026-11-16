@@ -51,6 +51,15 @@ Budget de référence **daté par financeur**, trajectoire pluriannuelle sur le 
 
   Chaque valeur de `source` est un slug présent dans `data/sources.json`, dont le `fileHash` est le sha256 de la publication archivée sous `data/sources/publications/`.
 
+### Masse salariale par corps
+
+Masse salariale **datée par corps**, en coût chargé **HCAS** (hors CAS Pensions), chaque ligne sourcée (règle de transparence n° 7) :
+
+- `masse_salariale_corps` — masse salariale annuelle d'un corps (schéma `masse_salariale_corps`), colonnes `body_code, value, unit, start_date, end_date (optionnel), source`. `unit = EUR`, `value` = montant en euros (entier). Un corps, deux millésimes (2024 clos, 2025 à fin ouverte) :
+  - `PE` — ETPT de la catégorie d'emploi 1106 « Enseignants du 1er degré » × coût moyen chargé HCAS global de cette catégorie, les deux lus dans le PAP « Enseignement scolaire » (programme 140) du millésime : 327 302 × 47 634 = 15 590 703 468 € en 2024 (PAP 2024, p. 47 et 53) ; 324 990 × 46 139 = 14 994 713 610 € en 2025 (PAP 2025, p. 47 et 52).
+
+  Le brut `data/sources/masse_salariale_corps.json` porte les deux facteurs (`etpt`, `average_loaded_cost`) ; le produit est calculé par `sources.masse_salariale_corps`. Chaque `source` est un slug dédié de `data/sources.json` (`pap-2024-ens-scolaire-masse-1106`, `pap-2025-ens-scolaire-masse-1106`), de même URL et `fileHash` que le PDF PAP archivé, dont le `locator` cite la formule, les pages et les deux valeurs. `ISG` n'a pas de ligne (pas de source directe, cf. #74).
+
 Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04).
 
 ## Contrôles de cohérence (`python -m checks`)
