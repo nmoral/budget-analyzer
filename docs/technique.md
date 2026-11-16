@@ -783,6 +783,9 @@ sont mis à jour **en place par clé naturelle** (upsert : `{body}_{grade}_{vers
 `purgeReplaceableScoped`), et `Source`/`Corps`/`Funder` restent en upsert global sur `code`.
 La chaîne scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une
 seule transaction).
+Réimporter le même commit laisse ainsi la base dans le même état (décision Q5, C6), sans
+nouvelle contrainte DB d'unicité (décision Q7) : l'atomicité vient de la transaction,
+l'unicité des données de l'invariant amont.
 
 ### Repositories et câblage
 
@@ -1426,16 +1429,9 @@ Ces référentiels sont des fichiers **curatés** (pas de CSV ni de schéma Fric
 colonnes NOT NULL de `Source`/`Corps` (et `Funder.label`) étant obligatoires, le référentiel
 doit les fournir (décision Q3/Q1).
 
-### Idempotence (réimport du même commit)
+### Réimport du même commit
 
-Réimporter le même commit laisse la base dans le même état (décision Q5, C6). En tête de
-transaction, `purgeExistingCommit()` supprime en DQL les entités **scopées** au
-`ParameterSet` du commit (Echelon d'abord — FK Grille —, puis Grille / DatedParameter /
-PrimeRate, enfin le `ParameterSet`), puis `em->clear()` ; le set est ensuite recréé et
-rechargé. Les référentiels **globaux** `Source`/`Corps` (pas de FK vers `ParameterSet`)
-ne sont pas purgés mais mis à jour par **upsert sur `code`** (`findOneBy`). Aucune nouvelle
-contrainte DB d'unicité n'est introduite (décision Q7) : l'atomicité vient de la
-transaction, l'unicité des données de l'invariant amont.
+Voir [Idempotence de l'import préservant les FK d'objets utilisateur (A2/J4)](#idempotence-de-limport-préservant-les-fk-dobjets-utilisateur-a2j4).
 
 ### Câblage et configuration
 
