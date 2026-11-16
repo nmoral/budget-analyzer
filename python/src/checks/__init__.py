@@ -17,9 +17,8 @@ from __future__ import annotations
 import csv
 import json
 import math
-import re
 import tomllib
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import date
 from itertools import combinations, pairwise
@@ -529,11 +528,14 @@ def check_concours_cross_totals(files: Sequence[LoadedFile]) -> list[Violation]:
 
 def load_academies(root: Path) -> frozenset[str] | None:
     """Codes du référentiel ``root/academies.json`` (``None`` si absent)."""
-    path = root / "academies.json"
-    if not path.exists():
+    return academie_codes(load_academie_entries(root))
+
+
+def academie_codes(entries: list[AcademieEntry] | None) -> frozenset[str] | None:
+    """Codes déclarés par les entrées (objet ou non) ; ``None`` sans référentiel."""
+    if entries is None:
         return None
-    referential: dict[str, Any] = json.loads(path.read_text("utf-8"))
-    return frozenset(referential)
+    return frozenset(entry.code for entry in entries)
 
 
 def check_academies_declared(declared: frozenset[str] | None) -> Invariant:
@@ -569,34 +571,59 @@ def check_academies_declared(declared: frozenset[str] | None) -> Invariant:
 
 @dataclass(frozen=True)
 class AcademieEntry:
-    """Une entrée de ``academies.json`` : code, ligne de sa clé, ``statut`` brut."""
+    """Une entrée de ``academies.json`` : code, ligne de sa clé, ``statut`` brut.
+
+    ``non_objet`` porte l'écriture JSON de la valeur quand elle n'est pas un objet.
+    """
 
     code: str
     line: int
     statut: str | None
-
-
-# Clé d'une entrée (valeur objet) : ``"<code>": {``.
-_ACADEMIE_KEY = re.compile(r'"([^"]+)"\s*:\s*\{')
+    non_objet: str | None = None
 
 
 def load_academie_entries(root: Path) -> list[AcademieEntry] | None:
     """Entrées de ``root/academies.json`` localisées sur la ligne de leur clé
 
     (``None`` si le référentiel est absent ; ``statut`` absent → ``None``).
+    Fichier lu et décodé une seule fois.
     """
     path = root / "academies.json"
     if not path.exists():
         return None
     text = path.read_text("utf-8")
-    lines: dict[str, int] = {}
-    for match in _ACADEMIE_KEY.finditer(text):
-        lines.setdefault(match.group(1), text.count("\n", 0, match.start()) + 1)
-    referential: dict[str, dict[str, Any]] = json.loads(text)
     return [
-        AcademieEntry(code=code, line=lines[code], statut=data.get("statut"))
-        for code, data in referential.items()
+        _academie_entry(code, text.count("\n", 0, position) + 1, value)
+        for position, code, value in _root_members(text)
     ]
+
+
+def _academie_entry(code: str, line: int, value: Any) -> AcademieEntry:
+    if isinstance(value, dict):
+        return AcademieEntry(code=code, line=line, statut=value.get("statut"))
+    shown = json.dumps(value, ensure_ascii=False)
+    return AcademieEntry(code=code, line=line, statut=None, non_objet=shown)
+
+
+def _root_members(text: str) -> Iterator[tuple[int, str, Any]]:
+    """``(position de la clé, clé, valeur)`` de chaque membre de l'objet racine.
+
+    Seules les clés de premier niveau sont repérées : chaque valeur est décodée
+    d'un bloc, ses clés imbriquées ne sont donc jamais confondues avec un code.
+    """
+    decode = json.JSONDecoder().raw_decode
+    position = _skip_blank(text, _skip_blank(text, 0) + 1)
+    while text[position : position + 1] == '"':
+        key, after_key = decode(text, position)
+        colon = _skip_blank(text, after_key)
+        value, after_value = decode(text, _skip_blank(text, colon + 1))
+        yield position, key, value
+        position = _skip_blank(text, _skip_blank(text, after_value) + 1)
+
+
+def _skip_blank(text: str, position: int) -> int:
+    """Première position ≥ ``position`` hors blancs JSON."""
+    return len(text) - len(text[position:].lstrip(" \t\n\r"))
 
 
 ACADEMIE_STATUTS = ("metropole", "drom", "com")
@@ -615,16 +642,19 @@ def check_academie_statuts(entries: list[AcademieEntry] | None) -> Invariant:
                 invariant="academie_statut",
                 file="academies.json",
                 line=entry.line,
-                message=f"{entry.code} : {_statut_breach(entry.statut)}",
+                message=f"{entry.code} : {_entry_breach(entry)}",
             )
             for entry in entries or []
-            if entry.statut not in ACADEMIE_STATUTS
+            if entry.non_objet is not None or entry.statut not in ACADEMIE_STATUTS
         ]
 
     return invariant
 
 
-def _statut_breach(statut: str | None) -> str:
+def _entry_breach(entry: AcademieEntry) -> str:
+    if entry.non_objet is not None:
+        return f"entrée « {entry.non_objet} » non objet"
+    statut = entry.statut
     if statut is None:
         return "statut absent"
     return f"statut « {statut} » hors {'/'.join(ACADEMIE_STATUTS)}"
@@ -692,12 +722,13 @@ def run(root: Path) -> tuple[int, str]:
     fonction de son seul argument, sans état global masqué.
     """
     files = collect_files(root)
+    academies = load_academie_entries(root)
     invariants = (
         *STATELESS_INVARIANTS,
         check_values_within_bounds(load_bounds(root)),
         check_sources_declared(load_declared_sources(root)),
-        check_academies_declared(load_academies(root)),
-        check_academie_statuts(load_academie_entries(root)),
+        check_academies_declared(academie_codes(academies)),
+        check_academie_statuts(academies),
     )
     violations: list[Violation] = []
     for invariant in invariants:
