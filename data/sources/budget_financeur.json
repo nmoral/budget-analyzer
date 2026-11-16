@@ -1,0 +1,36 @@
+{
+  "rows": [
+    {
+      "funder_code": "ETAT_P140",
+      "value": "26842958249",
+      "unit": "EUR",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "source": "pap-2024-ens-scolaire"
+    },
+    {
+      "funder_code": "ETAT_P140",
+      "value": "27490907364",
+      "unit": "EUR",
+      "start_date": "2025-01-01",
+      "end_date": "",
+      "source": "pap-2025-ens-scolaire"
+    },
+    {
+      "funder_code": "ONDAM",
+      "value": "254900000000",
+      "unit": "EUR",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "source": "ondam-2024-ralfss"
+    },
+    {
+      "funder_code": "ONDAM",
+      "value": "265900000000",
+      "unit": "EUR",
+      "start_date": "2025-01-01",
+      "end_date": "",
+      "source": "ondam-2025-ralfss"
+    }
+  ]
+}

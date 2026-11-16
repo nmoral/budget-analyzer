@@ -18,3 +18,7 @@ point_indice = { min = 0 }
 # Borne par schéma sur la colonne `value` de tout fichier `taux_primes`.
 [taux_primes]
 value = { min = 0, max = 1 }
+
+# Borne par schéma sur la colonne `value` (montant en euros) de `budget_financeur`.
+[budget_financeur]
+value = { min = 0 }

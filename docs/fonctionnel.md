@@ -55,19 +55,21 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **intégrité des fichiers sources** : l'empreinte du fichier brut archivé de chaque
   source est comparée à celle enregistrée dans son manifeste ; toute divergence fait
   échouer l'import ;
-- **complétude des référentiels** : toute source et tout corps cités par les données
-  doivent figurer dans les référentiels curatés du dépôt (`data/sources.json`,
-  `data/corps.json`) ; une référence inconnue fait échouer l'import.
+- **complétude des référentiels** : toute source, tout corps et tout financeur cités par
+  les données doivent figurer dans les référentiels curatés du dépôt (`data/sources.json`,
+  `data/corps.json`, `data/funders.json`) ; une référence inconnue fait échouer l'import.
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
-point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes) et les
-**référentiels** de sources et de corps auxquels elles se rattachent. Ne sont pas chargés
-par cette commande : les coûts PAP, les régimes de retraite, les financeurs et les objets
-de simulation (profils, scénarios), qui relèvent d'autres apports.
+point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
+**budget de référence daté par financeur** et les **référentiels** de sources, de corps et
+de financeurs auxquels ils se rattachent. Ne sont pas chargés par cette commande : les
+coûts PAP, les régimes de retraite et les objets de simulation (profils, scénarios), qui
+relèvent d'autres apports.
 
 **Réimport du même commit** : relancer la commande avec la même référence de version
 laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
-sont remplacées, et les sources et corps sont mis à jour sur place.
+— y compris le budget de référence — sont remplacées, et les sources, corps et financeurs
+sont mis à jour sur place.
 
 ### Modèle de données et sélection des valeurs réglementaires
 
@@ -90,7 +92,15 @@ suivantes.
   `IRCANTEC`).
 - **Financeur** : rattachement budgétaire (code, libellé) et ses codes dans les
   nomenclatures officielles (mission / programme / action pour l'État, sous-objectif
-  de l'ONDAM, fonction COFOG).
+  de l'ONDAM, fonction COFOG). Deux financeurs sont fournis par le dépôt : `ETAT_P140`
+  (État, programme 140) pour la FPE et `ONDAM` pour la FPH.
+- **Budget de référence** : montant budgétaire total d'un financeur sur une **période de
+  validité datée** (montant en euros, unité, source), suivant une **trajectoire
+  pluriannuelle** (plusieurs millésimes contigus par financeur, le dernier à fin ouverte).
+  Le budget `ETAT_P140` est constitué des **crédits complets du programme 140** (LFI) et le
+  budget `ONDAM` de l'**ONDAM global voté** (LFSS). Cette donnée est **exposée en base pour
+  un usage futur** par la mise en regard budgétaire (#21) ; elle n'est à ce stade ni
+  calculée ni affichée.
 - **Taux de primes** : taux de primes d'un corps pour une année d'observation (primes
   de la V1).
 - **Profil** : unité de simulation (corps, grade et échelon d'entrée, régime de

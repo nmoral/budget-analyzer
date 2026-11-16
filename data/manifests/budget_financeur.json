@@ -1,0 +1,9 @@
+{
+  "raw": "budget_financeur.json",
+  "retrieved_at": "2026-11-01",
+  "script": "sources.budget_financeur",
+  "script_version": "1",
+  "sha256": "4c70a81a3eba190c0869035f7c122b4d48a5b0059b4f3985d941595b777eb202",
+  "source": "Budget de référence par financeur — PAP « Enseignement scolaire » (programme 140, LFI) et Cour des comptes, RALFSS (ONDAM voté, LFSS)",
+  "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf"
+}

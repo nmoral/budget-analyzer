@@ -778,10 +778,11 @@ cassait le ré-import idempotent existant (`delete`/`recreate` du `ParameterSet`
 de FK). `Importer` ne supprime plus les lignes **référencées par un objet utilisateur** : au
 ré-import du même commit, le `ParameterSet` est **réutilisé** (même id), `Grille` et `Echelon`
 sont mis à jour **en place par clé naturelle** (upsert : `{body}_{grade}_{version}`, puis
-`grilleKey#rank`), tandis que `DatedParameter` et `PrimeRate` — que rien ne référence — sont
-**remplacés** par rechargement, et `Source`/`Corps` restent en upsert sur `code`. La chaîne
-scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une seule
-transaction).
+`grilleKey#rank`), tandis que `DatedParameter`, `PrimeRate` et `ReferenceBudget` (#70) — que
+rien ne référence — sont **remplacés** par rechargement (purge scopée au `ParameterSet` via
+`purgeReplaceableScoped`), et `Source`/`Corps`/`Funder` restent en upsert global sur `code`.
+La chaîne scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une
+seule transaction).
 
 ### Repositories et câblage
 
@@ -1175,7 +1176,7 @@ namespace `App\Migrations` → `symfony/migrations/`). La migration initiale
 
 ### Modèle de données
 
-Le modèle de persistance comprend **12 entités** dans `src/Infrastructure/Entity/`.
+Le modèle de persistance comprend **13 entités** dans `src/Infrastructure/Entity/`.
 Le code est en anglais, aligné sur les colonnes CSV du dépôt `data/` ; les noms de
 domaine français (Corps, Grille, Échelon) sont conservés comme noms d'entité. Les
 identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (mappés en
@@ -1201,6 +1202,11 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   `parameterSet` (FK). Valeur datée. La colonne `key` est échappée (`` `key` ``).
 - **PrimeRate** — taux de primes (primes V1) : `body` (FK Corps), `value`,
   `observationYear`, `source` (FK), `fallback` (booléen), `parameterSet` (FK).
+- **ReferenceBudget** — budget de référence daté par financeur (#70) : `value`
+  (`DECIMAL(16,2)`, montant total en euros), `unit`, `startDate`, `endDate` (nullable =
+  période ouverte), `funder` (FK), `source` (FK), `parameterSet` (FK). Valeur datée, bornes
+  de validité **incluses** `[startDate, endDate]`, scopée au jeu de paramètres. Table
+  `reference_budget` créée par la migration `Version20261101184806`.
 - **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
   `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité dédiée,
   les primes V1 passent par `PrimeRate`), `funder` (FK), `status`, `referenceCalendar`.
@@ -1210,7 +1216,8 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   `spreadYears`.
 - **ParameterSet** — jeu de paramètres pour la reproductibilité : `versionId` (unique,
   commit du dépôt de données), `importedAt`. Les valeurs datées (DatedParameter, Grille,
-  Echelon via sa grille, PrimeRate) et les Scénarios portent une FK vers ce jeu.
+  Echelon via sa grille, PrimeRate, ReferenceBudget) et les Scénarios portent une FK vers
+  ce jeu.
 
 Les entités sont **purement déclaratives** (aucun `repositoryClass`, aucune logique) ;
 le peuplement réel est assuré par la commande d'import `app:import` (voir « Import du
@@ -1351,17 +1358,21 @@ Sous `src/Infrastructure/Import/` :
   `sha256(data/sources/<manifest.raw>) == manifest.sha256`, manifeste lu dans
   `data/manifests/<fichier>.json`. Toute divergence (ou brut/manifeste manquant) lève
   `ManifestMismatchException` (décision Q4).
-- **`SourceReferential`** / **`CorpsReferential`** : chargent les référentiels curatés
-  `data/sources.json` (slug → `label`/`publisher`/`edition`/`locator`/`url`/`retrievedAt`/`fileHash`,
-  `edition` et `locator` ajoutés en #65) et `data/corps.json` (code →
-  `label`/`versant`/`category`).
+- **`SourceReferential`** / **`CorpsReferential`** / **`FunderReferential`** : chargent les
+  référentiels curatés `data/sources.json` (slug →
+  `label`/`publisher`/`edition`/`locator`/`url`/`retrievedAt`/`fileHash`, `edition` et
+  `locator` ajoutés en #65), `data/corps.json` (code → `label`/`versant`/`category`) et
+  `data/funders.json` (code → `label` requis, puis les codes de nomenclature optionnels
+  `mission`/`program`/`action`/`ondamSubObjective`/`cofog` ; introduit en #70). Un
+  référentiel introuvable ou invalide lève `ImportException`.
 
 ### Périmètre, mapping et ordre de chargement
 
 Le mapping fichier → schéma est la constante `Importer::FILE_TO_SCHEMA`, alignée sur le
 `FILE_TO_SCHEMA` Python **hors `couts_pap`** (non importé, aucune entité cible — hors
 périmètre #11). Avant tout chargement, l'`Importer` valide le schéma **et** vérifie
-l'empreinte de **chacun** des 12 fichiers du mapping (C3 « avant tout chargement », C4).
+l'empreinte de **chacun** des 13 fichiers du mapping (C3 « avant tout chargement », C4 ;
+`budget_financeur` ajouté en #70).
 
 Le chargement peuple ensuite, dans l'ordre :
 
@@ -1373,10 +1384,14 @@ Le chargement peuple ensuite, dans l'ordre :
 3. `Echelon` (`echelon_pe`, `echelon_isg`) — rattaché à sa `Grille` par la colonne
    `grille` du CSV, résolue via cette clé composite ; clé introuvable → `ImportException`
    (« grille inconnue ») ;
-4. `PrimeRate` (`taux_primes`) — FK `body` (Corps), `source`, `parameterSet`.
+4. `PrimeRate` (`taux_primes`) — FK `body` (Corps), `source`, `parameterSet` ;
+5. `ReferenceBudget` (`budget_financeur`, #70) — FK `source`, `funder` (résolu via
+   `data/funders.json`) et `parameterSet` ; `value`/`unit` repris tels quels, `start_date`
+   et `end_date` (vide = période ouverte) convertis en `DateTimeImmutable`.
 
 Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
-`echelon` = 22, `prime_rate` = 2, `source` = 11, `corps` = 2.
+`echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `source` = 15, `corps` = 2,
+`funder` = 2.
 
 ### Résolution des FK et référentiels
 
@@ -1388,11 +1403,18 @@ code → entité (une seule entité par code dans la transaction) :
   (`UnknownSourceException`), même si une ligne `Source` de même code existait déjà en base
   (le référentiel fait foi) ;
 - un corps cité par `body_code` est résolu depuis `data/corps.json` ; code absent → refus
-  (`UnknownCorpsException`).
+  (`UnknownCorpsException`) ;
+- un financeur cité par `funder_code` (colonne de `budget_financeur`) est résolu depuis
+  `data/funders.json` par `resolveFunder()` ; code absent → refus (`UnknownFunderException`,
+  sous-classe d'`ImportException`). Le `Funder` est **upserté globalement par `code`**
+  (comme `Source`/`Corps`, non scopé au `ParameterSet`) : la ligne existante est réutilisée,
+  sinon créée ; `label` (NOT NULL) est repris du référentiel et les colonnes de nomenclature
+  nullables (`mission`/`program`/`action`/`ondamSubObjective`/`cofog`) ne sont renseignées
+  que si présentes.
 
 Ces référentiels sont des fichiers **curatés** (pas de CSV ni de schéma Frictionless) : les
-colonnes `Source`/`Corps` étant toutes NOT NULL, le référentiel doit tout fournir
-(décision Q3).
+colonnes NOT NULL de `Source`/`Corps` (et `Funder.label`) étant obligatoires, le référentiel
+doit les fournir (décision Q3/Q1).
 
 ### Idempotence (réimport du même commit)
 

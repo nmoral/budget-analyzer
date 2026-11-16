@@ -7,9 +7,11 @@ namespace App\Infrastructure\Import;
 use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\DatedParameter;
 use App\Infrastructure\Entity\Echelon;
+use App\Infrastructure\Entity\Funder;
 use App\Infrastructure\Entity\Grille;
 use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\PrimeRate;
+use App\Infrastructure\Entity\ReferenceBudget;
 use App\Infrastructure\Entity\Source;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -20,18 +22,21 @@ use Doctrine\ORM\EntityManagerInterface;
  * de tous les CSV du périmètre d'import (C3), vérification des empreintes des bruts
  * (C4), puis création du `ParameterSet` versionné (C1) et chargement complet du
  * dépôt réel (C5) : valeurs datées (`DatedParameter`), grilles (`Grille`), échelons
- * (`Echelon`, rattachés à leur grille par la clé `{body_code}_{grade}_{version}`) et
- * taux de primes (`PrimeRate`), avec résolution des FK vers les référentiels `Source`
- * (`data/sources.json`) et `Corps` (`data/corps.json`) et vers le `ParameterSet`.
+ * (`Echelon`, rattachés à leur grille par la clé `{body_code}_{grade}_{version}`),
+ * taux de primes (`PrimeRate`) et budgets de référence datés par financeur
+ * (`ReferenceBudget`), avec résolution des FK vers les référentiels `Source`
+ * (`data/sources.json`), `Corps` (`data/corps.json`) et `Funder` (`data/funders.json`)
+ * et vers le `ParameterSet`.
  *
- * Un slug/corps référencé mais absent de son référentiel → refus (rollback total).
+ * Un slug/corps/financeur référencé mais absent de son référentiel → refus (rollback total).
  *
  * Réimport idempotent du même commit (C6, décisions Q2/Q5) : le `ParameterSet` est
  * réutilisé (jamais supprimé — un scénario l'épingle), `Grille`/`Echelon` sont mis à
- * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`
- * et `PrimeRate` — que rien ne référence — sont remplacés par rechargement, et les
- * référentiels globaux `Source`/`Corps` sont mis à jour par upsert sur `code`. Aucune FK
- * d'objet utilisateur (scénario, profil) n'est donc cassée par un ré-import.
+ * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`,
+ * `PrimeRate` et `ReferenceBudget` — que rien ne référence — sont remplacés par
+ * rechargement, et les référentiels globaux `Source`/`Corps`/`Funder` sont mis à jour par
+ * upsert sur `code`. Aucune FK d'objet utilisateur (scénario, profil) n'est donc cassée
+ * par un ré-import.
  */
 final class Importer
 {
@@ -56,6 +61,7 @@ final class Importer
         'grille_pe' => 'grille',
         'grille_isg' => 'grille',
         'taux_primes' => 'taux_primes',
+        'budget_financeur' => 'budget_financeur',
     ];
 
     /** @var list<string> */
@@ -78,6 +84,9 @@ final class Importer
     /** @var list<string> */
     private const PRIME_RATE_FILES = ['taux_primes'];
 
+    /** @var list<string> */
+    private const BUDGET_FILES = ['budget_financeur'];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly CsvReader $csvReader,
@@ -85,11 +94,12 @@ final class Importer
         private readonly ManifestVerifier $manifestVerifier,
         private readonly SourceReferential $sourceReferential,
         private readonly CorpsReferential $corpsReferential,
+        private readonly FunderReferential $funderReferential,
     ) {
     }
 
     /**
-     * @throws ImportException tout échec (schéma, empreinte, source/corps inconnu) → rollback total
+     * @throws ImportException tout échec (schéma, empreinte, source/corps/financeur inconnu) → rollback total
      */
     public function import(string $commit, string $dataDir): void
     {
@@ -97,6 +107,7 @@ final class Importer
             $parsed = $this->validateAndVerify($dataDir);
             $sourceReferential = $this->sourceReferential->load($dataDir);
             $corpsReferential = $this->corpsReferential->load($dataDir);
+            $funderReferential = $this->funderReferential->load($dataDir);
 
             // Reproductibilité idempotente (C6, décisions Q2/Q5). Au ré-import du même
             // commit, aucune ligne référencée par un objet utilisateur n'est détruite :
@@ -129,6 +140,8 @@ final class Importer
             $sources = [];
             /** @var array<string, Corps> $corps */
             $corps = [];
+            /** @var array<string, Funder> $funders */
+            $funders = [];
             /** @var array<string, Grille> $grilles */
             $grilles = [];
 
@@ -136,6 +149,7 @@ final class Importer
             $this->loadGrilles($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps, $grilles, $existingGrilles);
             $this->loadEchelons($parsed, $grilles, $existingEchelons);
             $this->loadPrimeRates($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
+            $this->loadBudgets($parsed, $set, $sourceReferential, $funderReferential, $sources, $funders);
 
             $this->em->flush();
         });
@@ -284,6 +298,36 @@ final class Importer
     }
 
     /**
+     * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, mission?: string, program?: string, action?: string, ondamSubObjective?: string, cofog?: string}>          $funderReferential
+     * @param array<string, Source>                                                                           $sources
+     * @param array<string, Funder>                                                                           $funders
+     */
+    private function loadBudgets(
+        array $parsed,
+        ParameterSet $set,
+        array $sourceReferential,
+        array $funderReferential,
+        array &$sources,
+        array &$funders,
+    ): void {
+        foreach (self::BUDGET_FILES as $file) {
+            foreach ($parsed[$file]['rows'] as $row) {
+                $budget = new ReferenceBudget();
+                $budget->value = $row['value'];
+                $budget->unit = $row['unit'];
+                $budget->startDate = new \DateTimeImmutable($row['start_date']);
+                $budget->endDate = $row['end_date'] === '' ? null : new \DateTimeImmutable($row['end_date']);
+                $budget->source = $this->resolveSource($row['source'], $sourceReferential, $sources);
+                $budget->funder = $this->resolveFunder($row['funder_code'], $funderReferential, $funders);
+                $budget->parameterSet = $set;
+                $this->em->persist($budget);
+            }
+        }
+    }
+
+    /**
      * Le ParameterSet déjà présent pour ce commit (ré-import), ou null au premier import.
      */
     private function findExistingSet(string $commit): ?ParameterSet
@@ -297,10 +341,11 @@ final class Importer
     }
 
     /**
-     * Purge les seules entités scopées que RIEN ne référence (DatedParameter, PrimeRate) :
-     * elles sont remplacées par rechargement. Grille/Echelon (référencés par les profils)
-     * et le ParameterSet (référencé par les scénarios) ne sont jamais supprimés ici — ils
-     * sont mis à jour en place par upsert, pour ne casser aucune FK d'objet utilisateur.
+     * Purge les seules entités scopées que RIEN ne référence (DatedParameter, PrimeRate,
+     * ReferenceBudget) : elles sont remplacées par rechargement. Grille/Echelon (référencés
+     * par les profils) et le ParameterSet (référencé par les scénarios) ne sont jamais
+     * supprimés ici — ils sont mis à jour en place par upsert, pour ne casser aucune FK
+     * d'objet utilisateur. Le référentiel global `Funder` (upsert par `code`) n'est pas purgé.
      */
     private function purgeReplaceableScoped(ParameterSet $set): void
     {
@@ -309,6 +354,7 @@ final class Importer
         $deletes = [
             'DELETE App\Infrastructure\Entity\DatedParameter p WHERE IDENTITY(p.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\PrimeRate r WHERE IDENTITY(r.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\ReferenceBudget b WHERE IDENTITY(b.parameterSet) = :set',
         ];
         foreach ($deletes as $dql) {
             $this->em->createQuery($dql)->setParameter('set', $setId)->execute();
@@ -421,6 +467,38 @@ final class Importer
         $corps->category = $data['category'];
 
         return $cache[$code] = $corps;
+    }
+
+    /**
+     * @param array<string, array{label: string, mission?: string, program?: string, action?: string, ondamSubObjective?: string, cofog?: string}> $referential
+     * @param array<string, Funder>                                                                                                                  $cache
+     */
+    private function resolveFunder(string $code, array $referential, array &$cache): Funder
+    {
+        if (isset($cache[$code])) {
+            return $cache[$code];
+        }
+
+        if (!isset($referential[$code])) {
+            throw new UnknownFunderException(sprintf('financeur inconnu `%s`', $code));
+        }
+
+        $data = $referential[$code];
+        // Upsert par `code` (C6, Q5) : réutilise la ligne existante, sinon la crée.
+        $funder = $this->em->getRepository(Funder::class)->findOneBy(['code' => $code]);
+        if (!$funder instanceof Funder) {
+            $funder = new Funder();
+            $funder->code = $code;
+            $this->em->persist($funder);
+        }
+        $funder->label = $data['label'];
+        $funder->mission = $data['mission'] ?? null;
+        $funder->program = $data['program'] ?? null;
+        $funder->action = $data['action'] ?? null;
+        $funder->ondamSubObjective = $data['ondamSubObjective'] ?? null;
+        $funder->cofog = $data['cofog'] ?? null;
+
+        return $cache[$code] = $funder;
     }
 
     /**
