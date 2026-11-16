@@ -61,14 +61,14 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
-**budget de référence daté par financeur** et les **référentiels** de sources, de corps et
-de financeurs auxquels ils se rattachent. Ne sont pas chargés par cette commande : les
-coûts PAP, les régimes de retraite et les objets de simulation (profils, scénarios), qui
-relèvent d'autres apports.
+**budget de référence daté par financeur**, la **masse salariale datée par corps** et les
+**référentiels** de sources, de corps et de financeurs auxquels ils se rattachent. Ne
+sont pas chargés par cette commande : les coûts PAP, les régimes de retraite et les objets
+de simulation (profils, scénarios), qui relèvent d'autres apports.
 
 **Réimport du même commit** : relancer la commande avec la même référence de version
 laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
-— y compris le budget de référence — sont remplacées, et les sources, corps et financeurs
+— y compris le budget de référence et la masse salariale — sont remplacées, et les sources, corps et financeurs
 sont mis à jour sur place.
 
 ### Modèle de données et sélection des valeurs réglementaires
@@ -101,6 +101,13 @@ suivantes.
   budget `ONDAM` de l'**ONDAM global voté** (LFSS). Cette donnée est **exposée en base pour
   un usage futur** par la mise en regard budgétaire (#21) ; elle n'est à ce stade ni
   calculée ni affichée.
+- **Masse salariale par corps** : coût annuel chargé **hors CAS Pensions** (HCAS) d'un
+  corps sur une **période de validité datée** (montant en euros, unité, source). Pour les
+  professeurs des écoles (`PE`), elle vaut l'effectif (ETPT de la catégorie d'emploi 1106)
+  multiplié par le coût moyen chargé HCAS global, tous deux lus dans le PAP du millésime
+  (2024, puis 2025 à fin ouverte). Le corps `ISG` n'a pas de masse salariale (pas de source
+  directe). Cette donnée est **exposée en base pour un usage futur** (#21) ; elle n'est à ce
+  stade ni calculée ni affichée.
 - **Taux de primes** : taux de primes d'un corps pour une année d'observation (primes
   de la V1).
 - **Profil** : unité de simulation (corps, grade et échelon d'entrée, régime de

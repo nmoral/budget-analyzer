@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Infrastructure\Persistence;
 
 use App\Infrastructure\Entity\Corps;
+use App\Infrastructure\Entity\CorpsPayroll;
 use App\Infrastructure\Entity\DatedParameter;
 use App\Infrastructure\Entity\Echelon;
 use App\Infrastructure\Entity\Funder;
@@ -212,6 +213,27 @@ abstract class IntegrationTestCase extends KernelTestCase
         $this->em->persist($budget);
 
         return $budget;
+    }
+
+    protected function newCorpsPayroll(
+        string $value,
+        string $startDate,
+        ?string $endDate,
+        Corps $corps,
+        Source $source,
+        ParameterSet $set,
+    ): CorpsPayroll {
+        $payroll = new CorpsPayroll();
+        $payroll->value = $value;
+        $payroll->unit = 'EUR';
+        $payroll->startDate = new \DateTimeImmutable($startDate);
+        $payroll->endDate = $endDate === null ? null : new \DateTimeImmutable($endDate);
+        $payroll->body = $corps;
+        $payroll->source = $source;
+        $payroll->parameterSet = $set;
+        $this->em->persist($payroll);
+
+        return $payroll;
     }
 
     /**
