@@ -1,0 +1,180 @@
+{
+  "01": {
+    "label": "Paris",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "02": {
+    "label": "Aix-Marseille",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "03": {
+    "label": "Besançon",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "04": {
+    "label": "Bordeaux",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "05": {
+    "label": "Caen",
+    "statut": "metropole",
+    "source": "data-education-dnb-academies"
+  },
+  "06": {
+    "label": "Clermont-Ferrand",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "07": {
+    "label": "Dijon",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "08": {
+    "label": "Grenoble",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "09": {
+    "label": "Lille",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "10": {
+    "label": "Lyon",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "11": {
+    "label": "Montpellier",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "12": {
+    "label": "Nancy-Metz",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "13": {
+    "label": "Poitiers",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "14": {
+    "label": "Rennes",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "15": {
+    "label": "Strasbourg",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "16": {
+    "label": "Toulouse",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "17": {
+    "label": "Nantes",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "18": {
+    "label": "Orléans-Tours",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "19": {
+    "label": "Reims",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "20": {
+    "label": "Amiens",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "21": {
+    "label": "Rouen",
+    "statut": "metropole",
+    "source": "data-education-dnb-academies"
+  },
+  "22": {
+    "label": "Limoges",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "23": {
+    "label": "Nice",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "24": {
+    "label": "Créteil",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "25": {
+    "label": "Versailles",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "27": {
+    "label": "Corse",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  },
+  "28": {
+    "label": "La Réunion",
+    "statut": "drom",
+    "aliases": [
+      "Réunion"
+    ],
+    "source": "data-education-annuaire-academies"
+  },
+  "31": {
+    "label": "Martinique",
+    "statut": "drom",
+    "source": "data-education-annuaire-academies"
+  },
+  "32": {
+    "label": "Guadeloupe",
+    "statut": "drom",
+    "source": "data-education-annuaire-academies"
+  },
+  "33": {
+    "label": "Guyane",
+    "statut": "drom",
+    "source": "data-education-annuaire-academies"
+  },
+  "40": {
+    "label": "Nouvelle Calédonie",
+    "statut": "com",
+    "source": "data-education-annuaire-academies"
+  },
+  "41": {
+    "label": "Polynésie Française",
+    "statut": "com",
+    "source": "data-education-annuaire-academies"
+  },
+  "43": {
+    "label": "Mayotte",
+    "statut": "drom",
+    "source": "data-education-annuaire-academies"
+  },
+  "44": {
+    "label": "Saint Pierre et Miquelon",
+    "statut": "com",
+    "source": "data-education-annuaire-academies"
+  },
+  "70": {
+    "label": "Normandie",
+    "statut": "metropole",
+    "source": "data-education-annuaire-academies"
+  }
+}
