@@ -45,6 +45,7 @@ FILE_TO_SCHEMA: dict[str, str] = {
     "couts_pap": "couts_pap",
     "budget_financeur": "budget_financeur",
     "masse_salariale_corps": "masse_salariale_corps",
+    "concours_admis": "concours_admis",
 }
 
 
@@ -400,11 +401,83 @@ def check_sources_declared(declared: frozenset[str] | None) -> Invariant:
     return invariant
 
 
+_CONCOURS_COUNTS = ("postes", "inscrits", "presents", "admis")
+
+
+def _concours_key(row: dict[str, str]) -> str:
+    return f"{row['body_code']}/{row['session']}/{row['voie']}"
+
+
+def check_concours_counts(files: Sequence[LoadedFile]) -> list[Violation]:
+    """Effectifs ``concours_admis`` : tous ≥ 0 et admis ≤ présents ≤ inscrits.
+
+    Aucune contrainte entre ``admis`` et ``postes`` : les emplois non pourvus
+    d'un concours peuvent être reportés sur un autre (décret n° 90-680, art. 4).
+    """
+    violations: list[Violation] = []
+    for loaded in files:
+        if loaded.schema != "concours_admis":
+            continue
+        for line, row in loaded.rows:
+            violations.extend(
+                Violation(
+                    invariant="concours",
+                    file=loaded.filename,
+                    line=line,
+                    message=f"{_concours_key(row)} : {breach}",
+                )
+                for breach in _concours_breaches(row)
+            )
+    return violations
+
+
+def _concours_breaches(row: dict[str, str]) -> list[str]:
+    counts = {column: int(row[column]) for column in _CONCOURS_COUNTS}
+    breaches = [
+        f"{column} {value} < 0" for column, value in counts.items() if value < 0
+    ]
+    if counts["admis"] > counts["presents"]:
+        breaches.append(f"admis {counts['admis']} > présents {counts['presents']}")
+    if counts["presents"] > counts["inscrits"]:
+        breaches.append(
+            f"présents {counts['presents']} > inscrits {counts['inscrits']}"
+        )
+    return breaches
+
+
+def check_concours_unique(files: Sequence[LoadedFile]) -> list[Violation]:
+    """Une seule ligne ``concours_admis`` par (``body_code``, ``session``, ``voie``).
+
+    Le doublon est localisé sur sa ligne, en citant la première occurrence.
+    """
+    violations: list[Violation] = []
+    for loaded in files:
+        if loaded.schema != "concours_admis":
+            continue
+        first_line: dict[str, int] = {}
+        for line, row in loaded.rows:
+            key = _concours_key(row)
+            if key in first_line:
+                violations.append(
+                    Violation(
+                        invariant="unicite",
+                        file=loaded.filename,
+                        line=line,
+                        message=f"{key} : doublon de la ligne {first_line[key]}",
+                    )
+                )
+            else:
+                first_line[key] = line
+    return violations
+
+
 # Registre des invariants sans configuration externe (C3 est fabriqué dans run()).
 STATELESS_INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
     check_indices_strictly_increasing,
     check_periods_no_overlap,
+    check_concours_counts,
+    check_concours_unique,
 )
 
 

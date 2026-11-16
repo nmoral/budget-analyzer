@@ -60,6 +60,16 @@ Masse salariale **datée par corps**, en coût chargé **HCAS** (hors CAS Pensio
 
   Le brut `data/sources/masse_salariale_corps.json` porte les deux facteurs (`etpt`, `average_loaded_cost`) ; le produit est calculé par `sources.masse_salariale_corps`. Chaque `source` est un slug dédié de `data/sources.json` (`pap-2024-ens-scolaire-masse-1106`, `pap-2025-ens-scolaire-masse-1106`), de même URL et `fileHash` que le PDF PAP archivé, dont le `locator` cite la formule, les pages et les deux valeurs. `ISG` n'a pas de ligne (pas de source directe, cf. #74).
 
+### Admis aux concours
+
+Sessions de concours **par corps, session et voie**, chaque ligne sourcée (règle de transparence n° 7) :
+
+- `concours_admis` — une ligne par concours publié (schéma `concours_admis`), colonnes `body_code, session, voie, postes, inscrits, presents, admis, source` (session et effectifs entiers). Clé unique (`body_code`, `session`, `voie`).
+  - `PE` — CRPE de l'enseignement public, sessions 2021 à 2025, totaux nationaux (postes offerts, candidats inscrits, présents aux épreuves écrites, admis) transcrits des pages « Les données statistiques des concours de recrutement de professeurs des écoles de la session <année> » de devenirenseignant.gouv.fr, section « Données chiffrées des concours de l'enseignement public ». Voies : `externe`, `externe_supplementaire`, `externe_special` (langues régionales), `troisieme`, `second_interne`, `second_interne_special`, `interne_exceptionnel` (publié depuis 2023) ; une voie non publiée une session n'a pas de ligne. Ex. 2025 externe : 8 117 postes, 43 525 inscrits, 18 524 présents, 7 576 admis.
+  - Exclus : Polynésie française (corps distinct), enseignement privé (CAFEP), admissibles, listes complémentaires, détail par académie. `ISG` n'a pas de ligne (cf. #78).
+
+  Le brut `data/sources/concours_admis.json` garde pour chaque ligne le libellé exact du bloc source (`block`), écarté du CSV par `sources.concours_admis`. Chaque `source` est le slug `menj-crpe-<session>` de `data/sources.json`, dont le `locator` cite la page, la section et les blocs repris ; la page est archivée sous `data/sources/publications/crpe-session-<session>.html` (`fileHash` = son sha256).
+
 Reste à scaffolder : les sources restantes (une par issue, cf. #03, #04).
 
 ## Contrôles de cohérence (`python -m checks`)
@@ -78,6 +88,8 @@ Invariants appliqués :
 
 - **Indices croissants** — dans chaque grille d'un fichier `echelon` (groupée par la colonne `grille`), `gross_index` et `increased_index` sont strictement croissants par `rank` croissant. Les deux colonnes sont contrôlées indépendamment.
 - **Périodes sans chevauchement** — les périodes d'effet d'une même clé ne se chevauchent pas : `parametre_date` groupé par `key`, `grille` par `body_code` + `grade`, `budget_financeur` par `funder_code`, `masse_salariale_corps` par `body_code` (un corps du référentiel sans ligne, comme `ISG`, n'est pas une anomalie). Période `[start_date ; end_date]` bornes incluses, `end_date` vide = ouverte (∞) ; l'adjacence (fin le jour J, début le jour J+1) est autorisée.
+- **Effectifs de concours** — dans `concours_admis`, `postes`, `inscrits`, `presents` et `admis` sont ≥ 0 et `admis ≤ presents ≤ inscrits` (bornes incluses). `admis > postes` est admis : les emplois non pourvus d'un concours peuvent être reportés sur un autre (décret n° 90-680, art. 4).
+- **Unicité des sessions de concours** — une seule ligne `concours_admis` par (`body_code`, `session`, `voie`) ; le doublon est signalé sur sa ligne en citant la première occurrence. Un corps sans ligne (`ISG`) n'est pas une anomalie.
 - **Valeurs dans les bornes** — chaque valeur soumise à bornes reste dans `[min ; max]` défini dans `coherence.toml` (voir ci-dessous).
 - **Source renseignée** — toute ligne d'un schéma portant une colonne `source` a une `source` non blanche (après `strip`). La présence de la colonne est dérivée du schéma livré, pas d'une liste codée en dur ; les schémas sans colonne `source` (ex. `echelon`, `couts_pap`) ne sont pas concernés.
 - **Source déclarée** — tout code `source` non blanc d'un CSV doit être déclaré dans `data/sources.json` (pas de source silencieuse) ; un code absent du référentiel est refusé. Les sources blanches relèvent de l'invariant précédent et ne sont pas signalées deux fois. Référentiel absent (`sources.json` manquant) → contrôle neutralisé, comme pour la liste blanche des bornes. La correspondance fine code ↔ `fileHash` ↔ brut reste vérifiée à l'import côté Symfony (`ManifestVerifier`).
