@@ -61,14 +61,14 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
-**budget de référence daté par financeur**, la **masse salariale datée par corps** et les
-**référentiels** de sources, de corps et de financeurs auxquels ils se rattachent. Ne
+**budget de référence daté par financeur**, la **masse salariale datée par corps**, les
+**sessions de concours par corps** et les **référentiels** de sources, de corps et de financeurs auxquels ils se rattachent. Ne
 sont pas chargés par cette commande : les coûts PAP, les régimes de retraite et les objets
 de simulation (profils, scénarios), qui relèvent d'autres apports.
 
 **Réimport du même commit** : relancer la commande avec la même référence de version
 laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
-— y compris le budget de référence et la masse salariale — sont remplacées, et les sources, corps et financeurs
+— y compris le budget de référence, la masse salariale et les sessions de concours — sont remplacées, et les sources, corps et financeurs
 sont mis à jour sur place.
 
 ### Modèle de données et sélection des valeurs réglementaires
@@ -108,6 +108,19 @@ suivantes.
   (2024, puis 2025 à fin ouverte). Le corps `ISG` n'a pas de masse salariale (pas de source
   directe). Cette donnée est **exposée en base pour un usage futur** (#21) ; elle n'est à ce
   stade ni calculée ni affichée.
+- **Sessions de concours** : pour un corps, une session (année) et une voie de concours
+  (externe, externe supplémentaire, externe spécial, troisième concours, second concours
+  interne, second interne spécial, interne exceptionnel), les effectifs nationaux publiés :
+  postes offerts, candidats inscrits, présents aux épreuves écrites et admis, avec leur
+  source. Pour les professeurs des écoles (`PE`) : CRPE de l'enseignement public, sessions
+  2021 à 2025 (devenirenseignant.gouv.fr), hors Polynésie française et enseignement privé ;
+  une voie non ouverte une année n'a pas de ligne. Le périmètre est le même chaque année :
+  quand le total national publié compte la Polynésie (sessions 2021 et 2025, concours
+  externe), la part Polynésie en est retranchée. Les données de Polynésie et d'outre-mer par
+  territoire relèvent de #80. Le nombre d'admis peut dépasser celui des
+  postes (report des emplois non pourvus entre concours). Le corps `ISG` n'a pas encore de
+  concours (#78). Cette donnée est **exposée en base pour un usage futur** (indicateur de
+  faisabilité, #21) ; elle n'est à ce stade ni calculée ni affichée.
 - **Taux de primes** : taux de primes d'un corps pour une année d'observation (primes
   de la V1).
 - **Profil** : unité de simulation (corps, grade et échelon d'entrée, régime de

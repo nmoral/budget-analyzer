@@ -151,5 +151,50 @@
     "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf",
     "retrievedAt": "2026-11-16",
     "fileHash": "8d347c18a426ab0ebb7cb639801e083adfc265244f553bd41580ad1d56ecbb11"
+  },
+  "menj-crpe-2021": {
+    "label": "devenirenseignant.gouv.fr — données statistiques des CRPE, session 2021",
+    "publisher": "Ministère de l'Éducation nationale (devenirenseignant.gouv.fr)",
+    "edition": "session 2021 (mise à jour juillet 2024)",
+    "locator": "page « Les données statistiques des concours de recrutement de professeurs des écoles de la session 2021 », section « Données chiffrées des concours de l'enseignement public », totaux nationaux par concours, hors Polynésie/privé/académies",
+    "url": "https://www.devenirenseignant.gouv.fr/les-donnees-statistiques-des-concours-de-recrutement-de-professeurs-des-ecoles-de-la-session-2021-451",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "5a5f138b1b91b45d494f4c76de5651525104b3811cb6d8962dbbf8d87e218142"
+  },
+  "menj-crpe-2022": {
+    "label": "devenirenseignant.gouv.fr — données statistiques des CRPE, session 2022",
+    "publisher": "Ministère de l'Éducation nationale (devenirenseignant.gouv.fr)",
+    "edition": "session 2022 (mise à jour juillet 2024)",
+    "locator": "page « Les données statistiques des concours de recrutement de professeurs des écoles de la session 2022 », section « Données chiffrées des concours de l'enseignement public », totaux nationaux par concours, hors Polynésie/privé/académies",
+    "url": "https://www.devenirenseignant.gouv.fr/les-donnees-statistiques-des-concours-de-recrutement-de-professeurs-des-ecoles-de-la-session-2022-454",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "fec7aac06c7c3e1af96527d75bc696429b8052b038610e78894d395cc7384d97"
+  },
+  "menj-crpe-2023": {
+    "label": "devenirenseignant.gouv.fr — données statistiques des CRPE, session 2023",
+    "publisher": "Ministère de l'Éducation nationale (devenirenseignant.gouv.fr)",
+    "edition": "session 2023 (mise à jour juillet 2024)",
+    "locator": "page « Les données statistiques des concours de recrutement de professeurs des écoles de la session 2023 », section « Données chiffrées des concours de l'enseignement public », totaux nationaux par concours, hors Polynésie/privé/académies",
+    "url": "https://www.devenirenseignant.gouv.fr/donnees-statistiques-des-crpe-de-2023",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "e461e0fe5cd1210a55feabfd41a39371edb040ea6b8372d1ea983affc5c090e6"
+  },
+  "menj-crpe-2024": {
+    "label": "devenirenseignant.gouv.fr — données statistiques des CRPE, session 2024",
+    "publisher": "Ministère de l'Éducation nationale (devenirenseignant.gouv.fr)",
+    "edition": "session 2024 (mise à jour septembre 2024)",
+    "locator": "page « Les données statistiques des concours de recrutement de professeurs des écoles de la session 2024 », section « Données chiffrées des concours de l'enseignement public », totaux nationaux par concours, hors Polynésie/privé/académies",
+    "url": "https://www.devenirenseignant.gouv.fr/les-donnees-statistiques-des-concours-de-recrutement-de-professeurs-des-ecoles-de-la-session-2024-1391",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "3f6e8414c931dd4d89972a44d13899696da5b57e2dc9ec6c816788bfc79f7773"
+  },
+  "menj-crpe-2025": {
+    "label": "devenirenseignant.gouv.fr — données statistiques des CRPE, session 2025",
+    "publisher": "Ministère de l'Éducation nationale (devenirenseignant.gouv.fr)",
+    "edition": "session 2025 (mise à jour septembre 2026)",
+    "locator": "page « Les données statistiques des concours de recrutement de professeurs des écoles de la session 2025 », section « Données chiffrées des concours de l'enseignement public », totaux nationaux par concours, hors Polynésie/privé/académies",
+    "url": "https://www.devenirenseignant.gouv.fr/les-donnees-statistiques-des-concours-de-recrutement-de-professeurs-des-ecoles-de-la-session-2025-1528",
+    "retrievedAt": "2026-11-16",
+    "fileHash": "0b13f1f50969c2ae10b7571519d5e63b1d8fbd52461137c248873c19992bc09c"
   }
 }

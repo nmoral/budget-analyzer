@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Import;
 
+use App\Infrastructure\Entity\ConcoursSession;
 use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\CorpsPayroll;
 use App\Infrastructure\Entity\DatedParameter;
@@ -25,7 +26,8 @@ use Doctrine\ORM\EntityManagerInterface;
  * dépôt réel (C5) : valeurs datées (`DatedParameter`), grilles (`Grille`), échelons
  * (`Echelon`, rattachés à leur grille par la clé `{body_code}_{grade}_{version}`),
  * taux de primes (`PrimeRate`), budgets de référence datés par financeur
- * (`ReferenceBudget`) et masse salariale datée par corps (`CorpsPayroll`), avec résolution des FK vers les référentiels `Source`
+ * (`ReferenceBudget`), masse salariale datée par corps (`CorpsPayroll`) et sessions de
+ * concours par corps (`ConcoursSession`), avec résolution des FK vers les référentiels `Source`
  * (`data/sources.json`), `Corps` (`data/corps.json`) et `Funder` (`data/funders.json`)
  * et vers le `ParameterSet`.
  *
@@ -34,7 +36,7 @@ use Doctrine\ORM\EntityManagerInterface;
  * Réimport idempotent du même commit (C6, décisions Q2/Q5) : le `ParameterSet` est
  * réutilisé (jamais supprimé — un scénario l'épingle), `Grille`/`Echelon` sont mis à
  * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`,
- * `PrimeRate`, `ReferenceBudget` et `CorpsPayroll` — que rien ne référence — sont remplacés par
+ * `PrimeRate`, `ReferenceBudget`, `CorpsPayroll` et `ConcoursSession` — que rien ne référence — sont remplacés par
  * rechargement, et les référentiels globaux `Source`/`Corps`/`Funder` sont mis à jour par
  * upsert sur `code`. Aucune FK d'objet utilisateur (scénario, profil) n'est donc cassée
  * par un ré-import.
@@ -64,6 +66,7 @@ final class Importer
         'taux_primes' => 'taux_primes',
         'budget_financeur' => 'budget_financeur',
         'masse_salariale_corps' => 'masse_salariale_corps',
+        'concours_admis' => 'concours_admis',
     ];
 
     /** @var list<string> */
@@ -91,6 +94,9 @@ final class Importer
 
     /** @var list<string> */
     private const PAYROLL_FILES = ['masse_salariale_corps'];
+
+    /** @var list<string> */
+    private const CONCOURS_FILES = ['concours_admis'];
 
     public function __construct(
         private readonly EntityManagerInterface $em,
@@ -156,6 +162,7 @@ final class Importer
             $this->loadPrimeRates($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
             $this->loadBudgets($parsed, $set, $sourceReferential, $funderReferential, $sources, $funders);
             $this->loadPayrolls($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
+            $this->loadConcoursSessions($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
 
             $this->em->flush();
         });
@@ -367,6 +374,41 @@ final class Importer
     }
 
     /**
+     * Sessions de concours par corps et voie. Un corps du référentiel sans concours (ISG)
+     * n'est pas une erreur : seuls les corps cités sont résolus.
+     *
+     * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, versant: string, category: string}>                         $corpsReferential
+     * @param array<string, Source>                                                                           $sources
+     * @param array<string, Corps>                                                                            $corps
+     */
+    private function loadConcoursSessions(
+        array $parsed,
+        ParameterSet $set,
+        array $sourceReferential,
+        array $corpsReferential,
+        array &$sources,
+        array &$corps,
+    ): void {
+        foreach (self::CONCOURS_FILES as $file) {
+            foreach ($parsed[$file]['rows'] as $row) {
+                $concours = new ConcoursSession();
+                $concours->session = (int) $row['session'];
+                $concours->voie = $row['voie'];
+                $concours->postes = (int) $row['postes'];
+                $concours->inscrits = (int) $row['inscrits'];
+                $concours->presents = (int) $row['presents'];
+                $concours->admis = (int) $row['admis'];
+                $concours->source = $this->resolveSource($row['source'], $sourceReferential, $sources);
+                $concours->body = $this->resolveCorps($row['body_code'], $corpsReferential, $corps);
+                $concours->parameterSet = $set;
+                $this->em->persist($concours);
+            }
+        }
+    }
+
+    /**
      * Le ParameterSet déjà présent pour ce commit (ré-import), ou null au premier import.
      */
     private function findExistingSet(string $commit): ?ParameterSet
@@ -381,7 +423,7 @@ final class Importer
 
     /**
      * Purge les seules entités scopées que RIEN ne référence (DatedParameter, PrimeRate,
-     * ReferenceBudget, CorpsPayroll) : elles sont remplacées par rechargement. Grille/Echelon (référencés
+     * ReferenceBudget, CorpsPayroll, ConcoursSession) : elles sont remplacées par rechargement. Grille/Echelon (référencés
      * par les profils) et le ParameterSet (référencé par les scénarios) ne sont jamais
      * supprimés ici — ils sont mis à jour en place par upsert, pour ne casser aucune FK
      * d'objet utilisateur. Le référentiel global `Funder` (upsert par `code`) n'est pas purgé.
@@ -395,6 +437,7 @@ final class Importer
             'DELETE App\Infrastructure\Entity\PrimeRate r WHERE IDENTITY(r.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\ReferenceBudget b WHERE IDENTITY(b.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\CorpsPayroll m WHERE IDENTITY(m.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\ConcoursSession c WHERE IDENTITY(c.parameterSet) = :set',
         ];
         foreach ($deletes as $dql) {
             $this->em->createQuery($dql)->setParameter('set', $setId)->execute();

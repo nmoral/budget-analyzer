@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Infrastructure\Persistence;
 
+use App\Infrastructure\Entity\ConcoursSession;
 use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\CorpsPayroll;
 use App\Infrastructure\Entity\DatedParameter;
@@ -234,6 +235,32 @@ abstract class IntegrationTestCase extends KernelTestCase
         $this->em->persist($payroll);
 
         return $payroll;
+    }
+
+    /**
+     * @param array{postes: int, inscrits: int, presents: int, admis: int} $counts
+     */
+    protected function newConcoursSession(
+        int $session,
+        string $voie,
+        array $counts,
+        Corps $corps,
+        Source $source,
+        ParameterSet $set,
+    ): ConcoursSession {
+        $concours = new ConcoursSession();
+        $concours->session = $session;
+        $concours->voie = $voie;
+        $concours->postes = $counts['postes'];
+        $concours->inscrits = $counts['inscrits'];
+        $concours->presents = $counts['presents'];
+        $concours->admis = $counts['admis'];
+        $concours->body = $corps;
+        $concours->source = $source;
+        $concours->parameterSet = $set;
+        $this->em->persist($concours);
+
+        return $concours;
     }
 
     /**

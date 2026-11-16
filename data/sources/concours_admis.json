@@ -1,0 +1,401 @@
+{
+  "rows": [
+    {
+      "body_code": "PE",
+      "session": "2021",
+      "voie": "externe",
+      "block": "Concours externe de recrutement de professeurs des écoles",
+      "published_total": {
+        "postes": "8694",
+        "inscrits": "84131",
+        "presents": "26657",
+        "admis": "8294"
+      },
+      "excluded": [
+        {
+          "kind": "academie",
+          "label": "Polynésie Française",
+          "postes": "10",
+          "inscrits": "395",
+          "presents": "120",
+          "admis": "10"
+        }
+      ],
+      "note": "Total national publié moins la ligne académie « Polynésie Française » du tableau « Résultats par académies » (corps distinct, sans bloc séparé en 2021) ; retenu = somme des académies hors Polynésie.",
+      "postes": "8684",
+      "inscrits": "83736",
+      "presents": "26537",
+      "admis": "8284",
+      "source": "menj-crpe-2021"
+    },
+    {
+      "body_code": "PE",
+      "session": "2021",
+      "voie": "externe_supplementaire",
+      "block": "Concours externe supplémentaire de recrutement de professeurs des écoles (académie de Créteil)",
+      "postes": "300",
+      "inscrits": "5579",
+      "presents": "3137",
+      "admis": "300",
+      "source": "menj-crpe-2021"
+    },
+    {
+      "body_code": "PE",
+      "session": "2021",
+      "voie": "externe_special",
+      "block": "Concours externe spécial de recrutement de professeurs des écoles (langues régionales)",
+      "postes": "190",
+      "inscrits": "569",
+      "presents": "268",
+      "admis": "114",
+      "source": "menj-crpe-2021"
+    },
+    {
+      "body_code": "PE",
+      "session": "2021",
+      "voie": "troisieme",
+      "block": "Troisième concours de recrutement de professeurs des écoles",
+      "postes": "689",
+      "inscrits": "11358",
+      "presents": "3057",
+      "admis": "700",
+      "source": "menj-crpe-2021"
+    },
+    {
+      "body_code": "PE",
+      "session": "2021",
+      "voie": "second_interne",
+      "block": "Second concours interne de recrutement de professeurs des écoles",
+      "postes": "303",
+      "inscrits": "4046",
+      "presents": "914",
+      "admis": "278",
+      "source": "menj-crpe-2021"
+    },
+    {
+      "body_code": "PE",
+      "session": "2021",
+      "voie": "second_interne_special",
+      "block": "Second concours interne spécial de recrutement de professeurs des écoles",
+      "postes": "24",
+      "inscrits": "59",
+      "presents": "17",
+      "admis": "2",
+      "source": "menj-crpe-2021"
+    },
+    {
+      "body_code": "PE",
+      "session": "2022",
+      "voie": "externe",
+      "block": "Concours externe de recrutement de professeurs des écoles",
+      "postes": "8323",
+      "inscrits": "41641",
+      "presents": "14112",
+      "admis": "6582",
+      "source": "menj-crpe-2022"
+    },
+    {
+      "body_code": "PE",
+      "session": "2022",
+      "voie": "externe_supplementaire",
+      "block": "Concours externe supplémentaire de recrutement de professeurs des écoles",
+      "postes": "700",
+      "inscrits": "4205",
+      "presents": "1502",
+      "admis": "414",
+      "source": "menj-crpe-2022"
+    },
+    {
+      "body_code": "PE",
+      "session": "2022",
+      "voie": "externe_special",
+      "block": "Concours externe spécial de recrutement de professeurs des écoles (langues régionales)",
+      "postes": "183",
+      "inscrits": "317",
+      "presents": "122",
+      "admis": "52",
+      "source": "menj-crpe-2022"
+    },
+    {
+      "body_code": "PE",
+      "session": "2022",
+      "voie": "troisieme",
+      "block": "Troisième concours de recrutement de professeurs des écoles",
+      "postes": "930",
+      "inscrits": "9332",
+      "presents": "2802",
+      "admis": "777",
+      "source": "menj-crpe-2022"
+    },
+    {
+      "body_code": "PE",
+      "session": "2022",
+      "voie": "second_interne",
+      "block": "Second concours interne de recrutement de professeurs des écoles",
+      "postes": "424",
+      "inscrits": "3984",
+      "presents": "1144",
+      "admis": "319",
+      "source": "menj-crpe-2022"
+    },
+    {
+      "body_code": "PE",
+      "session": "2022",
+      "voie": "second_interne_special",
+      "block": "Second concours interne spécial de recrutement de professeurs des écoles",
+      "postes": "28",
+      "inscrits": "61",
+      "presents": "17",
+      "admis": "2",
+      "source": "menj-crpe-2022"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "externe",
+      "block": "Concours externe de recrutement de professeurs des écoles",
+      "postes": "8159",
+      "inscrits": "42724",
+      "presents": "17808",
+      "admis": "6958",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "externe_supplementaire",
+      "block": "Concours externe supplémentaire de recrutement de professeurs des écoles",
+      "postes": "700",
+      "inscrits": "3662",
+      "presents": "1323",
+      "admis": "357",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "externe_special",
+      "block": "Concours externe spécial de recrutement de professeurs des écoles (langues régionales)",
+      "postes": "170",
+      "inscrits": "407",
+      "presents": "206",
+      "admis": "87",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "troisieme",
+      "block": "Troisième concours de recrutement de professeurs des écoles",
+      "postes": "988",
+      "inscrits": "12796",
+      "presents": "3799",
+      "admis": "889",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "second_interne",
+      "block": "Second concours interne de recrutement de professeurs des écoles",
+      "postes": "544",
+      "inscrits": "4963",
+      "presents": "1426",
+      "admis": "364",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "second_interne_special",
+      "block": "Second concours interne spécial de recrutement de professeurs des écoles",
+      "postes": "24",
+      "inscrits": "63",
+      "presents": "14",
+      "admis": "3",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2023",
+      "voie": "interne_exceptionnel",
+      "block": "Concours interne exceptionnel de recrutement de professeurs des écoles",
+      "postes": "370",
+      "inscrits": "1048",
+      "presents": "534",
+      "admis": "282",
+      "source": "menj-crpe-2023"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "externe",
+      "block": "Concours externe de recrutement de professeurs des écoles",
+      "postes": "7917",
+      "inscrits": "42145",
+      "presents": "18385",
+      "admis": "6961",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "externe_supplementaire",
+      "block": "Concours externe supplémentaire de recrutement de professeurs des écoles",
+      "postes": "700",
+      "inscrits": "3105",
+      "presents": "1377",
+      "admis": "420",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "externe_special",
+      "block": "Concours externe spécial de recrutement de professeurs des écoles (langues régionales)",
+      "postes": "162",
+      "inscrits": "398",
+      "presents": "206",
+      "admis": "86",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "troisieme",
+      "block": "Troisième concours de recrutement de professeurs des écoles",
+      "postes": "1199",
+      "inscrits": "13543",
+      "presents": "4182",
+      "admis": "952",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "second_interne",
+      "block": "Second concours interne de recrutement de professeurs des écoles",
+      "postes": "581",
+      "inscrits": "4691",
+      "presents": "1470",
+      "admis": "299",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "second_interne_special",
+      "block": "Second concours interne spécial de recrutement de professeurs des écoles",
+      "postes": "26",
+      "inscrits": "58",
+      "presents": "15",
+      "admis": "4",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2024",
+      "voie": "interne_exceptionnel",
+      "block": "Concours interne exceptionnel de recrutement de professeurs des écoles",
+      "postes": "370",
+      "inscrits": "745",
+      "presents": "343",
+      "admis": "183",
+      "source": "menj-crpe-2024"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "externe",
+      "block": "Concours externe de recrutement de professeurs des écoles",
+      "published_total": {
+        "postes": "8117",
+        "inscrits": "43525",
+        "presents": "18524",
+        "admis": "7576"
+      },
+      "excluded": [
+        {
+          "kind": "bloc",
+          "label": "Concours externe de recrutement de professeurs des écoles du corps de l’Etat créé pour la Polynésie française",
+          "postes": "15",
+          "inscrits": "249",
+          "presents": "137",
+          "admis": "15"
+        }
+      ],
+      "note": "Total national publié moins le bloc séparé Polynésie française (corps distinct), compté dans ce total mais absent du tableau « Résultats par académies » ; retenu = somme des académies.",
+      "postes": "8102",
+      "inscrits": "43276",
+      "presents": "18387",
+      "admis": "7561",
+      "source": "menj-crpe-2025"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "externe_supplementaire",
+      "block": "Concours externe supplémentaire de recrutement de professeurs des écoles",
+      "postes": "500",
+      "inscrits": "2982",
+      "presents": "1381",
+      "admis": "393",
+      "source": "menj-crpe-2025"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "externe_special",
+      "block": "Concours externe spécial de recrutement de professeurs des écoles (langues régionales)",
+      "postes": "174",
+      "inscrits": "360",
+      "presents": "175",
+      "admis": "65",
+      "source": "menj-crpe-2025"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "troisieme",
+      "block": "Troisième concours de recrutement de professeurs des écoles",
+      "postes": "1027",
+      "inscrits": "13274",
+      "presents": "3728",
+      "admis": "991",
+      "source": "menj-crpe-2025"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "second_interne",
+      "block": "Second concours interne de recrutement de professeurs des écoles",
+      "postes": "502",
+      "inscrits": "4692",
+      "presents": "1430",
+      "admis": "294",
+      "source": "menj-crpe-2025"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "second_interne_special",
+      "block": "Second concours interne spécial de recrutement de professeurs des écoles",
+      "postes": "27",
+      "inscrits": "59",
+      "presents": "16",
+      "admis": "3",
+      "source": "menj-crpe-2025"
+    },
+    {
+      "body_code": "PE",
+      "session": "2025",
+      "voie": "interne_exceptionnel",
+      "block": "Concours interne exceptionnel de recrutement de professeurs des écoles",
+      "postes": "370",
+      "inscrits": "1034",
+      "presents": "531",
+      "admis": "305",
+      "source": "menj-crpe-2025"
+    }
+  ]
+}
