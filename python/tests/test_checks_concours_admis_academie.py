@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from checks import collect_files, load_academies, main, run
+from checks import (
+    academie_codes,
+    collect_files,
+    load_academie_entries,
+    main,
+    run,
+)
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
 NO_ANOMALY = "Contrôles de cohérence : aucune anomalie."
@@ -203,10 +209,11 @@ def test_academie_not_checked_without_referential(data_root: Path) -> None:
     assert run(data_root) == (0, NO_ANOMALY)
 
 
-def test_load_academies_reads_codes(data_root: Path) -> None:
-    assert load_academies(data_root) == frozenset({"32", "41", "70"})
+def test_academie_codes_reads_referential_codes(data_root: Path) -> None:
+    entries = load_academie_entries(data_root)
+    assert academie_codes(entries) == frozenset({"32", "41", "70"})
     (data_root / "academies.json").unlink()
-    assert load_academies(data_root) is None
+    assert academie_codes(load_academie_entries(data_root)) is None
 
 
 # --- C3.4 : doublon / incohérence / négatif / source blanche -------------------

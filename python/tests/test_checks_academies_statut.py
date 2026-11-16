@@ -3,6 +3,8 @@
 import json
 import os
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +13,7 @@ import pytest
 from checks import AcademieEntry, load_academie_entries, main, run
 
 REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
+SRC = Path(__file__).resolve().parents[1] / "src"
 NO_ANOMALY = "Contrôles de cohérence : aucune anomalie."
 
 
@@ -166,3 +169,246 @@ def test_null_statut_reported_as_absent(real_copy: Path) -> None:
         1,
         [_expected(real_copy, "41", "statut absent")],
     )
+
+
+# --- #84 : entrée non objet, chargement unique ------------------------------
+
+
+def _set_entry(root: Path, code: str, value: object, *, indent: int | None = 2) -> None:
+    """Remplace l'entrée ``code`` d'``academies.json`` par ``value`` (brute)."""
+    path = root / "academies.json"
+    referential: dict[str, Any] = json.loads(path.read_text("utf-8"))
+    referential[code] = value
+    separators = None if indent else (",", ":")
+    text = json.dumps(
+        referential, ensure_ascii=False, indent=indent, separators=separators
+    )
+    path.write_text(text, "utf-8")
+
+
+def _key_line(root: Path, code: str) -> int:
+    """Ligne de la clé de premier niveau ``"<code>":`` (fichier indenté de 2)."""
+    lines = (root / "academies.json").read_text("utf-8").splitlines()
+    return next(
+        number
+        for number, line in enumerate(lines, start=1)
+        if line.startswith(f'  "{code}":')
+    )
+
+
+def _non_object(root: Path, code: str, shown: str) -> str:
+    return (
+        f"academies.json:{_key_line(root, code)} [academie_statut] "
+        f"{code} : entrée « {shown} » non objet"
+    )
+
+
+@pytest.mark.parametrize(
+    ("code", "value", "shown"),
+    [
+        pytest.param("32", "drom", '"drom"', id="C1.1-chaine"),
+        pytest.param("41", 1, "1", id="C1.2-nombre"),
+        pytest.param("28", None, "null", id="C1.3-null"),
+        pytest.param("43", ["drom"], '["drom"]', id="C1.4-liste"),
+    ],
+)
+def test_84_c1_non_object_entry_reported_on_key_line(
+    real_copy: Path,
+    capsys: pytest.CaptureFixture[str],
+    code: str,
+    value: object,
+    shown: str,
+) -> None:
+    _set_entry(real_copy, code, value)
+
+    assert main() == 1
+    assert capsys.readouterr().out.splitlines() == [
+        _non_object(real_copy, code, shown),
+        "Récapitulatif : 1 anomalie(s) détectée(s).",
+    ]
+
+
+def test_84_c1_5_non_object_and_bad_statut_both_reported(real_copy: Path) -> None:
+    _alter(real_copy, {"41": "outremer"})
+    _set_entry(real_copy, "32", "drom")
+
+    code, report = run(real_copy)
+
+    assert code == 1
+    assert report.splitlines() == [
+        _non_object(real_copy, "32", '"drom"'),
+        (
+            f"academies.json:{_key_line(real_copy, '41')} [academie_statut] "
+            "41 : statut « outremer » hors metropole/drom/com"
+        ),
+        "Récapitulatif : 2 anomalie(s) détectée(s).",
+    ]
+
+
+def test_84_c1_6_referenced_code_stays_declared(real_copy: Path) -> None:
+    csv_rows = (real_copy / "data" / "concours_admis_academie.csv").read_text("utf-8")
+    assert ",32," in csv_rows
+    _set_entry(real_copy, "32", "drom")
+
+    code, report = run(real_copy)
+
+    assert code == 1
+    assert "[academie]" not in report
+    assert report.splitlines() == [
+        _non_object(real_copy, "32", '"drom"'),
+        "Récapitulatif : 1 anomalie(s) détectée(s).",
+    ]
+
+
+def test_84_c1_7_compact_json_reported_on_line_1(real_copy: Path) -> None:
+    _set_entry(real_copy, "32", "drom", indent=None)
+    assert '"32":"drom"' in (real_copy / "academies.json").read_text("utf-8")
+
+    assert run(real_copy) == (
+        1,
+        (
+            'academies.json:1 [academie_statut] 32 : entrée « "drom" » non objet\n'
+            "Récapitulatif : 1 anomalie(s) détectée(s)."
+        ),
+    )
+
+
+def test_84_c1_8_real_data_exit_0(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("BUDGET_DATA_DIR", str(REAL_DATA))
+    assert main() == 0
+    assert capsys.readouterr().out.strip() == NO_ANOMALY
+
+
+def test_84_c2_1_academies_json_read_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    reads: list[Path] = []
+    original = Path.read_text
+
+    def spy(self: Path, *args: Any, **kwargs: Any) -> str:
+        if self.name == "academies.json":
+            reads.append(self)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", spy)
+    assert run(REAL_DATA) == (0, NO_ANOMALY)
+    assert reads == [REAL_DATA / "academies.json"]
+
+
+def test_84_c2_2_both_checks_neutralised_without_referential(real_copy: Path) -> None:
+    (real_copy / "academies.json").unlink()
+    _replace_first_academie(real_copy, "ZZ")
+
+    assert run(real_copy) == (0, NO_ANOMALY)
+
+
+def _replace_first_academie(root: Path, code: str) -> None:
+    """Remplace l'académie de la 1re ligne du CSV par un code inconnu."""
+    path = root / "data" / "concours_admis_academie.csv"
+    header, first, *rest = path.read_text("utf-8").splitlines()
+    cells = first.split(",")
+    cells[3] = code
+    path.write_text("\n".join((header, ",".join(cells), *rest)) + "\n", "utf-8")
+
+
+def test_load_academie_entries_ignores_nested_keys(tmp_path: Path) -> None:
+    (tmp_path / "academies.json").write_text(
+        '{\n  "01": {\n    "02": "x",\n    "label": "\\"02\\": {"\n  },\n'
+        '  "02": "drom",\n  "03": {}\n}\n',
+        "utf-8",
+    )
+    assert load_academie_entries(tmp_path) == [
+        AcademieEntry(code="01", line=2, statut=None),
+        AcademieEntry(code="02", line=6, statut=None, non_objet='"drom"'),
+        AcademieEntry(code="03", line=7, statut=None),
+    ]
+
+
+def test_load_academie_entries_empty_referential(tmp_path: Path) -> None:
+    (tmp_path / "academies.json").write_text(" { } ", "utf-8")
+    assert load_academie_entries(tmp_path) == []
+
+
+def test_load_academie_entries_shows_non_ascii_value_as_written(tmp_path: Path) -> None:
+    (tmp_path / "academies.json").write_text('{\r\n\t"28" :\t"Réunion"\r\n}', "utf-8")
+    assert load_academie_entries(tmp_path) == [
+        AcademieEntry(code="28", line=2, statut=None, non_objet='"Réunion"'),
+    ]
+
+
+# --- #84 J2 : décodage complet par json.loads -------------------------------
+
+
+def test_84_c2_3_invalid_json_fails_like_main(real_copy: Path) -> None:
+    path = real_copy / "academies.json"
+    path.write_text(path.read_text("utf-8") + " garbage", "utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "checks"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "PYTHONPATH": str(SRC)},
+    )
+
+    assert result.returncode != 0
+    assert "json.decoder.JSONDecodeError: Extra data" in result.stderr
+    assert NO_ANOMALY not in result.stdout
+
+
+def test_84_c2_3_invalid_json_raises_in_run(real_copy: Path) -> None:
+    path = real_copy / "academies.json"
+    path.write_text(path.read_text("utf-8") + " garbage", "utf-8")
+
+    with pytest.raises(json.JSONDecodeError, match="Extra data"):
+        run(real_copy)
+
+
+def test_84_c2_4_duplicate_key_keeps_last_occurrence(real_copy: Path) -> None:
+    path = real_copy / "academies.json"
+    text = path.read_text("utf-8")
+    duplicate = '  "32": {\n    "label": "Doublon",\n    "statut": "outremer"\n  }\n}'
+    path.write_text(text.rstrip()[:-1].rstrip() + ",\n" + duplicate + "\n", "utf-8")
+    lines = path.read_text("utf-8").splitlines()
+    first, last = (n for n, line in enumerate(lines, 1) if line.startswith('  "32":'))
+    assert first < last
+
+    entries = load_academie_entries(real_copy) or []
+    assert [entry for entry in entries if entry.code == "32"] == [
+        AcademieEntry(code="32", line=last, statut="outremer")
+    ]
+    code, report = run(real_copy)
+
+    assert code == 1
+    assert report.splitlines() == [
+        (
+            f"academies.json:{last} [academie_statut] "
+            "32 : statut « outremer » hors metropole/drom/com"
+        ),
+        "Récapitulatif : 1 anomalie(s) détectée(s).",
+    ]
+
+
+def test_load_academie_entries_duplicate_key_single_last_entry(tmp_path: Path) -> None:
+    (tmp_path / "academies.json").write_text(
+        '{\n  "01": {"statut": "drom"},\n  "02": "x",\n  "01": {"statut": "com"}\n}',
+        "utf-8",
+    )
+    assert load_academie_entries(tmp_path) == [
+        AcademieEntry(code="01", line=4, statut="com"),
+        AcademieEntry(code="02", line=3, statut=None, non_objet='"x"'),
+    ]
+
+
+def test_load_academie_entries_escaped_key_and_brackets_in_strings(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "academies.json").write_text(
+        '{\n  "\\u0030\\u0031": {"label": "a}\\"]{", "x": [{"03": 1}]},\n'
+        '  "02": ["{", "\\"03\\": "]\n}',
+        "utf-8",
+    )
+    assert load_academie_entries(tmp_path) == [
+        AcademieEntry(code="01", line=2, statut=None),
+        AcademieEntry(code="02", line=3, statut=None, non_objet='["{", "\\"03\\": "]'),
+    ]

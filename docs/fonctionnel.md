@@ -62,8 +62,10 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **statut des académies** : chaque académie de `data/academies.json` a un statut
   exactement `metropole`, `drom` ou `com` ; un statut absent, vide ou autre fait
   échouer l'import (rien n'est importé) ; le message nomme le code de la première
-  académie fautive rencontrée. `python -m checks` signale la même anomalie, pour chaque
-  académie fautive.
+  académie fautive rencontrée (une entrée qui n'est pas un objet compte comme un statut
+  absent). `python -m checks` signale la même anomalie, pour chaque académie fautive ;
+  une entrée qui n'est pas un objet y est signalée par un message dédié (« entrée
+  « <valeur> » non objet »).
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
