@@ -779,8 +779,8 @@ de FK). `Importer` ne supprime plus les lignes **référencées par un objet uti
 ré-import du même commit, le `ParameterSet` est **réutilisé** (même id), `Grille` et `Echelon`
 sont mis à jour **en place par clé naturelle** (upsert : `{body}_{grade}_{version}`, puis
 `grilleKey#rank`), tandis que `DatedParameter`, `PrimeRate`, `ReferenceBudget` (#70),
-`CorpsPayroll` (#71) et `ConcoursSession` (#72) — que rien ne référence — sont **remplacés** par rechargement (purge scopée au `ParameterSet` via
-`purgeReplaceableScoped`), et `Source`/`Corps`/`Funder` restent en upsert global sur `code`.
+`CorpsPayroll` (#71), `ConcoursSession` (#72) et `ConcoursAcademie` (#80) — que rien ne référence — sont **remplacés** par rechargement (purge scopée au `ParameterSet` via
+`purgeReplaceableScoped`), et `Source`/`Corps`/`Funder`/`Academie` restent en upsert global sur `code`.
 La chaîne scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une
 seule transaction).
 Réimporter le même commit laisse ainsi la base dans le même état (décision Q5, C6), sans
@@ -1179,7 +1179,7 @@ namespace `App\Migrations` → `symfony/migrations/`). La migration initiale
 
 ### Modèle de données
 
-Le modèle de persistance comprend **15 entités** dans `src/Infrastructure/Entity/`.
+Le modèle de persistance comprend **17 entités** dans `src/Infrastructure/Entity/`.
 Le code est en anglais, aligné sur les colonnes CSV du dépôt `data/` ; les noms de
 domaine français (Corps, Grille, Échelon) sont conservés comme noms d'entité. Les
 identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (mappés en
@@ -1226,6 +1226,16 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   Aucune contrainte d'unicité en base sur (jeu de paramètres, corps, session, voie) :
   l'unicité (`body_code`, `session`, `voie`) et la cohérence des effectifs
   (`admis ≤ presents ≤ inscrits`) sont contrôlées en amont par `python -m checks`.
+- **Academie** — référentiel global des académies (#80) : `code` (unique, code officiel
+  data.education.gouv.fr, ex. `41` Polynésie française), `label`, `statut` (`metropole`,
+  `drom`, `com` ; `VARCHAR(16)`), `source` (FK NOT NULL, source du code officiel). Non scopée
+  au jeu de paramètres, upsert par `code` à l'import. Table `academie`.
+- **ConcoursAcademie** — session de concours par corps, voie et académie (#80) : mêmes
+  colonnes que `ConcoursSession` plus `academie` (FK Academie) ; FK `body`, `academie`,
+  `source`, `parameterSet` toutes NOT NULL. Scopée au jeu de paramètres. Table
+  `concours_academie`, créée avec `academie` par la migration `Version20261116172020`.
+  Unicité (`body_code`, `session`, `voie`, `academie`), cohérence des effectifs et
+  recoupement avec la ligne nationale contrôlés en amont par `python -m checks`.
 - **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
   `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité dédiée,
   les primes V1 passent par `PrimeRate`), `funder` (FK), `status`, `referenceCalendar`.
@@ -1235,7 +1245,7 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   `spreadYears`.
 - **ParameterSet** — jeu de paramètres pour la reproductibilité : `versionId` (unique,
   commit du dépôt de données), `importedAt`. Les valeurs datées (DatedParameter, Grille,
-  Echelon via sa grille, PrimeRate, ReferenceBudget, CorpsPayroll, ConcoursSession) et les Scénarios portent
+  Echelon via sa grille, PrimeRate, ReferenceBudget, CorpsPayroll, ConcoursSession, ConcoursAcademie) et les Scénarios portent
   une FK vers ce jeu.
 
 Les entités sont **purement déclaratives** (aucun `repositoryClass`, aucune logique) ;
@@ -1384,14 +1394,20 @@ Sous `src/Infrastructure/Import/` :
   `data/funders.json` (code → `label` requis, puis les codes de nomenclature optionnels
   `mission`/`program`/`action`/`ondamSubObjective`/`cofog` ; introduit en #70). Un
   référentiel introuvable ou invalide lève `ImportException`.
+- **`AcademieReferential`** (#80) : charge `data/academies.json` (code officiel →
+  `label`/`statut`/`source`, `aliases` optionnels, non persistés). Les colonnes de
+  `Academie` étant NOT NULL, chaque entrée doit fournir `label`, `statut` et `source`.
+  Référentiel introuvable ou invalide → `ImportException` (contrairement à
+  `python -m checks`, qui neutralise le contrôle d'académie en son absence).
 
 ### Périmètre, mapping et ordre de chargement
 
 Le mapping fichier → schéma est la constante `Importer::FILE_TO_SCHEMA`, alignée sur le
 `FILE_TO_SCHEMA` Python **hors `couts_pap`** (non importé, aucune entité cible — hors
 périmètre #11). Avant tout chargement, l'`Importer` valide le schéma **et** vérifie
-l'empreinte de **chacun** des 15 fichiers du mapping (C3 « avant tout chargement », C4 ;
-`budget_financeur` ajouté en #70, `masse_salariale_corps` en #71, `concours_admis` en #72).
+l'empreinte de **chacun** des 16 fichiers du mapping (C3 « avant tout chargement », C4 ;
+`budget_financeur` ajouté en #70, `masse_salariale_corps` en #71, `concours_admis` en #72,
+`concours_admis_academie` en #80).
 
 Le chargement peuple ensuite, dans l'ordre :
 
@@ -1412,11 +1428,17 @@ Le chargement peuple ensuite, dans l'ordre :
    Un corps du référentiel sans ligne de masse salariale (`ISG`) n'est pas une erreur ;
 7. `ConcoursSession` (`concours_admis`, #72) — FK `body` (Corps, résolu par
    `resolveCorps()`), `source` et `parameterSet` ; `session` et effectifs convertis en
-   entiers, `voie` reprise telle quelle. Un corps sans concours (`ISG`) n'est pas une erreur.
+   entiers, `voie` reprise telle quelle. Un corps sans concours (`ISG`) n'est pas une erreur ;
+8. `Academie` (`data/academies.json`, #80) — **tout** le référentiel est upserté par `code`,
+   chaque académie rattachée à la source de son code (`resolveSource()`) ;
+9. `ConcoursAcademie` (`concours_admis_academie`, #80) — FK `body` (`resolveCorps()`),
+   `academie` (code absent du référentiel → `UnknownAcademieException`), `source` et
+   `parameterSet` ; mêmes conversions que `ConcoursSession`.
 
 Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
 `echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `corps_payroll` = 2,
-`concours_session` = 33, `source` = 22, `corps` = 2, `funder` = 2.
+`concours_session` = 33, `academie` = 35 (dont la Nouvelle-Calédonie, sans ligne de concours), `concours_academie` = 533, `source` = 29, `corps` = 2,
+`funder` = 2.
 
 ### Résolution des FK et référentiels
 
@@ -1435,7 +1457,10 @@ code → entité (une seule entité par code dans la transaction) :
   (comme `Source`/`Corps`, non scopé au `ParameterSet`) : la ligne existante est réutilisée,
   sinon créée ; `label` (NOT NULL) est repris du référentiel et les colonnes de nomenclature
   nullables (`mission`/`program`/`action`/`ondamSubObjective`/`cofog`) ne sont renseignées
-  que si présentes.
+  que si présentes ;
+- une académie citée par `academie` (colonne de `concours_admis_academie`) est résolue parmi
+  les académies chargées depuis `data/academies.json` (`AcademieReferential`) ; code absent →
+  refus (`UnknownAcademieException`, sous-classe d'`ImportException`).
 
 Ces référentiels sont des fichiers **curatés** (pas de CSV ni de schéma Frictionless) : les
 colonnes NOT NULL de `Source`/`Corps` (et `Funder.label`) étant obligatoires, le référentiel

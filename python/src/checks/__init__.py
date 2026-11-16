@@ -46,6 +46,7 @@ FILE_TO_SCHEMA: dict[str, str] = {
     "budget_financeur": "budget_financeur",
     "masse_salariale_corps": "masse_salariale_corps",
     "concours_admis": "concours_admis",
+    "concours_admis_academie": "concours_admis_academie",
 }
 
 
@@ -403,28 +404,41 @@ def check_sources_declared(declared: frozenset[str] | None) -> Invariant:
 
 _CONCOURS_COUNTS = ("postes", "inscrits", "presents", "admis")
 
+# Clé d'unicité de chaque schéma de sessions de concours (national, par académie).
+_CONCOURS_KEYS: dict[str, tuple[str, ...]] = {
+    "concours_admis": ("body_code", "session", "voie"),
+    "concours_admis_academie": ("body_code", "session", "voie", "academie"),
+}
 
-def _concours_key(row: dict[str, str]) -> str:
-    return f"{row['body_code']}/{row['session']}/{row['voie']}"
+# Polynésie française (code officiel 41) : hors des totaux nationaux de
+# ``concours_admis``, elle est écartée du recoupement par académie.
+_POLYNESIE = "41"
+
+
+def _concours_key(schema: str, row: dict[str, str]) -> str:
+    return "/".join(row[column] for column in _CONCOURS_KEYS[schema])
+
+
+def _concours_files(files: Sequence[LoadedFile]) -> list[LoadedFile]:
+    return [loaded for loaded in files if loaded.schema in _CONCOURS_KEYS]
 
 
 def check_concours_counts(files: Sequence[LoadedFile]) -> list[Violation]:
-    """Effectifs ``concours_admis`` : tous ≥ 0 et admis ≤ présents ≤ inscrits.
+    """Effectifs de concours (national et par académie) : tous ≥ 0 et
+    admis ≤ présents ≤ inscrits.
 
     Aucune contrainte entre ``admis`` et ``postes`` : les emplois non pourvus
     d'un concours peuvent être reportés sur un autre (décret n° 90-680, art. 4).
     """
     violations: list[Violation] = []
-    for loaded in files:
-        if loaded.schema != "concours_admis":
-            continue
+    for loaded in _concours_files(files):
         for line, row in loaded.rows:
             violations.extend(
                 Violation(
                     invariant="concours",
                     file=loaded.filename,
                     line=line,
-                    message=f"{_concours_key(row)} : {breach}",
+                    message=f"{_concours_key(loaded.schema, row)} : {breach}",
                 )
                 for breach in _concours_breaches(row)
             )
@@ -446,17 +460,16 @@ def _concours_breaches(row: dict[str, str]) -> list[str]:
 
 
 def check_concours_unique(files: Sequence[LoadedFile]) -> list[Violation]:
-    """Une seule ligne ``concours_admis`` par (``body_code``, ``session``, ``voie``).
+    """Une seule ligne par clé : (``body_code``, ``session``, ``voie``) au
+    national, plus ``academie`` par académie.
 
     Le doublon est localisé sur sa ligne, en citant la première occurrence.
     """
     violations: list[Violation] = []
-    for loaded in files:
-        if loaded.schema != "concours_admis":
-            continue
+    for loaded in _concours_files(files):
         first_line: dict[str, int] = {}
         for line, row in loaded.rows:
-            key = _concours_key(row)
+            key = _concours_key(loaded.schema, row)
             if key in first_line:
                 violations.append(
                     Violation(
@@ -471,6 +484,88 @@ def check_concours_unique(files: Sequence[LoadedFile]) -> list[Violation]:
     return violations
 
 
+def check_concours_cross_totals(files: Sequence[LoadedFile]) -> list[Violation]:
+    """Recoupement : pour chaque ligne ``concours_admis``, la somme des lignes
+    ``concours_admis_academie`` de même (``body_code``, ``session``, ``voie``),
+    Polynésie française exclue, égale chaque effectif national.
+
+    Contrôle neutralisé si l'un des deux fichiers est absent ; l'écart est
+    localisé sur la ligne nationale.
+    """
+    by_schema = {loaded.schema: loaded for loaded in files}
+    national = by_schema.get("concours_admis")
+    academies = by_schema.get("concours_admis_academie")
+    if national is None or academies is None:
+        return []
+    sums: dict[str, dict[str, int]] = {}
+    for _, row in academies.rows:
+        if row["academie"] == _POLYNESIE:
+            continue
+        totals = sums.setdefault(
+            _concours_key("concours_admis", row), dict.fromkeys(_CONCOURS_COUNTS, 0)
+        )
+        for column in _CONCOURS_COUNTS:
+            totals[column] += int(row[column])
+    violations: list[Violation] = []
+    for line, row in national.rows:
+        key = _concours_key("concours_admis", row)
+        totals = sums.get(key, dict.fromkeys(_CONCOURS_COUNTS, 0))
+        violations.extend(
+            Violation(
+                invariant="recoupement",
+                file=national.filename,
+                line=line,
+                message=(
+                    f"{key} : {column} : somme des académies hors Polynésie "
+                    f"{totals[column]} ≠ national {row[column]}"
+                ),
+            )
+            for column in _CONCOURS_COUNTS
+            if totals[column] != int(row[column])
+        )
+    return violations
+
+
+def load_academies(root: Path) -> frozenset[str] | None:
+    """Codes du référentiel ``root/academies.json`` (``None`` si absent)."""
+    path = root / "academies.json"
+    if not path.exists():
+        return None
+    referential: dict[str, Any] = json.loads(path.read_text("utf-8"))
+    return frozenset(referential)
+
+
+def check_academies_declared(declared: frozenset[str] | None) -> Invariant:
+    """Toute ``academie`` de ``concours_admis_academie`` est un code du référentiel.
+
+    Référentiel absent → aucun contrôle (comme ``sources.json``).
+    """
+
+    def invariant(files: Sequence[LoadedFile]) -> list[Violation]:
+        if declared is None:
+            return []
+        violations: list[Violation] = []
+        for loaded in files:
+            if loaded.schema != "concours_admis_academie":
+                continue
+            violations.extend(
+                Violation(
+                    invariant="academie",
+                    file=loaded.filename,
+                    line=line,
+                    message=(
+                        f"{_concours_key(loaded.schema, row)} : académie "
+                        f"« {row['academie']} » absente de academies.json"
+                    ),
+                )
+                for line, row in loaded.rows
+                if row["academie"] not in declared
+            )
+        return violations
+
+    return invariant
+
+
 # Registre des invariants sans configuration externe (C3 est fabriqué dans run()).
 STATELESS_INVARIANTS: tuple[Invariant, ...] = (
     check_source_not_blank,
@@ -478,6 +573,7 @@ STATELESS_INVARIANTS: tuple[Invariant, ...] = (
     check_periods_no_overlap,
     check_concours_counts,
     check_concours_unique,
+    check_concours_cross_totals,
 )
 
 
@@ -536,6 +632,7 @@ def run(root: Path) -> tuple[int, str]:
         *STATELESS_INVARIANTS,
         check_values_within_bounds(load_bounds(root)),
         check_sources_declared(load_declared_sources(root)),
+        check_academies_declared(load_academies(root)),
     )
     violations: list[Violation] = []
     for invariant in invariants:

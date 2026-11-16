@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Infrastructure\Persistence;
 
+use App\Infrastructure\Entity\Academie;
+use App\Infrastructure\Entity\ConcoursAcademie;
 use App\Infrastructure\Entity\ConcoursSession;
 use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\CorpsPayroll;
@@ -256,6 +258,46 @@ abstract class IntegrationTestCase extends KernelTestCase
         $concours->presents = $counts['presents'];
         $concours->admis = $counts['admis'];
         $concours->body = $corps;
+        $concours->source = $source;
+        $concours->parameterSet = $set;
+        $this->em->persist($concours);
+
+        return $concours;
+    }
+
+    protected function newAcademie(string $code, string $label, string $statut, Source $source): Academie
+    {
+        $academie = new Academie();
+        $academie->code = $code;
+        $academie->label = $label;
+        $academie->statut = $statut;
+        $academie->source = $source;
+        $this->em->persist($academie);
+
+        return $academie;
+    }
+
+    /**
+     * @param array{postes: int, inscrits: int, presents: int, admis: int} $counts
+     */
+    protected function newConcoursAcademie(
+        int $session,
+        string $voie,
+        array $counts,
+        Corps $corps,
+        Academie $academie,
+        Source $source,
+        ParameterSet $set,
+    ): ConcoursAcademie {
+        $concours = new ConcoursAcademie();
+        $concours->session = $session;
+        $concours->voie = $voie;
+        $concours->postes = $counts['postes'];
+        $concours->inscrits = $counts['inscrits'];
+        $concours->presents = $counts['presents'];
+        $concours->admis = $counts['admis'];
+        $concours->body = $corps;
+        $concours->academie = $academie;
         $concours->source = $source;
         $concours->parameterSet = $set;
         $this->em->persist($concours);

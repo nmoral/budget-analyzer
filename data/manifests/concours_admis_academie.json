@@ -1,0 +1,9 @@
+{
+  "raw": "concours_admis_academie.json",
+  "retrieved_at": "2026-11-16",
+  "script": "sources.concours_admis_academie",
+  "script_version": "1",
+  "sha256": "c3ec63e33202cd4f8a851a946ea39bca365272c6126f444e5322d41d805ad58b",
+  "source": "Admis aux concours de recrutement de professeurs des écoles (CRPE, enseignement public) — détail par académie, sessions 2021 à 2025",
+  "url": "https://www.devenirenseignant.gouv.fr/statistiques"
+}

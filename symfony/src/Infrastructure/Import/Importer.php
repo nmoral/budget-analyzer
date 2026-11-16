@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Import;
 
+use App\Infrastructure\Entity\Academie;
+use App\Infrastructure\Entity\ConcoursAcademie;
 use App\Infrastructure\Entity\ConcoursSession;
 use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\CorpsPayroll;
@@ -26,18 +28,21 @@ use Doctrine\ORM\EntityManagerInterface;
  * dépôt réel (C5) : valeurs datées (`DatedParameter`), grilles (`Grille`), échelons
  * (`Echelon`, rattachés à leur grille par la clé `{body_code}_{grade}_{version}`),
  * taux de primes (`PrimeRate`), budgets de référence datés par financeur
- * (`ReferenceBudget`), masse salariale datée par corps (`CorpsPayroll`) et sessions de
- * concours par corps (`ConcoursSession`), avec résolution des FK vers les référentiels `Source`
- * (`data/sources.json`), `Corps` (`data/corps.json`) et `Funder` (`data/funders.json`)
- * et vers le `ParameterSet`.
+ * (`ReferenceBudget`), masse salariale datée par corps (`CorpsPayroll`), sessions de
+ * concours par corps (`ConcoursSession`) et par académie (`ConcoursAcademie`), avec
+ * résolution des FK vers les référentiels `Source` (`data/sources.json`), `Corps`
+ * (`data/corps.json`), `Funder` (`data/funders.json`) et `Academie`
+ * (`data/academies.json`, chargé en entier) et vers le `ParameterSet`.
  *
- * Un slug/corps/financeur référencé mais absent de son référentiel → refus (rollback total).
+ * Un slug/corps/financeur/académie référencé mais absent de son référentiel → refus
+ * (rollback total).
  *
  * Réimport idempotent du même commit (C6, décisions Q2/Q5) : le `ParameterSet` est
  * réutilisé (jamais supprimé — un scénario l'épingle), `Grille`/`Echelon` sont mis à
  * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`,
- * `PrimeRate`, `ReferenceBudget`, `CorpsPayroll` et `ConcoursSession` — que rien ne référence — sont remplacés par
- * rechargement, et les référentiels globaux `Source`/`Corps`/`Funder` sont mis à jour par
+ * `PrimeRate`, `ReferenceBudget`, `CorpsPayroll`, `ConcoursSession` et `ConcoursAcademie` — que rien ne
+ * référence — sont remplacés par rechargement, et les référentiels globaux
+ * `Source`/`Corps`/`Funder`/`Academie` sont mis à jour par
  * upsert sur `code`. Aucune FK d'objet utilisateur (scénario, profil) n'est donc cassée
  * par un ré-import.
  */
@@ -67,6 +72,7 @@ final class Importer
         'budget_financeur' => 'budget_financeur',
         'masse_salariale_corps' => 'masse_salariale_corps',
         'concours_admis' => 'concours_admis',
+        'concours_admis_academie' => 'concours_admis_academie',
     ];
 
     /** @var list<string> */
@@ -98,6 +104,9 @@ final class Importer
     /** @var list<string> */
     private const CONCOURS_FILES = ['concours_admis'];
 
+    /** @var list<string> */
+    private const CONCOURS_ACADEMIE_FILES = ['concours_admis_academie'];
+
     public function __construct(
         private readonly EntityManagerInterface $em,
         private readonly CsvReader $csvReader,
@@ -106,11 +115,12 @@ final class Importer
         private readonly SourceReferential $sourceReferential,
         private readonly CorpsReferential $corpsReferential,
         private readonly FunderReferential $funderReferential,
+        private readonly AcademieReferential $academieReferential,
     ) {
     }
 
     /**
-     * @throws ImportException tout échec (schéma, empreinte, source/corps/financeur inconnu) → rollback total
+     * @throws ImportException tout échec (schéma, empreinte, source/corps/financeur/académie inconnu) → rollback total
      */
     public function import(string $commit, string $dataDir): void
     {
@@ -119,6 +129,7 @@ final class Importer
             $sourceReferential = $this->sourceReferential->load($dataDir);
             $corpsReferential = $this->corpsReferential->load($dataDir);
             $funderReferential = $this->funderReferential->load($dataDir);
+            $academieReferential = $this->academieReferential->load($dataDir);
 
             // Reproductibilité idempotente (C6, décisions Q2/Q5). Au ré-import du même
             // commit, aucune ligne référencée par un objet utilisateur n'est détruite :
@@ -163,6 +174,8 @@ final class Importer
             $this->loadBudgets($parsed, $set, $sourceReferential, $funderReferential, $sources, $funders);
             $this->loadPayrolls($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
             $this->loadConcoursSessions($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
+            $academies = $this->loadAcademies($academieReferential, $sourceReferential, $sources);
+            $this->loadConcoursAcademies($parsed, $set, $sourceReferential, $corpsReferential, $academies, $sources, $corps);
 
             $this->em->flush();
         });
@@ -409,6 +422,79 @@ final class Importer
     }
 
     /**
+     * Référentiel global des académies, chargé en entier et mis à jour par upsert sur
+     * `code` (comme `Corps`/`Funder`) ; chaque académie est rattachée à la source de
+     * son code officiel.
+     *
+     * @param array<string, array{label: string, statut: string, source: string, aliases?: list<string>}>       $referential
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, Source>                                                                           $sources
+     *
+     * @return array<string, Academie>
+     */
+    private function loadAcademies(array $referential, array $sourceReferential, array &$sources): array
+    {
+        $academies = [];
+        foreach ($referential as $code => $data) {
+            $code = (string) $code;
+            $academie = $this->em->getRepository(Academie::class)->findOneBy(['code' => $code]);
+            if (!$academie instanceof Academie) {
+                $academie = new Academie();
+                $academie->code = $code;
+                $this->em->persist($academie);
+            }
+            $academie->label = $data['label'];
+            $academie->statut = $data['statut'];
+            $academie->source = $this->resolveSource($data['source'], $sourceReferential, $sources);
+            $academies[$code] = $academie;
+        }
+
+        return $academies;
+    }
+
+    /**
+     * Sessions de concours par corps, voie et académie. Une académie absente du
+     * référentiel → `UnknownAcademieException` (rollback total).
+     *
+     * @param array<string, array{header: list<string>, rows: list<array<string, string>>}>                   $parsed
+     * @param array<string, array{label: string, publisher: string, edition: string, locator: string, url: string, retrievedAt: string, fileHash: string}> $sourceReferential
+     * @param array<string, array{label: string, versant: string, category: string}>                         $corpsReferential
+     * @param array<string, Academie>                                                                         $academies
+     * @param array<string, Source>                                                                           $sources
+     * @param array<string, Corps>                                                                            $corps
+     */
+    private function loadConcoursAcademies(
+        array $parsed,
+        ParameterSet $set,
+        array $sourceReferential,
+        array $corpsReferential,
+        array $academies,
+        array &$sources,
+        array &$corps,
+    ): void {
+        foreach (self::CONCOURS_ACADEMIE_FILES as $file) {
+            foreach ($parsed[$file]['rows'] as $row) {
+                if (!isset($academies[$row['academie']])) {
+                    throw new UnknownAcademieException(sprintf('académie inconnue `%s`', $row['academie']));
+                }
+
+                $concours = new ConcoursAcademie();
+                $concours->session = (int) $row['session'];
+                $concours->voie = $row['voie'];
+                $concours->postes = (int) $row['postes'];
+                $concours->inscrits = (int) $row['inscrits'];
+                $concours->presents = (int) $row['presents'];
+                $concours->admis = (int) $row['admis'];
+                $concours->academie = $academies[$row['academie']];
+                $concours->source = $this->resolveSource($row['source'], $sourceReferential, $sources);
+                $concours->body = $this->resolveCorps($row['body_code'], $corpsReferential, $corps);
+                $concours->parameterSet = $set;
+                $this->em->persist($concours);
+            }
+        }
+    }
+
+    /**
      * Le ParameterSet déjà présent pour ce commit (ré-import), ou null au premier import.
      */
     private function findExistingSet(string $commit): ?ParameterSet
@@ -423,10 +509,10 @@ final class Importer
 
     /**
      * Purge les seules entités scopées que RIEN ne référence (DatedParameter, PrimeRate,
-     * ReferenceBudget, CorpsPayroll, ConcoursSession) : elles sont remplacées par rechargement. Grille/Echelon (référencés
+     * ReferenceBudget, CorpsPayroll, ConcoursSession, ConcoursAcademie) : elles sont remplacées par rechargement. Grille/Echelon (référencés
      * par les profils) et le ParameterSet (référencé par les scénarios) ne sont jamais
      * supprimés ici — ils sont mis à jour en place par upsert, pour ne casser aucune FK
-     * d'objet utilisateur. Le référentiel global `Funder` (upsert par `code`) n'est pas purgé.
+     * d'objet utilisateur. Les référentiels globaux `Funder` et `Academie` (upsert par `code`) ne sont pas purgés.
      */
     private function purgeReplaceableScoped(ParameterSet $set): void
     {
@@ -438,6 +524,7 @@ final class Importer
             'DELETE App\Infrastructure\Entity\ReferenceBudget b WHERE IDENTITY(b.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\CorpsPayroll m WHERE IDENTITY(m.parameterSet) = :set',
             'DELETE App\Infrastructure\Entity\ConcoursSession c WHERE IDENTITY(c.parameterSet) = :set',
+            'DELETE App\Infrastructure\Entity\ConcoursAcademie a WHERE IDENTITY(a.parameterSet) = :set',
         ];
         foreach ($deletes as $dql) {
             $this->em->createQuery($dql)->setParameter('set', $setId)->execute();

@@ -55,20 +55,21 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **intégrité des fichiers sources** : l'empreinte du fichier brut archivé de chaque
   source est comparée à celle enregistrée dans son manifeste ; toute divergence fait
   échouer l'import ;
-- **complétude des référentiels** : toute source, tout corps et tout financeur cités par
-  les données doivent figurer dans les référentiels curatés du dépôt (`data/sources.json`,
-  `data/corps.json`, `data/funders.json`) ; une référence inconnue fait échouer l'import.
+- **complétude des référentiels** : toute source, tout corps, tout financeur et toute
+  académie cités par les données doivent figurer dans les référentiels curatés du dépôt
+  (`data/sources.json`, `data/corps.json`, `data/funders.json`, `data/academies.json`) ;
+  une référence inconnue fait échouer l'import.
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
 **budget de référence daté par financeur**, la **masse salariale datée par corps**, les
-**sessions de concours par corps** et les **référentiels** de sources, de corps et de financeurs auxquels ils se rattachent. Ne
+**sessions de concours par corps**, leur **détail par académie** et les **référentiels** de sources, de corps, de financeurs et d'académies auxquels ils se rattachent. Ne
 sont pas chargés par cette commande : les coûts PAP, les régimes de retraite et les objets
 de simulation (profils, scénarios), qui relèvent d'autres apports.
 
 **Réimport du même commit** : relancer la commande avec la même référence de version
 laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
-— y compris le budget de référence, la masse salariale et les sessions de concours — sont remplacées, et les sources, corps et financeurs
+— y compris le budget de référence, la masse salariale et les sessions de concours (nationales et par académie) — sont remplacées, et les sources, corps, financeurs et académies
 sont mis à jour sur place.
 
 ### Modèle de données et sélection des valeurs réglementaires
@@ -117,10 +118,21 @@ suivantes.
   une voie non ouverte une année n'a pas de ligne. Le périmètre est le même chaque année :
   quand le total national publié compte la Polynésie (sessions 2021 et 2025, concours
   externe), la part Polynésie en est retranchée. Les données de Polynésie et d'outre-mer par
-  territoire relèvent de #80. Le nombre d'admis peut dépasser celui des
+  territoire sont le détail par académie ci-dessous (#80). Le nombre d'admis peut dépasser celui des
   postes (report des emplois non pourvus entre concours). Le corps `ISG` n'a pas encore de
   concours (#78). Cette donnée est **exposée en base pour un usage futur** (indicateur de
   faisabilité, #21) ; elle n'est à ce stade ni calculée ni affichée.
+- **Académies** : référentiel des territoires de recrutement — code officiel
+  (data.education.gouv.fr), libellé, statut (`metropole`, `drom` pour les départements et
+  régions d'outre-mer, `com` pour les collectivités d'outre-mer, dont la Polynésie française
+  et la Nouvelle-Calédonie) et source du code. Caen et Rouen (jusqu'en 2022) et Normandie
+  (depuis 2023) sont trois académies distinctes, sans recomposition.
+- **Sessions de concours par académie** : mêmes effectifs (postes, inscrits, présents, admis)
+  pour un corps, une session, une voie et une académie. Pour `PE` : CRPE de l'enseignement
+  public, sessions 2021 à 2025, outre-mer et Polynésie française traités comme tout
+  territoire ; la Polynésie est une académie du corps `PE` (concours externe), pas un corps
+  distinct. Hors Polynésie, la somme des académies égale la session nationale. Donnée
+  **exposée en base pour un usage futur**, ni calculée ni affichée.
 - **Taux de primes** : taux de primes d'un corps pour une année d'observation (primes
   de la V1).
 - **Profil** : unité de simulation (corps, grade et échelon d'entrée, régime de
