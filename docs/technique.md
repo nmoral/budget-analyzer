@@ -1397,6 +1397,9 @@ Sous `src/Infrastructure/Import/` :
 - **`AcademieReferential`** (#80) : charge `data/academies.json` (code officiel →
   `label`/`statut`/`source`, `aliases` optionnels, non persistés). Les colonnes de
   `Academie` étant NOT NULL, chaque entrée doit fournir `label`, `statut` et `source`.
+  Le `statut` doit valoir exactement `metropole`, `drom` ou `com` (casse et espaces
+  compris, #82) ; absent, vide ou autre → `InvalidAcademieStatutException` (sous-classe
+  d'`ImportException`, exit 1, rollback total). Aucune contrainte en base.
   Référentiel introuvable ou invalide → `ImportException` (contrairement à
   `python -m checks`, qui neutralise le contrôle d'académie en son absence).
 

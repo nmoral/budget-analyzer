@@ -58,7 +58,10 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **complétude des référentiels** : toute source, tout corps, tout financeur et toute
   académie cités par les données doivent figurer dans les référentiels curatés du dépôt
   (`data/sources.json`, `data/corps.json`, `data/funders.json`, `data/academies.json`) ;
-  une référence inconnue fait échouer l'import.
+  une référence inconnue fait échouer l'import ;
+- **statut des académies** : chaque académie de `data/academies.json` a un statut
+  exactement `metropole`, `drom` ou `com` ; un statut absent, vide ou autre fait
+  échouer l'import (rien n'est importé). `python -m checks` signale la même anomalie.
 
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
