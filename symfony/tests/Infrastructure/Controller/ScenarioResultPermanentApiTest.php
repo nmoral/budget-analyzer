@@ -65,7 +65,7 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=permanent&views=BUDGETAIRE');
         $response = $this->client->getResponse();
@@ -101,8 +101,8 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
         $id = $this->createScenario($profile, [
-            ['profileRef' => $profile->id, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
-            ['profileRef' => $profile->id, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->code, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->code, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
         ]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=permanent&views=BUDGETAIRE');
@@ -132,7 +132,7 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=permanent&views=BUDGETAIRE');
         /** @var array<string, mixed> $body */
@@ -161,7 +161,7 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=permanent&views=BUDGETAIRE,EQUIVALENT_PRIVE');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
@@ -199,7 +199,7 @@ final class ScenarioResultPermanentApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-no-point');
         $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['point_indice']);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=permanent&views=BUDGETAIRE');
         $response = $this->client->getResponse();

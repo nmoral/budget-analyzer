@@ -73,7 +73,7 @@ final class ScenarioResultCohortApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
@@ -105,7 +105,7 @@ final class ScenarioResultCohortApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE,EQUIVALENT_PRIVE');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
@@ -148,8 +148,8 @@ final class ScenarioResultCohortApiTest extends WebTestCase
     {
         [$long, $short] = $this->seedSharedGrilleProfiles();
         $id = $this->createScenario($long, [
-            ['profileRef' => $long->id, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
-            ['profileRef' => $short->id, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $long->code, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $short->code, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
         ]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE');
@@ -195,7 +195,7 @@ final class ScenarioResultCohortApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-no-point');
         $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['point_indice']);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE');
         $response = $this->client->getResponse();

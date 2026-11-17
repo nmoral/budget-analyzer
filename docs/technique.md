@@ -643,15 +643,20 @@ plus bas) et la **frontière Deptrac** est préservée.
 | `/api/scenarios/{id}/result?horizons=&views=` | `GET` | lire le résultat | `200` / `404` / `422` |
 
 - **`POST /api/scenarios`** attend `{title, lines:[{profileRef, volume, recruitmentDate,
-  spreadYears?}], parametersVersion?}`. `profileRef` est l'**id Doctrine** d'un `Profile`.
+  spreadYears?}], parametersVersion?}`. `profileRef` est le **code** (chaîne) d'un
+  `Profile` importé (#62 ; l'id Doctrine entier de #19 n'est plus accepté → `422`).
   Le scénario est **épinglé à un `ParameterSet`** : `parametersVersion` absent → `latest()` ;
-  présent → `ParameterSetRepository::findByVersionId()`. Succès → `201` `{id,
+  présent → `ParameterSetRepository::findByVersionId()`. Le profil est résolu **dans ce
+  jeu** par `ProfileRepository::findByCode(set, code)` ; code inconnu du jeu (y compris
+  présent seulement dans un autre jeu) → `422` `{error: "Profil « <code> » introuvable dans
+  le jeu de paramètres <version>."}`. Succès → `201` `{id,
   parametersVersion}`. Entrée invalide (corps non-JSON, `title` vide/absent, `lines` vide,
-  ligne mal formée, `profileRef`/`volume`/`spreadYears` non entiers, `recruitmentDate`
+  ligne mal formée, `profileRef` non chaîne, `volume`/`spreadYears` non entiers, `recruitmentDate`
   illisible, version demandée inconnue, aucun jeu importé) → **`422`** `{error}`. Le
   scénario reçoit `provenance = 'simulation'` par défaut (champ NOT NULL absent du corps).
 - **`GET /api/scenarios/{id}`** → `200` `{id, title, parametersVersion, lines:[{id,
-  profileRef, volume, recruitmentDate, spreadYears}]}` ; scénario inconnu → **`404`**.
+  profileRef, volume, recruitmentDate, spreadYears}]}` (`profileRef` = code du profil,
+  comme dans le résultat) ; scénario inconnu → **`404`**.
 - **`GET /api/scenarios/{id}/result`** → `200` avec le résultat (structure ci-dessous) ;
   scénario inconnu → `404` ; vue ou horizon inconnu → `422` (`InvalidSelectionException`).
   Une vue **valide mais non valorisable** avec le jeu épinglé — un paramètre daté requis

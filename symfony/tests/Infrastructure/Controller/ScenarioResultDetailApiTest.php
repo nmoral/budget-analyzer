@@ -302,7 +302,7 @@ final class ScenarioResultDetailApiTest extends WebTestCase
             server: ['CONTENT_TYPE' => 'application/json'],
             content: (string) json_encode([
                 'title' => 'Transparence',
-                'lines' => [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => $recruitmentDate]],
+                'lines' => [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => $recruitmentDate]],
             ]),
         );
         self::assertSame(201, $this->client->getResponse()->getStatusCode());

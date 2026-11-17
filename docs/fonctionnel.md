@@ -144,9 +144,11 @@ suivantes.
   **exposée en base pour un usage futur**, ni calculée ni affichée.
 - **Taux de primes** : taux de primes d'un corps pour une année d'observation (primes
   de la V1).
-- **Profil** : unité de simulation (corps, grade et échelon d'entrée, régime de
-  retraite, régime indemnitaire, financeur, statut titulaire/contractuel, calendrier
-  de référence civil/scolaire).
+- **Profil** : unité de simulation (code, libellé, corps, grade et échelon d'entrée,
+  régime de retraite, régime indemnitaire, financeur, statut titulaire/contractuel,
+  calendrier de référence civil/scolaire, source). Les profils entrent uniquement par
+  l'import (`data/profiles.json`) et appartiennent à un jeu de paramètres ; leur code
+  (`PE_CN`, `ISG_G1`) est unique dans ce jeu.
 - **Scénario** et **Ligne de scénario** : un scénario (titre, provenance, montant
   annoncé optionnel) et ses lignes (profil, volume, date de recrutement, étalement sur
   N années).
@@ -181,17 +183,21 @@ recrutement, puis la **lecture de son résultat de simulation** sur l'horizon «
 C'est le premier usage réel du moteur de calcul exposé hors des tests.
 
 **Créer un scénario** : on fournit un **titre** et une ou plusieurs **lignes**, chaque
-ligne décrivant un recrutement — le **profil** visé, un **volume** (nombre d'agents),
+ligne décrivant un recrutement — le **profil** visé, désigné par son **code** (`PE_CN`,
+`ISG_G1`), un **volume** (nombre d'agents),
 une **date de recrutement** et, optionnellement, un **étalement sur N années**. On peut
 aussi préciser la **version des paramètres** à épingler. À la création, le scénario est
 **rattaché à un jeu de paramètres** (voir « Rattachement à un jeu de paramètres ») : si
 aucune version n'est précisée, c'est le **dernier jeu importé** qui est épinglé ; si une
 version est précisée, c'est ce jeu-là. Une version demandée **inconnue** fait **rejeter**
-la création. La création renvoie l'**identifiant** du scénario et la **version des
+la création. Le profil doit exister **dans le jeu épinglé** : un code inconnu de ce jeu
+(y compris un code qui n'existe que dans une autre version) fait rejeter la création avec
+un message nommant le code ; l'ancienne référence numérique d'un profil n'est plus
+acceptée. La création renvoie l'**identifiant** du scénario et la **version des
 paramètres** effectivement épinglée.
 
 **Lire un scénario** : on retrouve son titre, la version des paramètres épinglée et ses
-lignes. Un scénario **inconnu** est signalé comme introuvable.
+lignes, chacune avec le code de son profil. Un scénario **inconnu** est signalé comme introuvable.
 
 **Lire le résultat d'un scénario** : on obtient, **par ligne** et **par vue de coût
 demandée**, le coût de chaque **horizon demandé** du recrutement. Trois horizons sont

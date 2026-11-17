@@ -58,7 +58,7 @@ final class ScenarioApiTest extends WebTestCase
             content: (string) json_encode([
                 'title' => 'Rentrée 2026',
                 'lines' => [[
-                    'profileRef' => $profile->id,
+                    'profileRef' => $profile->code,
                     'volume' => 1,
                     'recruitmentDate' => '2026-09-01',
                 ]],
@@ -90,7 +90,7 @@ final class ScenarioApiTest extends WebTestCase
             content: (string) json_encode([
                 'title' => 'Programme',
                 'lines' => [[
-                    'profileRef' => $profile->id,
+                    'profileRef' => $profile->code,
                     'volume' => 3,
                     'recruitmentDate' => '2026-09-01',
                     'spreadYears' => 2,
@@ -114,7 +114,7 @@ final class ScenarioApiTest extends WebTestCase
         self::assertSame('Programme', $body['title']);
         self::assertSame('commit-read', $body['parametersVersion']);
         self::assertCount(1, $body['lines']);
-        self::assertSame($profile->id, $body['lines'][0]['profileRef']);
+        self::assertSame($profile->code, $body['lines'][0]['profileRef']);
         self::assertSame(3, $body['lines'][0]['volume']);
         self::assertSame('2026-09-01', $body['lines'][0]['recruitmentDate']);
         self::assertSame(2, $body['lines'][0]['spreadYears']);
@@ -137,7 +137,7 @@ final class ScenarioApiTest extends WebTestCase
                 'title' => 'Rentrée 2026',
                 'parametersVersion' => 'zzz',
                 'lines' => [[
-                    'profileRef' => $profile->id,
+                    'profileRef' => $profile->code,
                     'volume' => 1,
                     'recruitmentDate' => '2026-09-01',
                 ]],
@@ -154,7 +154,8 @@ final class ScenarioApiTest extends WebTestCase
     {
         $older = $this->persistParameterSet($this->em, 'commit-older', '2026-01-01');
         $latest = $this->persistParameterSet($this->em, 'commit-latest', '2026-06-01');
-        $profile = $this->persistProfile($this->em, $latest);
+        // #62 : un scénario n'accepte que les profils de son jeu → profil du jeu épinglé.
+        $profile = $this->persistProfile($this->em, $older);
         $this->em->flush();
 
         $this->client->request(
@@ -165,7 +166,7 @@ final class ScenarioApiTest extends WebTestCase
                 'title' => 'Épinglé',
                 'parametersVersion' => 'commit-older',
                 'lines' => [[
-                    'profileRef' => $profile->id,
+                    'profileRef' => $profile->code,
                     'volume' => 1,
                     'recruitmentDate' => '2026-09-01',
                 ]],
@@ -197,7 +198,7 @@ final class ScenarioApiTest extends WebTestCase
             content: (string) json_encode([
                 'title' => 'Défaut',
                 'lines' => [[
-                    'profileRef' => $profile->id,
+                    'profileRef' => $profile->code,
                     'volume' => 1,
                     'recruitmentDate' => '2026-09-01',
                 ]],

@@ -125,10 +125,16 @@ final class ScenarioResultCacheApiTest extends WebTestCase
         $setB = $this->persistParameterSet($this->em, 'ver-b', '2026-02-01');
         // Même corps, taux CAS civil différent (50 % vs 82.28 %).
         $this->persistEngineParameters($this->em, $setB, $profile->body, '50.00');
+        // #62 : un scénario n'accepte que les profils de son jeu → même profil (même
+        // code) présent aussi dans le jeu B.
+        $profileB = clone $profile;
+        $profileB->id = null;
+        $profileB->parameterSet = $setB;
+        $this->em->persist($profileB);
         $this->em->flush();
 
         $idA = $this->createScenario($profile, 'ver-a');
-        $idB = $this->createScenario($profile, 'ver-b');
+        $idB = $this->createScenario($profileB, 'ver-b');
 
         $retirementA = $this->retirement($idA);
         $retirementB = $this->retirement($idB);
@@ -172,7 +178,7 @@ final class ScenarioResultCacheApiTest extends WebTestCase
     {
         $payload = [
             'title' => 'Cache',
-            'lines' => [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]],
+            'lines' => [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]],
         ];
         if ($parametersVersion !== null) {
             $payload['parametersVersion'] = $parametersVersion;

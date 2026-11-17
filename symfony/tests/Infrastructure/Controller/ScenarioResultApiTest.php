@@ -65,7 +65,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testBudgetaryYear1Result(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE');
         $response = $this->client->getResponse();
@@ -90,7 +90,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testPrivateEquivalentViewResult(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUIVALENT_PRIVE,BUDGETAIRE');
         $response = $this->client->getResponse();
@@ -116,8 +116,8 @@ final class ScenarioResultApiTest extends WebTestCase
     {
         $profile = $this->seedComputable();
         $id = $this->createScenario($profile, [
-            ['profileRef' => $profile->id, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
-            ['profileRef' => $profile->id, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->code, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->code, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
         ]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE');
@@ -141,8 +141,8 @@ final class ScenarioResultApiTest extends WebTestCase
     {
         $profile = $this->seedComputable();
         $id = $this->createScenario($profile, [
-            ['profileRef' => $profile->id, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
-            ['profileRef' => $profile->id, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->code, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $profile->code, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
         ]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE,BUDGETAIRE');
@@ -166,7 +166,7 @@ final class ScenarioResultApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-pinned');
         $profile = $this->persistComputableProfile($this->em, $set);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=year1&views=BUDGETAIRE');
         $first = (string) $this->client->getResponse()->getContent();
@@ -182,7 +182,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testUnknownViewReturns422(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=INCONNU');
 
@@ -192,7 +192,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testUnknownHorizonReturns422(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=foobar');
 
@@ -220,7 +220,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testUnderParameterizedTechnicalBalanceReturns422(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUILIBRE_TECHNIQUE');
         $response = $this->client->getResponse();
@@ -242,7 +242,7 @@ final class ScenarioResultApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-no-prive');
         $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['taux_employeur_prive']);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUIVALENT_PRIVE');
         $response = $this->client->getResponse();
@@ -263,7 +263,7 @@ final class ScenarioResultApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-no-point');
         $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['point_indice']);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
         $response = $this->client->getResponse();
@@ -284,7 +284,7 @@ final class ScenarioResultApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-no-prime');
         $profile = $this->persistComputableProfile($this->em, $set, omitPrimeRate: true);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
         $response = $this->client->getResponse();
@@ -302,7 +302,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testMixedSelectionFailsGloballyNamingFaultyView(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE,EQUILIBRE_TECHNIQUE');
         $mixed = $this->client->getResponse();
@@ -322,7 +322,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testUnderParameterizedErrorIsNotCached(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=EQUILIBRE_TECHNIQUE');
         $first = $this->client->getResponse();
@@ -344,7 +344,7 @@ final class ScenarioResultApiTest extends WebTestCase
     public function testNonRegressionStatusCodes(): void
     {
         $profile = $this->seedComputable();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?views=BUDGETAIRE');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());

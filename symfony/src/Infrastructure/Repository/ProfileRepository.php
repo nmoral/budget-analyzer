@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Repository;
 
+use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\Profile;
 use Doctrine\ORM\EntityManagerInterface;
 
 /**
- * Accès aux profils par identifiant (référence `profileRef` d'une ligne de scénario).
+ * Accès aux profils importés par code, dans un jeu de paramètres (référence
+ * `profileRef` d'une ligne de scénario, #62).
  */
 final class ProfileRepository
 {
@@ -16,8 +18,8 @@ final class ProfileRepository
     {
     }
 
-    public function find(int $id): ?Profile
+    public function findByCode(ParameterSet $set, string $code): ?Profile
     {
-        return $this->em->find(Profile::class, $id);
+        return $this->em->getRepository(Profile::class)->findOneBy(['parameterSet' => $set, 'code' => $code]);
     }
 }

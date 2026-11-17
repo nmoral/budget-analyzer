@@ -20,6 +20,9 @@ use Symfony\Component\Routing\Attribute\Route;
 /**
  * API JSON des scénarios (#19) : création et lecture.
  *
+ * Une ligne référence son profil par son **code** (`profileRef`, #62), résolu dans le
+ * jeu de paramètres du scénario : code inconnu de ce jeu ou non chaîne → 422.
+ *
  * Mapping JSON manuel (entité → tableau → JsonResponse), sans symfony/serializer.
  */
 final class ScenarioController
@@ -74,8 +77,8 @@ final class ScenarioController
                 return $this->error('Ligne de scénario invalide.', 422);
             }
             $line = $this->buildLine($scenario, $lineRaw);
-            if ($line === null) {
-                return $this->error('Ligne de scénario invalide.', 422);
+            if (\is_string($line)) {
+                return $this->error($line, 422);
             }
             $lines[] = $line;
         }
@@ -125,37 +128,45 @@ final class ScenarioController
     }
 
     /**
+     * Ligne construite, ou message d'erreur (422).
+     *
      * @param array<array-key, mixed> $lineRaw
      */
-    private function buildLine(Scenario $scenario, array $lineRaw): ?ScenarioLine
+    private function buildLine(Scenario $scenario, array $lineRaw): ScenarioLine|string
     {
+        $invalid = 'Ligne de scénario invalide.';
+
         $profileRef = $lineRaw['profileRef'] ?? null;
-        if (!\is_int($profileRef)) {
-            return null;
+        if (!\is_string($profileRef)) {
+            return '"profileRef" doit être le code d\'un profil (chaîne).';
         }
-        $profile = $this->profiles->find($profileRef);
+        $profile = $this->profiles->findByCode($scenario->parameterSet, $profileRef);
         if ($profile === null) {
-            return null;
+            return sprintf(
+                'Profil « %s » introuvable dans le jeu de paramètres %s.',
+                $profileRef,
+                $scenario->parameterSet->versionId,
+            );
         }
 
         $volume = $lineRaw['volume'] ?? null;
         if (!\is_int($volume)) {
-            return null;
+            return $invalid;
         }
 
         $recruitmentDateRaw = $lineRaw['recruitmentDate'] ?? null;
         if (!\is_string($recruitmentDateRaw)) {
-            return null;
+            return $invalid;
         }
         try {
             $recruitmentDate = new \DateTimeImmutable($recruitmentDateRaw);
         } catch (\Exception) {
-            return null;
+            return $invalid;
         }
 
         $spreadYears = $lineRaw['spreadYears'] ?? 0;
         if (!\is_int($spreadYears)) {
-            return null;
+            return $invalid;
         }
 
         $line = new ScenarioLine();
@@ -181,7 +192,7 @@ final class ScenarioController
             'parametersVersion' => $scenario->parameterSet->versionId,
             'lines' => array_map(static fn (ScenarioLine $line): array => [
                 'id' => $line->id,
-                'profileRef' => $line->profile->id,
+                'profileRef' => $line->profile->code,
                 'volume' => $line->volume,
                 'recruitmentDate' => $line->recruitmentDate->format('Y-m-d'),
                 'spreadYears' => $line->spreadYears,
