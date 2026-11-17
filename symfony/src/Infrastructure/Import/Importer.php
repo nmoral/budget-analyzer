@@ -15,7 +15,9 @@ use App\Infrastructure\Entity\Funder;
 use App\Infrastructure\Entity\Grille;
 use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\PrimeRate;
+use App\Infrastructure\Entity\Profile;
 use App\Infrastructure\Entity\ReferenceBudget;
+use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Source;
 use Doctrine\ORM\EntityManagerInterface;
 
@@ -31,19 +33,26 @@ use Doctrine\ORM\EntityManagerInterface;
  * (`ReferenceBudget`), masse salariale datée par corps (`CorpsPayroll`), sessions de
  * concours par corps (`ConcoursSession`) et par académie (`ConcoursAcademie`), avec
  * résolution des FK vers les référentiels `Source` (`data/sources.json`), `Corps`
- * (`data/corps.json`), `Funder` (`data/funders.json`) et `Academie`
- * (`data/academies.json`, chargé en entier) et vers le `ParameterSet`.
+ * (`data/corps.json`), `Funder` (`data/funders.json`, chargé en entier depuis #62) et
+ * `Academie` (`data/academies.json`, chargé en entier) et vers le `ParameterSet`.
+ * Depuis #62, les régimes de retraite (`data/retirement_schemes.json`, chargés en
+ * entier) et les profils (`data/profiles.json`) entrent aussi par l'import : chaque
+ * profil est créé dans le ParameterSet importé, rattaché à son corps, à son échelon
+ * d'entrée (rang `entryRank` de la grille de son (corps, grade) au `start_date` le plus
+ * récent du jeu), à son régime, à son financeur et à sa source. C'est la seule voie
+ * d'écriture de `Profile`, `RetirementScheme` et `Funder` (garde-fou d'architecture).
  *
- * Un slug/corps/financeur/académie référencé mais absent de son référentiel → refus
- * (rollback total).
+ * Un slug/corps/financeur/académie/régime référencé mais absent de son référentiel, ou
+ * un échelon d'entrée introuvable → refus (rollback total).
  *
  * Réimport idempotent du même commit (C6, décisions Q2/Q5) : le `ParameterSet` est
  * réutilisé (jamais supprimé — un scénario l'épingle), `Grille`/`Echelon` sont mis à
  * jour par upsert sur leur clé naturelle (un profil épingle un échelon), `DatedParameter`,
  * `PrimeRate`, `ReferenceBudget`, `CorpsPayroll`, `ConcoursSession` et `ConcoursAcademie` — que rien ne
  * référence — sont remplacés par rechargement, et les référentiels globaux
- * `Source`/`Corps`/`Funder`/`Academie` sont mis à jour par
- * upsert sur `code`. Aucune FK d'objet utilisateur (scénario, profil) n'est donc cassée
+ * `Source`/`Corps`/`Funder`/`Academie`/`RetirementScheme` sont mis à jour par
+ * upsert sur `code` ; les profils du jeu sont mis à jour en place par code (un scénario
+ * les référence). Aucune FK d'objet utilisateur (scénario, profil) n'est donc cassée
  * par un ré-import.
  */
 final class Importer
@@ -116,6 +125,8 @@ final class Importer
         private readonly CorpsReferential $corpsReferential,
         private readonly FunderReferential $funderReferential,
         private readonly AcademieReferential $academieReferential,
+        private readonly RetirementSchemeReferential $retirementSchemeReferential,
+        private readonly ProfileReferential $profileReferential,
     ) {
     }
 
@@ -130,6 +141,8 @@ final class Importer
             $corpsReferential = $this->corpsReferential->load($dataDir);
             $funderReferential = $this->funderReferential->load($dataDir);
             $academieReferential = $this->academieReferential->load($dataDir);
+            $retirementSchemeReferential = $this->retirementSchemeReferential->load($dataDir);
+            $profileReferential = $this->profileReferential->load($dataDir);
 
             // Reproductibilité idempotente (C6, décisions Q2/Q5). Au ré-import du même
             // commit, aucune ligne référencée par un objet utilisateur n'est détruite :
@@ -149,12 +162,14 @@ final class Importer
                 $this->purgeReplaceableScoped($set);
                 $existingGrilles = $this->indexExistingGrilles($set);
                 $existingEchelons = $this->indexExistingEchelons($existingGrilles);
+                $existingProfiles = $this->indexExistingProfiles($set);
             } else {
                 $set = new ParameterSet();
                 $set->versionId = $commit;
                 $this->em->persist($set);
                 $existingGrilles = [];
                 $existingEchelons = [];
+                $existingProfiles = [];
             }
             $set->importedAt = new \DateTimeImmutable();
 
@@ -169,9 +184,29 @@ final class Importer
 
             $this->loadDatedParameters($parsed, $set, $sourceReferential, $sources);
             $this->loadGrilles($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps, $grilles, $existingGrilles);
-            $this->loadEchelons($parsed, $grilles, $existingEchelons);
+            $echelons = $this->loadEchelons($parsed, $grilles, $existingEchelons);
             $this->loadPrimeRates($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
             $this->loadBudgets($parsed, $set, $sourceReferential, $funderReferential, $sources, $funders);
+            foreach (array_keys($funderReferential) as $funderCode) {
+                $this->resolveFunder((string) $funderCode, $funderReferential, $funders);
+            }
+            $schemes = $this->loadRetirementSchemes($retirementSchemeReferential);
+            foreach ($profileReferential as $code => $data) {
+                $profile = $existingProfiles[(string) $code] ?? new Profile();
+                $profile->code = (string) $code;
+                $profile->label = $data['label'];
+                $profile->body = $this->resolveCorps($data['body'], $corpsReferential, $corps);
+                $profile->grade = $data['grade'];
+                $profile->retirementScheme = $schemes[$data['retirementScheme']]
+                    ?? throw new UnknownRetirementSchemeException(sprintf('régime de retraite inconnu `%s`', $data['retirementScheme']));
+                $profile->funder = $this->resolveFunder($data['funder'], $funderReferential, $funders);
+                $profile->source = $this->resolveSource($data['source'], $sourceReferential, $sources);
+                $profile->entryEchelon = $this->resolveEntryEchelon((string) $code, $data, $grilles, $echelons);
+                $profile->status = $data['status'];
+                $profile->referenceCalendar = $data['referenceCalendar'];
+                $profile->parameterSet = $set;
+                $this->em->persist($profile);
+            }
             $this->loadPayrolls($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
             $this->loadConcoursSessions($parsed, $set, $sourceReferential, $corpsReferential, $sources, $corps);
             $academies = $this->loadAcademies($academieReferential, $sourceReferential, $sources);
@@ -268,9 +303,12 @@ final class Importer
      * @param array<string, array{header: list<string>, rows: list<array<string, string>>}> $parsed
      * @param array<string, Grille>                                                          $grilles
      * @param array<string, Echelon>                                                         $existingEchelons échelons scopés préexistants (upsert au ré-import), indexés par `grilleKey#rank`
+     *
+     * @return array<string, Echelon> échelons du jeu, indexés par `grilleKey#rank`
      */
-    private function loadEchelons(array $parsed, array $grilles, array $existingEchelons): void
+    private function loadEchelons(array $parsed, array $grilles, array $existingEchelons): array
     {
+        $echelons = [];
         foreach (self::ECHELON_FILES as $file) {
             foreach ($parsed[$file]['rows'] as $row) {
                 $key = $row['grille'];
@@ -290,8 +328,11 @@ final class Importer
                 if (!isset($existingEchelons[$echelonKey])) {
                     $this->em->persist($echelon);
                 }
+                $echelons[$echelonKey] = $echelon;
             }
         }
+
+        return $echelons;
     }
 
     /**
@@ -492,6 +533,81 @@ final class Importer
                 $this->em->persist($concours);
             }
         }
+    }
+
+    /**
+     * Référentiel global des régimes de retraite, chargé en entier et mis à jour par
+     * upsert sur `code` (non scopé ParameterSet, #62).
+     *
+     * @param array<string, array{label: string}> $referential
+     *
+     * @return array<string, RetirementScheme>
+     */
+    private function loadRetirementSchemes(array $referential): array
+    {
+        $schemes = [];
+        foreach ($referential as $code => $data) {
+            $code = (string) $code;
+            $scheme = $this->em->getRepository(RetirementScheme::class)->findOneBy(['code' => $code]);
+            if (!$scheme instanceof RetirementScheme) {
+                $scheme = new RetirementScheme();
+                $scheme->code = $code;
+                $this->em->persist($scheme);
+            }
+            $scheme->label = $data['label'];
+            $schemes[$code] = $scheme;
+        }
+
+        return $schemes;
+    }
+
+    /**
+     * Échelon d'entrée d'un profil : rang `entryRank` de la grille de son (corps, grade)
+     * au `start_date` le plus récent du jeu importé.
+     *
+     * @param array{body: string, grade: string, entryRank: int} $profile
+     * @param array<string, Grille>                              $grilles  grilles du jeu, par clé naturelle
+     * @param array<string, Echelon>                             $echelons échelons du jeu, par `grilleKey#rank`
+     */
+    private function resolveEntryEchelon(string $code, array $profile, array $grilles, array $echelons): Echelon
+    {
+        $latestKey = null;
+        foreach ($grilles as $key => $grille) {
+            if ($grille->body->code !== $profile['body'] || $grille->grade !== $profile['grade']) {
+                continue;
+            }
+            if ($latestKey === null || $grille->startDate > $grilles[$latestKey]->startDate) {
+                $latestKey = $key;
+            }
+        }
+
+        $echelon = $latestKey === null ? null : ($echelons[$this->echelonKey($latestKey, $profile['entryRank'])] ?? null);
+        if (!$echelon instanceof Echelon) {
+            throw new UnknownEntryEchelonException(sprintf(
+                'échelon d\'entrée introuvable pour le profil `%s` (corps %s, grade %s, rang %d)',
+                $code,
+                $profile['body'],
+                $profile['grade'],
+                $profile['entryRank'],
+            ));
+        }
+
+        return $echelon;
+    }
+
+    /**
+     * Profils préexistants du jeu (ré-import), indexés par code : mis à jour en place.
+     *
+     * @return array<string, Profile>
+     */
+    private function indexExistingProfiles(ParameterSet $set): array
+    {
+        $map = [];
+        foreach ($this->em->getRepository(Profile::class)->findBy(['parameterSet' => $set]) as $profile) {
+            $map[$profile->code] = $profile;
+        }
+
+        return $map;
     }
 
     /**

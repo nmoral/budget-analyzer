@@ -1407,6 +1407,10 @@ Sous `src/Infrastructure/Import/` :
   base (pas de CHECK, décision Q1).
   Référentiel introuvable ou invalide → `ImportException` (contrairement à
   `python -m checks`, qui neutralise le contrôle d'académie en son absence).
+- **`RetirementSchemeReferential`** / **`ProfileReferential`** (#62) : chargent
+  `data/retirement_schemes.json` (code → `label`) et `data/profiles.json` (code →
+  `label`, `body`, `grade`, `entryRank`, `retirementScheme`, `funder`, `status`,
+  `referenceCalendar`, `source`). Référentiel introuvable ou invalide → `ImportException`.
 
 ### Périmètre, mapping et ordre de chargement
 
@@ -1441,12 +1445,31 @@ Le chargement peuple ensuite, dans l'ordre :
    chaque académie rattachée à la source de son code (`resolveSource()`) ;
 9. `ConcoursAcademie` (`concours_admis_academie`, #80) — FK `body` (`resolveCorps()`),
    `academie` (code absent du référentiel → `UnknownAcademieException`), `source` et
-   `parameterSet` ; mêmes conversions que `ConcoursSession`.
+   `parameterSet` ; mêmes conversions que `ConcoursSession` ;
+10. `Funder` (#62) — **tout** `data/funders.json` est upserté par `code`, y compris un
+   financeur cité par aucun budget ;
+11. `RetirementScheme` (#62) — **tout** `data/retirement_schemes.json` est upserté par
+   `code` (référentiel global, non scopé au `ParameterSet`) ;
+12. `Profile` (#62) — un profil par entrée de `data/profiles.json`, **dans le
+   `ParameterSet` importé** (code unique par jeu), avec FK `body` (`resolveCorps()`),
+   `retirementScheme` (code absent → `UnknownRetirementSchemeException`), `funder`
+   (`resolveFunder()`), `source` (`resolveSource()`) et `entryEchelon` : rang `entryRank`
+   de la grille du jeu de même (corps, grade) au `start_date` le plus récent ; aucune
+   grille ou rang absent → `UnknownEntryEchelonException`. Au ré-import du même commit,
+   les profils du jeu sont mis à jour en place par code (même id, FK des lignes de
+   scénario préservées) ; un nouveau commit crée ses propres profils sans toucher ceux des
+   jeux précédents.
+
+L'`Importer` est la **seule** voie d'écriture de `Profile`, `RetirementScheme` et `Funder` :
+le test d'architecture `tests/Architecture/ReferentialWriteBoundaryTest.php` analyse les
+jetons de `src/` et échoue sur tout `new` de ces entités ailleurs (verrou en base hors
+périmètre, #64). La migration `Version20261117085048` refuse de s'appliquer (sans rien
+supprimer) tant que la table `profile` contient des profils saisis à la main.
 
 Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
 `echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `corps_payroll` = 2,
 `concours_session` = 33, `academie` = 35 (dont la Nouvelle-Calédonie, sans ligne de concours), `concours_academie` = 533, `source` = 29, `corps` = 2,
-`funder` = 2.
+`funder` = 2, `retirement_scheme` = 2, `profile` = 2 (`PE_CN`, `ISG_G1`).
 
 ### Résolution des FK et référentiels
 

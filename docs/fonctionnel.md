@@ -55,10 +55,12 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **intégrité des fichiers sources** : l'empreinte du fichier brut archivé de chaque
   source est comparée à celle enregistrée dans son manifeste ; toute divergence fait
   échouer l'import ;
-- **complétude des référentiels** : toute source, tout corps, tout financeur et toute
-  académie cités par les données doivent figurer dans les référentiels curatés du dépôt
-  (`data/sources.json`, `data/corps.json`, `data/funders.json`, `data/academies.json`) ;
-  une référence inconnue fait échouer l'import ;
+- **complétude des référentiels** : toute source, tout corps, tout financeur, toute
+  académie et tout régime de retraite cités par les données ou par un profil doivent
+  figurer dans les référentiels curatés du dépôt (`data/sources.json`, `data/corps.json`,
+  `data/funders.json`, `data/academies.json`, `data/retirement_schemes.json`) ; l'échelon
+  d'entrée d'un profil (grade et rang) doit exister dans les grilles importées ; une
+  référence inconnue fait échouer l'import ;
 - **statut des académies** : chaque académie de `data/academies.json` a un statut
   exactement `metropole`, `drom` ou `com` ; un statut absent, vide ou autre fait
   échouer l'import (rien n'est importé) ; le message nomme le code de la première
@@ -70,14 +72,14 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
 **budget de référence daté par financeur**, la **masse salariale datée par corps**, les
-**sessions de concours par corps**, leur **détail par académie** et les **référentiels** de sources, de corps, de financeurs et d'académies auxquels ils se rattachent. Ne
-sont pas chargés par cette commande : les coûts PAP, les régimes de retraite et les objets
-de simulation (profils, scénarios), qui relèvent d'autres apports.
+**sessions de concours par corps**, leur **détail par académie**, les **référentiels** de sources, de corps, de financeurs (tous ceux de `data/funders.json`, cités ou non par un budget), d'académies et de **régimes de retraite** (`data/retirement_schemes.json`), et les **profils** de `data/profiles.json` (`PE_CN`, `ISG_G1`), créés dans la version importée et rattachés à leur corps, à leur échelon d'entrée (rang déclaré de la grille la plus récente de leur corps et grade), à leur régime, à leur financeur et à leur source. Les profils, régimes et financeurs n'entrent en base que par cette commande, jamais par saisie. Ne
+sont pas chargés : les coûts PAP et les scénarios, qui relèvent d'autres apports.
 
 **Réimport du même commit** : relancer la commande avec la même référence de version
 laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
-— y compris le budget de référence, la masse salariale et les sessions de concours (nationales et par académie) — sont remplacées, et les sources, corps, financeurs et académies
-sont mis à jour sur place.
+— y compris le budget de référence, la masse salariale et les sessions de concours (nationales et par académie) — sont remplacées, et les sources, corps, financeurs, académies,
+régimes de retraite et profils de cette version sont mis à jour sur place. Une nouvelle
+version crée ses propres profils sans modifier ceux des versions précédentes.
 
 ### Modèle de données et sélection des valeurs réglementaires
 
