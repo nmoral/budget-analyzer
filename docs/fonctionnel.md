@@ -98,8 +98,10 @@ suivantes.
 - **Corps** : cadre statutaire (code, libellé, versant, catégorie A/B/C).
 - **Grille** et **Échelon** : grille indiciaire d'un corps pour un grade, dans une
   version donnée, et ses échelons (rang, indice brut, indice majoré, durée en mois).
-- **Régime de retraite** : code et libellé (`CAS_CIVIL`, `CAS_MILITAIRE`, `CNRACL`,
-  `IRCANTEC`).
+- **Régime de retraite** : code et libellé. Deux régimes sont fournis par le dépôt
+  (`data/retirement_schemes.json`), ceux qui disposent d'une règle de calcul : `CAS_CIVIL`
+  (CAS « Pensions », fonctionnaires civils de l'État) et `CNRACL` (Caisse nationale de
+  retraites des agents des collectivités locales).
 - **Financeur** : rattachement budgétaire (code, libellé) et ses codes dans les
   nomenclatures officielles (mission / programme / action pour l'État, sous-objectif
   de l'ONDAM, fonction COFOG). Deux financeurs sont fournis par le dépôt : `ETAT_P140`
@@ -148,7 +150,13 @@ suivantes.
   régime de retraite, régime indemnitaire, financeur, statut titulaire/contractuel,
   calendrier de référence civil/scolaire, source). Les profils entrent uniquement par
   l'import (`data/profiles.json`) et appartiennent à un jeu de paramètres ; leur code
-  (`PE_CN`, `ISG_G1`) est unique dans ce jeu.
+  est unique dans ce jeu. Deux profils sont fournis par le dépôt :
+  - `PE_CN` « Professeur des écoles — classe normale » : corps PE, grade classe normale,
+    entrée au 1er échelon, régime `CAS_CIVIL`, financeur `ETAT_P140`, titulaire,
+    calendrier scolaire (source : décret 2017-789) ;
+  - `ISG_G1` « Infirmier en soins généraux — 1er grade » : corps ISG, 1er grade, entrée
+    au 1er échelon, régime `CNRACL`, financeur `ONDAM`, titulaire, calendrier civil
+    (source : arrêté du 19 mai 2016).
 - **Scénario** et **Ligne de scénario** : un scénario (titre, provenance, montant
   annoncé optionnel) et ses lignes (profil, volume, date de recrutement, étalement sur
   N années).
