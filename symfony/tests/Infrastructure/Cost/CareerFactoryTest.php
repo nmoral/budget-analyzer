@@ -149,6 +149,10 @@ final class CareerFactoryTest extends IntegrationTestCase
         $this->em->persist($funder);
 
         $profile = new Profile();
+        $profile->code = 'PE_CN';
+        $profile->label = 'Professeur des écoles — classe normale';
+        $profile->source = $source;
+        $profile->parameterSet = $set;
         $profile->body = $corps;
         $profile->grade = 'classe_normale';
         $profile->entryEchelon = $byRank[$entryRank];

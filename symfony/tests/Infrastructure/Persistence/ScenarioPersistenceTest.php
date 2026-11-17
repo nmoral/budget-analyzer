@@ -39,6 +39,10 @@ final class ScenarioPersistenceTest extends IntegrationTestCase
         $this->em->persist($funder);
 
         $profile = new Profile();
+        $profile->code = 'PE_CN';
+        $profile->label = 'Professeur des écoles — classe normale';
+        $profile->source = $source;
+        $profile->parameterSet = $set;
         $profile->body = $corps;
         $profile->grade = 'classe_normale';
         $profile->entryEchelon = $echelon;
@@ -98,5 +102,10 @@ final class ScenarioPersistenceTest extends IntegrationTestCase
         self::assertSame('140', $rereadProfile->funder->program);
         self::assertSame('titulaire', $rereadProfile->status);
         self::assertSame('scolaire', $rereadProfile->referenceCalendar);
+        // #62 C2 : code, libellé, source et jeu de paramètres du profil.
+        self::assertSame('PE_CN', $rereadProfile->code);
+        self::assertSame('Professeur des écoles — classe normale', $rereadProfile->label);
+        self::assertSame('decret-2017-789', $rereadProfile->source->code);
+        self::assertSame('commit-current', $rereadProfile->parameterSet->versionId);
     }
 }

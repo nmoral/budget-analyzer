@@ -925,6 +925,10 @@ final class ImportCommandTest extends IntegrationTestCase
         $this->em->persist($funder);
 
         $profile = new Profile();
+        $profile->code = 'PE_CN';
+        $profile->label = 'Professeur des écoles — classe normale';
+        $profile->source = $echelon->grille->source;
+        $profile->parameterSet = $set;
         $profile->body = $echelon->grille->body;
         $profile->grade = 'classe_normale';
         $profile->entryEchelon = $echelon;

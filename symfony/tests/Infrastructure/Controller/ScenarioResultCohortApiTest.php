@@ -16,6 +16,7 @@ use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\Echelon;
 use App\Infrastructure\Entity\Funder;
 use App\Infrastructure\Entity\Grille;
+use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\Profile;
 use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Source;
@@ -335,16 +336,27 @@ final class ScenarioResultCohortApiTest extends WebTestCase
 
         $this->persistEngineParameters($this->em, $set, $corps);
 
-        $long = $this->makeProfile($corps, $echelons[1], $scheme, $funder);
-        $short = $this->makeProfile($corps, $echelons[3], $scheme, $funder);
+        $long = $this->makeProfile('PE_LONG', $corps, $echelons[1], $scheme, $funder, $source, $set);
+        $short = $this->makeProfile('PE_SHORT', $corps, $echelons[3], $scheme, $funder, $source, $set);
         $this->em->flush();
 
         return [$long, $short];
     }
 
-    private function makeProfile(Corps $corps, Echelon $entry, RetirementScheme $scheme, Funder $funder): Profile
-    {
+    private function makeProfile(
+        string $code,
+        Corps $corps,
+        Echelon $entry,
+        RetirementScheme $scheme,
+        Funder $funder,
+        Source $source,
+        ParameterSet $set,
+    ): Profile {
         $profile = new Profile();
+        $profile->code = $code;
+        $profile->label = 'Profil ' . $code;
+        $profile->source = $source;
+        $profile->parameterSet = $set;
         $profile->body = $corps;
         $profile->grade = 'classe normale';
         $profile->entryEchelon = $entry;
