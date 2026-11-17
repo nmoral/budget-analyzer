@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Infrastructure\Persistence;
 
+use App\Infrastructure\Entity\ParameterSet;
+use App\Infrastructure\Entity\Profile;
+use App\Infrastructure\Entity\Source;
 use Doctrine\ORM\EntityManagerInterface;
+use Doctrine\ORM\Mapping\ManyToOneAssociationMapping;
 use Doctrine\ORM\Tools\SchemaValidator;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 
@@ -64,6 +68,29 @@ final class MappingValidationTest extends KernelTestCase
             [],
             $errors,
             "The mapping files are not correct:\n" . print_r($errors, true),
+        );
+    }
+
+    /**
+     * #62 C2.1 — Profile porte `code`, `label`, `source`, `parameterSet` NOT NULL et un
+     * code unique par ParameterSet.
+     */
+    public function testProfileIsCodedAndScopedToItsParameterSet(): void
+    {
+        $metadata = $this->entityManager()->getClassMetadata(Profile::class);
+
+        foreach (['code', 'label'] as $field) {
+            self::assertFalse($metadata->isNullable($field), $field);
+        }
+        foreach (['source' => Source::class, 'parameterSet' => ParameterSet::class] as $association => $target) {
+            self::assertSame($target, $metadata->getAssociationTargetClass($association));
+            $mapping = $metadata->getAssociationMapping($association);
+            self::assertInstanceOf(ManyToOneAssociationMapping::class, $mapping, $association);
+            self::assertFalse($mapping->joinColumns[0]->nullable, $association);
+        }
+        self::assertSame(
+            ['uniq_profile_parameter_set_code' => ['columns' => ['parameter_set_id', 'code']]],
+            $metadata->table['uniqueConstraints'] ?? [],
         );
     }
 

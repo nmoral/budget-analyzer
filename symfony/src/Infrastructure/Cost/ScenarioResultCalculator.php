@@ -180,7 +180,7 @@ final class ScenarioResultCalculator
 
             $lineResults[] = [
                 'lineId' => $line->id,
-                'profileRef' => $line->profile->id,
+                'profileRef' => $line->profile->code,
                 'volume' => $line->volume,
                 'results' => $byView,
             ];

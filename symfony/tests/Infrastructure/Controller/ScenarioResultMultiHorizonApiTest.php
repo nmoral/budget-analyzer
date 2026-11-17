@@ -217,7 +217,7 @@ final class ScenarioResultMultiHorizonApiTest extends WebTestCase
             server: ['CONTENT_TYPE' => 'application/json'],
             content: (string) json_encode([
                 'title' => 'Multi-horizon',
-                'lines' => [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]],
+                'lines' => [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]],
             ]),
         );
         self::assertSame(201, $this->client->getResponse()->getStatusCode());

@@ -643,15 +643,20 @@ plus bas) et la **frontière Deptrac** est préservée.
 | `/api/scenarios/{id}/result?horizons=&views=` | `GET` | lire le résultat | `200` / `404` / `422` |
 
 - **`POST /api/scenarios`** attend `{title, lines:[{profileRef, volume, recruitmentDate,
-  spreadYears?}], parametersVersion?}`. `profileRef` est l'**id Doctrine** d'un `Profile`.
+  spreadYears?}], parametersVersion?}`. `profileRef` est le **code** (chaîne) d'un
+  `Profile` importé (#62 ; l'id Doctrine entier de #19 n'est plus accepté → `422`).
   Le scénario est **épinglé à un `ParameterSet`** : `parametersVersion` absent → `latest()` ;
-  présent → `ParameterSetRepository::findByVersionId()`. Succès → `201` `{id,
+  présent → `ParameterSetRepository::findByVersionId()`. Le profil est résolu **dans ce
+  jeu** par `ProfileRepository::findByCode(set, code)` ; code inconnu du jeu (y compris
+  présent seulement dans un autre jeu) → `422` `{error: "Profil « <code> » introuvable dans
+  le jeu de paramètres <version>."}`. Succès → `201` `{id,
   parametersVersion}`. Entrée invalide (corps non-JSON, `title` vide/absent, `lines` vide,
-  ligne mal formée, `profileRef`/`volume`/`spreadYears` non entiers, `recruitmentDate`
+  ligne mal formée, `profileRef` non chaîne, `volume`/`spreadYears` non entiers, `recruitmentDate`
   illisible, version demandée inconnue, aucun jeu importé) → **`422`** `{error}`. Le
   scénario reçoit `provenance = 'simulation'` par défaut (champ NOT NULL absent du corps).
 - **`GET /api/scenarios/{id}`** → `200` `{id, title, parametersVersion, lines:[{id,
-  profileRef, volume, recruitmentDate, spreadYears}]}` ; scénario inconnu → **`404`**.
+  profileRef, volume, recruitmentDate, spreadYears}]}` (`profileRef` = code du profil,
+  comme dans le résultat) ; scénario inconnu → **`404`**.
 - **`GET /api/scenarios/{id}/result`** → `200` avec le résultat (structure ci-dessous) ;
   scénario inconnu → `404` ; vue ou horizon inconnu → `422` (`InvalidSelectionException`).
   Une vue **valide mais non valorisable** avec le jeu épinglé — un paramètre daté requis
@@ -780,7 +785,8 @@ ré-import du même commit, le `ParameterSet` est **réutilisé** (même id), `G
 sont mis à jour **en place par clé naturelle** (upsert : `{body}_{grade}_{version}`, puis
 `grilleKey#rank`), tandis que `DatedParameter`, `PrimeRate`, `ReferenceBudget` (#70),
 `CorpsPayroll` (#71), `ConcoursSession` (#72) et `ConcoursAcademie` (#80) — que rien ne référence — sont **remplacés** par rechargement (purge scopée au `ParameterSet` via
-`purgeReplaceableScoped`), et `Source`/`Corps`/`Funder`/`Academie` restent en upsert global sur `code`.
+`purgeReplaceableScoped`), et `Source`/`Corps`/`Funder`/`Academie`/`RetirementScheme` restent en upsert global sur `code`.
+Les `Profile` du jeu (#62) sont mis à jour **en place par code** (jamais supprimés).
 La chaîne scénario → ligne → profil → échelon reste valide (décisions Q2/Q5, toujours en une
 seule transaction).
 Réimporter le même commit laisse ainsi la base dans le même état (décision Q5, C6), sans
@@ -790,7 +796,8 @@ l'unicité des données de l'invariant amont.
 ### Repositories et câblage
 
 Ajoutés sous `src/Infrastructure/Repository/` : `ScenarioRepository` (`find`, `save` avec
-ses lignes), `ScenarioLineRepository` (`forScenario`), `ProfileRepository` (`find`), et
+ses lignes), `ScenarioLineRepository` (`forScenario`), `ProfileRepository` (`findByCode(ParameterSet,
+code)` depuis #62, qui remplace `find(int)`), et
 `ParameterSetRepository::findByVersionId`. Les services (contrôleur, orchestrateur, cache,
 scope, adapters, repositories) sont autowirés ; `symfony/cache` est rendu **explicite** dans
 `composer.json` (déjà transitif). Aucune nouvelle commande de chaîne qualité ni nouveau port
@@ -1237,17 +1244,23 @@ identifiants sont des entiers auto-générés ; les montants sont en `DECIMAL` (
   `concours_academie`, créée avec `academie` par la migration `Version20261116172020`.
   Unicité (`body_code`, `session`, `voie`, `academie`), cohérence des effectifs et
   recoupement avec la ligne nationale contrôlés en amont par `python -m checks`.
-- **Profile** — unité de simulation : `body` (FK), `grade`, `entryEchelon` (FK Echelon),
-  `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité dédiée,
-  les primes V1 passent par `PrimeRate`), `funder` (FK), `status`, `referenceCalendar`.
+- **Profile** — unité de simulation : `code`, `label`, `body` (FK), `grade`, `entryEchelon`
+  (FK Echelon), `retirementScheme` (FK), `indemnitaryScheme` (chaîne nullable — pas d'entité
+  dédiée, les primes V1 passent par `PrimeRate`), `funder` (FK), `status`,
+  `referenceCalendar`, `source` (FK, #62), `parameterSet` (FK, #62). Toutes les FK sont
+  NOT NULL ; `code` est unique par jeu de paramètres (contrainte
+  `uniq_profile_parameter_set_code` sur (`parameter_set_id`, `code`)). Colonnes `code`,
+  `label`, `source_id`, `parameter_set_id` ajoutées par la migration
+  `Version20261117085048` (#62). Les profils proviennent uniquement de `app:import`
+  (`data/profiles.json`).
 - **Scenario** — `title`, `provenance`, `announcedAmount` (DECIMAL nullable),
   `parameterSet` (FK).
 - **ScenarioLine** — `scenario` (FK), `profile` (FK), `volume`, `recruitmentDate`,
   `spreadYears`.
 - **ParameterSet** — jeu de paramètres pour la reproductibilité : `versionId` (unique,
   commit du dépôt de données), `importedAt`. Les valeurs datées (DatedParameter, Grille,
-  Echelon via sa grille, PrimeRate, ReferenceBudget, CorpsPayroll, ConcoursSession, ConcoursAcademie) et les Scénarios portent
-  une FK vers ce jeu.
+  Echelon via sa grille, PrimeRate, ReferenceBudget, CorpsPayroll, ConcoursSession, ConcoursAcademie), les Profils (#62) et les
+  Scénarios portent une FK vers ce jeu.
 
 Les entités sont **purement déclaratives** (aucun `repositoryClass`, aucune logique) ;
 le peuplement réel est assuré par la commande d'import `app:import` (voir « Import du
@@ -1407,6 +1420,10 @@ Sous `src/Infrastructure/Import/` :
   base (pas de CHECK, décision Q1).
   Référentiel introuvable ou invalide → `ImportException` (contrairement à
   `python -m checks`, qui neutralise le contrôle d'académie en son absence).
+- **`RetirementSchemeReferential`** / **`ProfileReferential`** (#62) : chargent
+  `data/retirement_schemes.json` (code → `label`) et `data/profiles.json` (code →
+  `label`, `body`, `grade`, `entryRank`, `retirementScheme`, `funder`, `status`,
+  `referenceCalendar`, `source`). Référentiel introuvable ou invalide → `ImportException`.
 
 ### Périmètre, mapping et ordre de chargement
 
@@ -1431,22 +1448,42 @@ Le chargement peuple ensuite, dans l'ordre :
 5. `ReferenceBudget` (`budget_financeur`, #70) — FK `source`, `funder` (résolu via
    `data/funders.json`) et `parameterSet` ; `value`/`unit` repris tels quels, `start_date`
    et `end_date` (vide = période ouverte) convertis en `DateTimeImmutable` ;
-6. `CorpsPayroll` (`masse_salariale_corps`, #71) — FK `body` (Corps, résolu par
+6. `Funder` (#62) — **tout** `data/funders.json` est upserté par `code` (`resolveFunder()`),
+   y compris un financeur cité par aucun budget ;
+7. `RetirementScheme` (#62) — **tout** `data/retirement_schemes.json` est upserté par
+   `code` (référentiel global, non scopé au `ParameterSet`) ;
+8. `Profile` (#62) — un profil par entrée de `data/profiles.json`, **dans le
+   `ParameterSet` importé** (code unique par jeu), avec FK `body` (`resolveCorps()`),
+   `retirementScheme` (code absent → `UnknownRetirementSchemeException`), `funder`
+   (`resolveFunder()`), `source` (`resolveSource()`) et `entryEchelon` : rang `entryRank`
+   de la grille du jeu de même (corps, grade) au `start_date` le plus récent ; aucune
+   grille ou rang absent → `UnknownEntryEchelonException`. `indemnitaryScheme` n'est pas
+   renseigné (reste `null`). Au ré-import du même commit, les profils du jeu sont mis à
+   jour en place par code (même id, FK des lignes de scénario préservées) ; un profil du
+   jeu absent de `data/profiles.json` est conservé ; un nouveau commit crée ses propres
+   profils sans toucher ceux des jeux précédents ;
+9. `CorpsPayroll` (`masse_salariale_corps`, #71) — FK `body` (Corps, résolu par
    `resolveCorps()`), `source` et `parameterSet` ; mêmes conversions que `ReferenceBudget`.
    Un corps du référentiel sans ligne de masse salariale (`ISG`) n'est pas une erreur ;
-7. `ConcoursSession` (`concours_admis`, #72) — FK `body` (Corps, résolu par
+10. `ConcoursSession` (`concours_admis`, #72) — FK `body` (Corps, résolu par
    `resolveCorps()`), `source` et `parameterSet` ; `session` et effectifs convertis en
    entiers, `voie` reprise telle quelle. Un corps sans concours (`ISG`) n'est pas une erreur ;
-8. `Academie` (`data/academies.json`, #80) — **tout** le référentiel est upserté par `code`,
+11. `Academie` (`data/academies.json`, #80) — **tout** le référentiel est upserté par `code`,
    chaque académie rattachée à la source de son code (`resolveSource()`) ;
-9. `ConcoursAcademie` (`concours_admis_academie`, #80) — FK `body` (`resolveCorps()`),
+12. `ConcoursAcademie` (`concours_admis_academie`, #80) — FK `body` (`resolveCorps()`),
    `academie` (code absent du référentiel → `UnknownAcademieException`), `source` et
    `parameterSet` ; mêmes conversions que `ConcoursSession`.
+
+L'`Importer` est la **seule** voie d'écriture de `Profile`, `RetirementScheme` et `Funder` :
+le test d'architecture `tests/Architecture/ReferentialWriteBoundaryTest.php` analyse les
+jetons de `src/` et échoue sur tout `new` de ces entités ailleurs (verrou en base hors
+périmètre, #64). La migration `Version20261117085048` refuse de s'appliquer (sans rien
+supprimer) tant que la table `profile` contient des profils saisis à la main.
 
 Sur le dépôt réel, cela produit les comptes : `dated_parameter` = 10, `grille` = 2,
 `echelon` = 22, `prime_rate` = 2, `reference_budget` = 4, `corps_payroll` = 2,
 `concours_session` = 33, `academie` = 35 (dont la Nouvelle-Calédonie, sans ligne de concours), `concours_academie` = 533, `source` = 29, `corps` = 2,
-`funder` = 2.
+`funder` = 2, `retirement_scheme` = 2, `profile` = 2 (`PE_CN`, `ISG_G1`).
 
 ### Résolution des FK et référentiels
 
@@ -1459,8 +1496,9 @@ code → entité (une seule entité par code dans la transaction) :
   (le référentiel fait foi) ;
 - un corps cité par `body_code` est résolu depuis `data/corps.json` ; code absent → refus
   (`UnknownCorpsException`) ;
-- un financeur cité par `funder_code` (colonne de `budget_financeur`) est résolu depuis
-  `data/funders.json` par `resolveFunder()` ; code absent → refus (`UnknownFunderException`,
+- un financeur cité par `funder_code` (colonne de `budget_financeur`) ou par un profil est
+  résolu depuis `data/funders.json` par `resolveFunder()` (depuis #62, toutes les entrées du
+  référentiel passent aussi par `resolveFunder()`, citées ou non) ; code absent → refus (`UnknownFunderException`,
   sous-classe d'`ImportException`). Le `Funder` est **upserté globalement par `code`**
   (comme `Source`/`Corps`, non scopé au `ParameterSet`) : la ligne existante est réutilisée,
   sinon créée ; `label` (NOT NULL) est repris du référentiel et les colonnes de nomenclature
@@ -1468,7 +1506,13 @@ code → entité (une seule entité par code dans la transaction) :
   que si présentes ;
 - une académie citée par `academie` (colonne de `concours_admis_academie`) est résolue parmi
   les académies chargées depuis `data/academies.json` (`AcademieReferential`) ; code absent →
-  refus (`UnknownAcademieException`, sous-classe d'`ImportException`).
+  refus (`UnknownAcademieException`, sous-classe d'`ImportException`) ;
+- un régime de retraite cité par un profil est résolu parmi les régimes chargés depuis
+  `data/retirement_schemes.json` ; code absent → refus (`UnknownRetirementSchemeException`,
+  sous-classe d'`ImportException`, #62) ;
+- l'échelon d'entrée d'un profil (`body`, `grade`, `entryRank`) est résolu parmi les
+  grilles et échelons du jeu importé ; grille ou rang introuvable → refus
+  (`UnknownEntryEchelonException`, sous-classe d'`ImportException`, #62).
 
 Ces référentiels sont des fichiers **curatés** (pas de CSV ni de schéma Frictionless) : les
 colonnes NOT NULL de `Source`/`Corps` (et `Funder.label`) étant obligatoires, le référentiel

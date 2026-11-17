@@ -55,10 +55,12 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 - **intégrité des fichiers sources** : l'empreinte du fichier brut archivé de chaque
   source est comparée à celle enregistrée dans son manifeste ; toute divergence fait
   échouer l'import ;
-- **complétude des référentiels** : toute source, tout corps, tout financeur et toute
-  académie cités par les données doivent figurer dans les référentiels curatés du dépôt
-  (`data/sources.json`, `data/corps.json`, `data/funders.json`, `data/academies.json`) ;
-  une référence inconnue fait échouer l'import ;
+- **complétude des référentiels** : toute source, tout corps, tout financeur, toute
+  académie et tout régime de retraite cités par les données ou par un profil doivent
+  figurer dans les référentiels curatés du dépôt (`data/sources.json`, `data/corps.json`,
+  `data/funders.json`, `data/academies.json`, `data/retirement_schemes.json`) ; l'échelon
+  d'entrée d'un profil (grade et rang) doit exister dans les grilles importées ; une
+  référence inconnue fait échouer l'import ;
 - **statut des académies** : chaque académie de `data/academies.json` a un statut
   exactement `metropole`, `drom` ou `com` ; un statut absent, vide ou autre fait
   échouer l'import (rien n'est importé) ; le message nomme le code de la première
@@ -70,14 +72,14 @@ et un code de sortie non nul. Les vérifications menées avant tout chargement s
 Ce qui est chargé : les **valeurs réglementaires datées** (paramètres scalaires comme le
 point d'indice et les taux, grilles indiciaires et leurs échelons, taux de primes), le
 **budget de référence daté par financeur**, la **masse salariale datée par corps**, les
-**sessions de concours par corps**, leur **détail par académie** et les **référentiels** de sources, de corps, de financeurs et d'académies auxquels ils se rattachent. Ne
-sont pas chargés par cette commande : les coûts PAP, les régimes de retraite et les objets
-de simulation (profils, scénarios), qui relèvent d'autres apports.
+**sessions de concours par corps**, leur **détail par académie**, les **référentiels** de sources, de corps, de financeurs (tous ceux de `data/funders.json`, cités ou non par un budget), d'académies et de **régimes de retraite** (`data/retirement_schemes.json`), et les **profils** de `data/profiles.json` (`PE_CN`, `ISG_G1`), créés dans la version importée et rattachés à leur corps, à leur échelon d'entrée (rang déclaré de la grille la plus récente de leur corps et grade), à leur régime, à leur financeur et à leur source. Les profils, régimes et financeurs n'entrent en base que par cette commande, jamais par saisie. Ne
+sont pas chargés : les coûts PAP et les scénarios, qui relèvent d'autres apports.
 
 **Réimport du même commit** : relancer la commande avec la même référence de version
 laisse la base dans le **même état** (pas de doublon). Les valeurs datées de cette version
-— y compris le budget de référence, la masse salariale et les sessions de concours (nationales et par académie) — sont remplacées, et les sources, corps, financeurs et académies
-sont mis à jour sur place.
+— y compris le budget de référence, la masse salariale et les sessions de concours (nationales et par académie) — sont remplacées, et les sources, corps, financeurs, académies,
+régimes de retraite et profils de cette version sont mis à jour sur place. Une nouvelle
+version crée ses propres profils sans modifier ceux des versions précédentes.
 
 ### Modèle de données et sélection des valeurs réglementaires
 
@@ -96,8 +98,10 @@ suivantes.
 - **Corps** : cadre statutaire (code, libellé, versant, catégorie A/B/C).
 - **Grille** et **Échelon** : grille indiciaire d'un corps pour un grade, dans une
   version donnée, et ses échelons (rang, indice brut, indice majoré, durée en mois).
-- **Régime de retraite** : code et libellé (`CAS_CIVIL`, `CAS_MILITAIRE`, `CNRACL`,
-  `IRCANTEC`).
+- **Régime de retraite** : code et libellé. Deux régimes sont fournis par le dépôt
+  (`data/retirement_schemes.json`), ceux qui disposent d'une règle de calcul : `CAS_CIVIL`
+  (CAS « Pensions », fonctionnaires civils de l'État) et `CNRACL` (Caisse nationale de
+  retraites des agents des collectivités locales).
 - **Financeur** : rattachement budgétaire (code, libellé) et ses codes dans les
   nomenclatures officielles (mission / programme / action pour l'État, sous-objectif
   de l'ONDAM, fonction COFOG). Deux financeurs sont fournis par le dépôt : `ETAT_P140`
@@ -142,9 +146,17 @@ suivantes.
   **exposée en base pour un usage futur**, ni calculée ni affichée.
 - **Taux de primes** : taux de primes d'un corps pour une année d'observation (primes
   de la V1).
-- **Profil** : unité de simulation (corps, grade et échelon d'entrée, régime de
-  retraite, régime indemnitaire, financeur, statut titulaire/contractuel, calendrier
-  de référence civil/scolaire).
+- **Profil** : unité de simulation (code, libellé, corps, grade et échelon d'entrée,
+  régime de retraite, régime indemnitaire, financeur, statut titulaire/contractuel,
+  calendrier de référence civil/scolaire, source). Les profils entrent uniquement par
+  l'import (`data/profiles.json`) et appartiennent à un jeu de paramètres ; leur code
+  est unique dans ce jeu. Deux profils sont fournis par le dépôt :
+  - `PE_CN` « Professeur des écoles — classe normale » : corps PE, grade classe normale,
+    entrée au 1er échelon, régime `CAS_CIVIL`, financeur `ETAT_P140`, titulaire,
+    calendrier scolaire (source : décret 2017-789) ;
+  - `ISG_G1` « Infirmier en soins généraux — 1er grade » : corps ISG, 1er grade, entrée
+    au 1er échelon, régime `CNRACL`, financeur `ONDAM`, titulaire, calendrier civil
+    (source : arrêté du 19 mai 2016).
 - **Scénario** et **Ligne de scénario** : un scénario (titre, provenance, montant
   annoncé optionnel) et ses lignes (profil, volume, date de recrutement, étalement sur
   N années).
@@ -179,17 +191,21 @@ recrutement, puis la **lecture de son résultat de simulation** sur l'horizon «
 C'est le premier usage réel du moteur de calcul exposé hors des tests.
 
 **Créer un scénario** : on fournit un **titre** et une ou plusieurs **lignes**, chaque
-ligne décrivant un recrutement — le **profil** visé, un **volume** (nombre d'agents),
+ligne décrivant un recrutement — le **profil** visé, désigné par son **code** (`PE_CN`,
+`ISG_G1`), un **volume** (nombre d'agents),
 une **date de recrutement** et, optionnellement, un **étalement sur N années**. On peut
 aussi préciser la **version des paramètres** à épingler. À la création, le scénario est
 **rattaché à un jeu de paramètres** (voir « Rattachement à un jeu de paramètres ») : si
 aucune version n'est précisée, c'est le **dernier jeu importé** qui est épinglé ; si une
 version est précisée, c'est ce jeu-là. Une version demandée **inconnue** fait **rejeter**
-la création. La création renvoie l'**identifiant** du scénario et la **version des
+la création. Le profil doit exister **dans le jeu épinglé** : un code inconnu de ce jeu
+(y compris un code qui n'existe que dans une autre version) fait rejeter la création avec
+un message nommant le code ; l'ancienne référence numérique d'un profil n'est plus
+acceptée. La création renvoie l'**identifiant** du scénario et la **version des
 paramètres** effectivement épinglée.
 
 **Lire un scénario** : on retrouve son titre, la version des paramètres épinglée et ses
-lignes. Un scénario **inconnu** est signalé comme introuvable.
+lignes, chacune avec le code de son profil. Un scénario **inconnu** est signalé comme introuvable.
 
 **Lire le résultat d'un scénario** : on obtient, **par ligne** et **par vue de coût
 demandée**, le coût de chaque **horizon demandé** du recrutement. Trois horizons sont

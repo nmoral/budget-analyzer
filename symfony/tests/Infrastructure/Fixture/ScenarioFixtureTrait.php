@@ -116,6 +116,10 @@ trait ScenarioFixtureTrait
         $profile->funder = $funder;
         $profile->status = 'titulaire';
         $profile->referenceCalendar = $referenceCalendar;
+        $profile->code = 'PROFILE-' . uniqid();
+        $profile->label = 'Professeur des écoles — classe normale';
+        $profile->source = $source;
+        $profile->parameterSet = $set;
         $em->persist($profile);
 
         return $profile;
@@ -213,6 +217,10 @@ trait ScenarioFixtureTrait
         $profile->funder = $funder;
         $profile->status = 'titulaire';
         $profile->referenceCalendar = $referenceCalendar;
+        $profile->code = $corpsCode . '_CN';
+        $profile->label = 'Professeur des écoles — classe normale';
+        $profile->source = $source;
+        $profile->parameterSet = $set;
         $em->persist($profile);
 
         return $profile;

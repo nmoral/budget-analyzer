@@ -74,17 +74,19 @@ final class ScenarioRepositoryTest extends IntegrationTestCase
         self::assertNull($repository->findByVersionId('zzz'));
     }
 
-    public function testProfileRepositoryFindsById(): void
+    /** #62 C4 — un profil se résout par son code, dans son seul jeu de paramètres. */
+    public function testProfileRepositoryFindsByCodeWithinItsParameterSet(): void
     {
         $set = $this->persistParameterSet($this->em, 'commit-profile');
+        $other = $this->persistParameterSet($this->em, 'commit-other');
         $profile = $this->persistProfile($this->em, $set);
         $this->em->flush();
-        self::assertNotNull($profile->id);
 
         $repository = new ProfileRepository($this->em);
-        $found = $repository->find($profile->id);
+        $found = $repository->findByCode($set, $profile->code);
         self::assertNotNull($found);
         self::assertSame($profile->id, $found->id);
-        self::assertNull($repository->find(999999));
+        self::assertNull($repository->findByCode($other, $profile->code));
+        self::assertNull($repository->findByCode($set, 'NOPE'));
     }
 }

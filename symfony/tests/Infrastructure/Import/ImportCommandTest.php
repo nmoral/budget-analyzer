@@ -15,6 +15,9 @@ use App\Infrastructure\Import\Importer;
 use App\Infrastructure\Import\InvalidAcademieStatutException;
 use App\Infrastructure\Import\UnknownAcademieException;
 use App\Infrastructure\Import\UnknownCorpsException;
+use App\Infrastructure\Import\UnknownEntryEchelonException;
+use App\Infrastructure\Import\UnknownFunderException;
+use App\Infrastructure\Import\UnknownRetirementSchemeException;
 use App\Infrastructure\Import\UnknownSourceException;
 use App\Tests\Infrastructure\Persistence\IntegrationTestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -914,10 +917,9 @@ final class ImportCommandTest extends IntegrationTestCase
         $echelonId = $echelon->id;
         self::assertNotNull($echelonId);
 
-        $scheme = new RetirementScheme();
-        $scheme->code = 'CAS_CIVIL';
-        $scheme->label = 'CAS civil';
-        $this->em->persist($scheme);
+        // Le régime CAS_CIVIL est importé (#62) : le profil épinglé le réutilise.
+        $scheme = $this->em->getRepository(RetirementScheme::class)->findOneBy(['code' => 'CAS_CIVIL']);
+        self::assertInstanceOf(RetirementScheme::class, $scheme);
 
         $funder = new Funder();
         $funder->code = 'ETAT';
@@ -925,6 +927,10 @@ final class ImportCommandTest extends IntegrationTestCase
         $this->em->persist($funder);
 
         $profile = new Profile();
+        $profile->code = 'PINNED';
+        $profile->label = 'Professeur des écoles — classe normale';
+        $profile->source = $echelon->grille->source;
+        $profile->parameterSet = $set;
         $profile->body = $echelon->grille->body;
         $profile->grade = 'classe_normale';
         $profile->entryEchelon = $echelon;
@@ -983,6 +989,261 @@ final class ImportCommandTest extends IntegrationTestCase
         $command = $application->find('app:import');
 
         self::assertSame('app:import', $command->getName());
+    }
+
+    /**
+     * #62 C3.1 — import nominal : 2 régimes, 2 financeurs, 2 profils rattachés au
+     * nouveau ParameterSet ; `PE_CN` résolu sur ses référentiels.
+     */
+    public function testImportCreatesSchemesFundersAndProfilesOfTheNewSet(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode(), $tester->getDisplay());
+
+        $setId = $this->fetchInt("SELECT id FROM parameter_set WHERE version_id = '9f3a1c2'");
+        self::assertSame(2, $this->rowCount('retirement_scheme'));
+        self::assertSame(2, $this->rowCount('funder'));
+        self::assertSame(2, $this->rowCount('profile'));
+        self::assertSame(2, $this->rowCountWhere('profile', 'parameter_set_id = ' . $setId));
+
+        self::assertSame(
+            [
+                'label' => 'Professeur des écoles — classe normale',
+                'body' => 'PE',
+                'grade' => 'classe_normale',
+                'grille' => 'PE_classe_normale_2024',
+                'rank' => 1,
+                'increased_index' => 395,
+                'scheme' => 'CAS_CIVIL',
+                'funder' => 'ETAT_P140',
+                'status' => 'titulaire',
+                'reference_calendar' => 'scolaire',
+                'source' => 'decret-2017-789',
+            ],
+            $this->importedProfile('PE_CN', '9f3a1c2'),
+        );
+    }
+
+    /** #62 C3.2 — même import : `ISG_G1` résolu sur ses référentiels. */
+    public function testImportResolvesTheIsgProfile(): void
+    {
+        $tester = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode(), $tester->getDisplay());
+
+        self::assertSame(
+            [
+                'label' => 'Infirmier en soins généraux — 1er grade',
+                'body' => 'ISG',
+                'grade' => 'grade_1',
+                'grille' => 'ISG_grade_1_2024',
+                'rank' => 1,
+                'increased_index' => 395,
+                'scheme' => 'CNRACL',
+                'funder' => 'ONDAM',
+                'status' => 'titulaire',
+                'reference_calendar' => 'civil',
+                'source' => 'arrete-2016-05-19',
+            ],
+            $this->importedProfile('ISG_G1', '9f3a1c2'),
+        );
+    }
+
+    /** #62 C3.3 — même commit ×2 : mêmes nombres de lignes, aucun profil en double. */
+    public function testReimportingSameCommitKeepsProfilesSchemesAndFundersStable(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode(), $first->getDisplay());
+        $profileIds = $this->profileIdsByCode('9f3a1c2');
+
+        $second = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode(), $second->getDisplay());
+
+        self::assertSame(1, $this->rowCount('parameter_set'));
+        self::assertSame(2, $this->rowCount('retirement_scheme'));
+        self::assertSame(2, $this->rowCount('funder'));
+        self::assertSame(2, $this->rowCount('profile'));
+        self::assertSame($profileIds, $this->profileIdsByCode('9f3a1c2'));
+    }
+
+    /** #62 C3.4 — deux commits : 2 ParameterSet, 2 profils chacun, ceux du premier intacts. */
+    public function testNewCommitCreatesItsOwnProfilesAndKeepsThePreviousOnes(): void
+    {
+        $first = $this->runImport('9f3a1c2', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $first->getStatusCode(), $first->getDisplay());
+        $firstIds = $this->profileIdsByCode('9f3a1c2');
+        $firstPe = $this->importedProfile('PE_CN', '9f3a1c2');
+
+        $second = $this->runImport('b4d5e6f', $this->dataDir());
+        self::assertSame(Command::SUCCESS, $second->getStatusCode(), $second->getDisplay());
+
+        self::assertSame(2, $this->rowCount('parameter_set'));
+        self::assertSame(4, $this->rowCount('profile'));
+        self::assertSame($firstIds, $this->profileIdsByCode('9f3a1c2'));
+        self::assertSame($firstPe, $this->importedProfile('PE_CN', '9f3a1c2'));
+        self::assertSame(['ISG_G1', 'PE_CN'], array_keys($this->profileIdsByCode('b4d5e6f')));
+        self::assertSame([], array_intersect($firstIds, $this->profileIdsByCode('b4d5e6f')));
+        self::assertSame(2, $this->rowCount('retirement_scheme'));
+        self::assertSame(2, $this->rowCount('funder'));
+    }
+
+    /** #62 C3.5 — un financeur de `funders.json` cité par aucun budget est créé. */
+    public function testFunderCitedByNoBudgetIsCreated(): void
+    {
+        $dir = $this->copyData();
+        $this->rewriteJson($dir . '/funders.json', static function (array $funders): array {
+            $funders['TEST_F'] = ['label' => 'Financeur de test'];
+
+            return $funders;
+        });
+
+        $tester = $this->runImport('9f3a1c2', $dir);
+
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode(), $tester->getDisplay());
+        self::assertSame(3, $this->rowCount('funder'));
+        self::assertSame(1, $this->rowCountWhere('funder', "code = 'TEST_F' AND label = 'Financeur de test'"));
+    }
+
+    /**
+     * #62 C3.6 — référence inconnue dans un profil : exit 1, rollback total.
+     */
+    #[DataProvider('unknownProfileReferences')]
+    public function testUnknownProfileReferenceRollsBackEverything(string $field, string|int $value, string $exception, string $message): void
+    {
+        $dir = $this->copyData();
+        $this->alterProfile($dir, 'PE_CN', $field, $value);
+
+        $tester = $this->runImport('deadbeef', $dir);
+
+        self::assertSame(Command::FAILURE, $tester->getStatusCode());
+        self::assertStringContainsString($message, (string) preg_replace('/\s+/', ' ', $tester->getDisplay()));
+        $this->assertNothingImported();
+        self::assertSame(0, $this->rowCount('profile'));
+        self::assertSame(0, $this->rowCount('retirement_scheme'));
+        self::assertSame(0, $this->rowCount('funder'));
+    }
+
+    /**
+     * #62 C3.6 — chaque référence inconnue lève son exception dédiée.
+     *
+     * @param class-string<\Throwable> $exception
+     */
+    #[DataProvider('unknownProfileReferences')]
+    public function testUnknownProfileReferenceRaisesItsException(string $field, string|int $value, string $exception, string $message): void
+    {
+        $dir = $this->copyData();
+        $this->alterProfile($dir, 'PE_CN', $field, $value);
+
+        $this->expectException($exception);
+        $this->expectExceptionMessage($message);
+        $this->importer()->import('deadbeef', $dir);
+    }
+
+    /**
+     * @return iterable<string, array{string, string|int, class-string<\Throwable>, string}>
+     */
+    public static function unknownProfileReferences(): iterable
+    {
+        yield 'corps' => ['body', 'XX', UnknownCorpsException::class, 'corps inconnu `XX`'];
+        yield 'régime' => ['retirementScheme', 'ZZ', UnknownRetirementSchemeException::class, 'régime de retraite inconnu `ZZ`'];
+        yield 'financeur' => ['funder', 'YY', UnknownFunderException::class, 'financeur inconnu `YY`'];
+        yield 'grade' => ['grade', 'inexistant', UnknownEntryEchelonException::class, 'échelon d\'entrée introuvable pour le profil `PE_CN` (corps PE, grade inexistant, rang 1)'];
+        yield 'rang' => ['entryRank', 99, UnknownEntryEchelonException::class, 'échelon d\'entrée introuvable pour le profil `PE_CN` (corps PE, grade classe_normale, rang 99)'];
+        yield 'source' => ['source', 'inexistant', UnknownSourceException::class, 'source inconnue `inexistant`'];
+    }
+
+    /**
+     * #62 C3.7 — (corps, grade) avec deux versions de grille dans le ParameterSet : le
+     * profil pointe vers la version au `start_date` le plus récent.
+     */
+    public function testProfilePointsToTheMostRecentGrilleVersion(): void
+    {
+        $dir = $this->copyData();
+        // Version plus récente insérée AVANT la 2024 : l'ordre du fichier ne décide pas.
+        $this->replaceInFile(
+            $dir . '/data/grille_pe.csv',
+            'PE,classe_normale,2024,',
+            "PE,classe_normale,2025,2025-01-01,,decret-2017-789\nPE,classe_normale,2024,",
+        );
+        file_put_contents(
+            $dir . '/data/echelon_pe.csv',
+            "PE_classe_normale_2025,1,450,400,12\n",
+            FILE_APPEND,
+        );
+
+        $tester = $this->runImport('9f3a1c2', $dir);
+        self::assertSame(Command::SUCCESS, $tester->getStatusCode(), $tester->getDisplay());
+
+        $profile = $this->importedProfile('PE_CN', '9f3a1c2');
+        self::assertSame('PE_classe_normale_2025', $profile['grille']);
+        self::assertSame(400, $profile['increased_index']);
+    }
+
+    /**
+     * Profil importé `$code` du jeu `$commit`, avec ses références résolues.
+     *
+     * @return array<string, mixed>
+     */
+    private function importedProfile(string $code, string $commit): array
+    {
+        $row = $this->em->getConnection()->fetchAssociative(
+            "SELECT p.label, c.code AS body, p.grade, gc.code || '_' || g.grade || '_' || g.version AS grille, "
+            . 'e.rank, e.increased_index, r.code AS scheme, f.code AS funder, p.status, '
+            . 'p.reference_calendar, s.code AS source '
+            . 'FROM profile p '
+            . 'JOIN parameter_set ps ON ps.id = p.parameter_set_id '
+            . 'JOIN corps c ON c.id = p.body_id '
+            . 'JOIN echelon e ON e.id = p.entry_echelon_id '
+            . 'JOIN grille g ON g.id = e.grille_id '
+            . 'JOIN corps gc ON gc.id = g.body_id '
+            . 'JOIN retirement_scheme r ON r.id = p.retirement_scheme_id '
+            . 'JOIN funder f ON f.id = p.funder_id '
+            . 'JOIN source s ON s.id = p.source_id '
+            . 'WHERE p.code = ? AND ps.version_id = ? AND g.parameter_set_id = ps.id',
+            [$code, $commit],
+        );
+        self::assertIsArray($row, sprintf('profil %s absent du jeu %s', $code, $commit));
+
+        return $row;
+    }
+
+    /**
+     * @return array<string, int> code → id des profils du jeu `$commit`, triés par code
+     */
+    private function profileIdsByCode(string $commit): array
+    {
+        /** @var array<string, int> $rows */
+        $rows = $this->em->getConnection()->fetchAllKeyValue(
+            'SELECT p.code, p.id FROM profile p JOIN parameter_set ps ON ps.id = p.parameter_set_id '
+            . 'WHERE ps.version_id = ? ORDER BY p.code',
+            [$commit],
+        );
+
+        return $rows;
+    }
+
+    private function alterProfile(string $dir, string $code, string $field, string|int $value): void
+    {
+        $this->rewriteJson($dir . '/profiles.json', static function (array $profiles) use ($code, $field, $value): array {
+            self::assertIsArray($profiles[$code] ?? null);
+            $profiles[$code][$field] = $value;
+
+            return $profiles;
+        });
+    }
+
+    /**
+     * @param callable(array<mixed>): array<mixed> $change
+     */
+    private function rewriteJson(string $path, callable $change): void
+    {
+        $raw = file_get_contents($path);
+        self::assertIsString($raw);
+        $decoded = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($decoded);
+        file_put_contents(
+            $path,
+            json_encode($change($decoded), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+        );
     }
 
     private function assertNothingImported(): void

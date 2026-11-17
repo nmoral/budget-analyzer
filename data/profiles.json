@@ -1,0 +1,24 @@
+{
+  "PE_CN": {
+    "label": "Professeur des écoles — classe normale",
+    "body": "PE",
+    "grade": "classe_normale",
+    "entryRank": 1,
+    "retirementScheme": "CAS_CIVIL",
+    "funder": "ETAT_P140",
+    "status": "titulaire",
+    "referenceCalendar": "scolaire",
+    "source": "decret-2017-789"
+  },
+  "ISG_G1": {
+    "label": "Infirmier en soins généraux — 1er grade",
+    "body": "ISG",
+    "grade": "grade_1",
+    "entryRank": 1,
+    "retirementScheme": "CNRACL",
+    "funder": "ONDAM",
+    "status": "titulaire",
+    "referenceCalendar": "civil",
+    "source": "arrete-2016-05-19"
+  }
+}

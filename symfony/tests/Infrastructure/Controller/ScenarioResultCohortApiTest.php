@@ -16,6 +16,7 @@ use App\Infrastructure\Entity\Corps;
 use App\Infrastructure\Entity\Echelon;
 use App\Infrastructure\Entity\Funder;
 use App\Infrastructure\Entity\Grille;
+use App\Infrastructure\Entity\ParameterSet;
 use App\Infrastructure\Entity\Profile;
 use App\Infrastructure\Entity\RetirementScheme;
 use App\Infrastructure\Entity\Source;
@@ -72,7 +73,7 @@ final class ScenarioResultCohortApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
@@ -104,7 +105,7 @@ final class ScenarioResultCohortApiTest extends WebTestCase
             ['rank' => 2, 'increasedIndex' => 420, 'durationMonths' => 12],
             ['rank' => 3, 'increasedIndex' => 450, 'durationMonths' => null],
         ]);
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE,EQUIVALENT_PRIVE');
         self::assertSame(200, $this->client->getResponse()->getStatusCode());
@@ -147,8 +148,8 @@ final class ScenarioResultCohortApiTest extends WebTestCase
     {
         [$long, $short] = $this->seedSharedGrilleProfiles();
         $id = $this->createScenario($long, [
-            ['profileRef' => $long->id, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
-            ['profileRef' => $short->id, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $long->code, 'volume' => 2, 'recruitmentDate' => self::RECRUITMENT],
+            ['profileRef' => $short->code, 'volume' => 3, 'recruitmentDate' => self::RECRUITMENT],
         ]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE');
@@ -194,7 +195,7 @@ final class ScenarioResultCohortApiTest extends WebTestCase
         $set = $this->persistParameterSet($this->em, 'ver-no-point');
         $profile = $this->persistComputableProfile($this->em, $set, omitKeys: ['point_indice']);
         $this->em->flush();
-        $id = $this->createScenario($profile, [['profileRef' => $profile->id, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
+        $id = $this->createScenario($profile, [['profileRef' => $profile->code, 'volume' => 1, 'recruitmentDate' => self::RECRUITMENT]]);
 
         $this->client->request('GET', '/api/scenarios/' . $id . '/result?horizons=cohorte&views=BUDGETAIRE');
         $response = $this->client->getResponse();
@@ -335,16 +336,27 @@ final class ScenarioResultCohortApiTest extends WebTestCase
 
         $this->persistEngineParameters($this->em, $set, $corps);
 
-        $long = $this->makeProfile($corps, $echelons[1], $scheme, $funder);
-        $short = $this->makeProfile($corps, $echelons[3], $scheme, $funder);
+        $long = $this->makeProfile('PE_LONG', $corps, $echelons[1], $scheme, $funder, $source, $set);
+        $short = $this->makeProfile('PE_SHORT', $corps, $echelons[3], $scheme, $funder, $source, $set);
         $this->em->flush();
 
         return [$long, $short];
     }
 
-    private function makeProfile(Corps $corps, Echelon $entry, RetirementScheme $scheme, Funder $funder): Profile
-    {
+    private function makeProfile(
+        string $code,
+        Corps $corps,
+        Echelon $entry,
+        RetirementScheme $scheme,
+        Funder $funder,
+        Source $source,
+        ParameterSet $set,
+    ): Profile {
         $profile = new Profile();
+        $profile->code = $code;
+        $profile->label = 'Profil ' . $code;
+        $profile->source = $source;
+        $profile->parameterSet = $set;
         $profile->body = $corps;
         $profile->grade = 'classe normale';
         $profile->entryEchelon = $entry;

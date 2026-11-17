@@ -36,6 +36,10 @@ final class DomainProfileFactoryTest extends IntegrationTestCase
         $this->em->persist($funder);
 
         $entity = new ProfileEntity();
+        $entity->code = 'PE_CN';
+        $entity->label = 'Professeur des écoles — classe normale';
+        $entity->source = $source;
+        $entity->parameterSet = $set;
         $entity->body = $corps;
         $entity->grade = 'classe_normale';
         $entity->entryEchelon = $echelon;
