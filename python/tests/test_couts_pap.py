@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -15,10 +16,17 @@ REAL_DATA = Path(os.environ["BUDGET_DATA_DIR"])
 RETRIEVED_AT = "2026-10-21"
 
 HEADER = "program,employment_category,average_loaded_cost,year,document,page,url"
+# #22 C1.1 : page corrigée 49 -> 52 (tableau « Coûts entrée-sortie » du PAP 2025).
 ROW_140 = (
-    "140,enseignant_1er_degre,46139,2025,PAP2025-ENSSCOL-P140,49,"
+    "140,enseignant_1er_degre,46139,2025,PAP2025-ENSSCOL-P140,52,"
     "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/"
     "Enseignement_scolaire.pdf"
+)
+# #22 C1.1 : millésime PAP 2024 (coût global 47 634, page 53).
+ROW_140_2024 = (
+    "140,enseignant_1er_degre,47634,2024,PAP2024-ENSSCOL-P140,53,"
+    "https://www.assemblee-nationale.fr/dyn/content/download/705202/file/"
+    "Enseignement%20scolaire.pdf"
 )
 
 
@@ -54,7 +62,7 @@ def test_missing_document_is_rejected(data_dir: Path) -> None:
 
 def test_missing_page_is_rejected(data_dir: Path) -> None:
     # C1.3 : colonne page vide -> rejet (required sur page).
-    bad = ROW_140.replace(",49,", ",,")
+    bad = ROW_140.replace(",52,", ",,")
     csv_path = _write_csv(data_dir / "data" / "couts_pap.csv", bad)
     report = validate_csv(csv_path, "couts_pap")
     assert not report.valid
@@ -103,3 +111,22 @@ def test_generated_csv_holds_sourced_row(data_dir: Path) -> None:
     # C3.1 : le CSV genere contient la ligne 140 sourcee exacte.
     out = run_couts_pap()
     assert ROW_140 in out.read_text("utf-8").splitlines()
+
+
+def test_generated_csv_holds_both_sourced_vintages(data_dir: Path) -> None:
+    # #22 C1.1 : le CSV généré porte exactement les lignes 2024 et 2025 sourcées.
+    out = run_couts_pap()
+    assert out.read_text("utf-8").splitlines() == [HEADER, ROW_140_2024, ROW_140]
+
+
+def test_committed_csv_holds_both_sourced_vintages() -> None:
+    # #22 C1.1 : data/data/couts_pap.csv livré = lignes 2024 (p. 53) et 2025 (p. 52).
+    committed = (REAL_DATA / "data" / "couts_pap.csv").read_text("utf-8")
+    assert committed.splitlines() == [HEADER, ROW_140_2024, ROW_140]
+    assert verify_manifest_at(REAL_DATA)
+
+
+def verify_manifest_at(root: Path) -> bool:
+    manifest = json.loads((root / "manifests" / "couts_pap.json").read_text("utf-8"))
+    raw = (root / "sources" / "couts_pap.json").read_bytes()
+    return bool(hashlib.sha256(raw).hexdigest() == manifest["sha256"])

@@ -37,7 +37,7 @@ La source retenue, la raison du choix et le statut de repli pour chaque corps so
 
 Coûts moyens chargés PAP par catégorie d'emploi, saisis à la main, chaque ligne sourcée au document et à la page (règle de transparence n° 7) :
 
-- `couts_pap` — coût moyen chargé d'une catégorie d'emploi d'un programme (schéma `couts_pap`), colonnes `program, employment_category, average_loaded_cost, year, document, page, url`. Une ligne en V0 : programme 140, `enseignant_1er_degre` (professeur des écoles), 46139 € en 2025, sourcée `PAP2025-ENSSCOL-P140` page 49 (PAP 2025, annexe « Enseignement scolaire »). `document` et `page` sont requis : une ligne privée de l'un ou l'autre est rejetée à la validation.
+- `couts_pap` — coût moyen chargé d'une catégorie d'emploi d'un programme (schéma `couts_pap`), colonnes `program, employment_category, average_loaded_cost, year, document, page, url`. Deux lignes pour le programme 140, `enseignant_1er_degre` (professeur des écoles), coût moyen chargé HCAS global : 47634 € en 2024, sourcée `PAP2024-ENSSCOL-P140` page 53, et 46139 € en 2025, sourcée `PAP2025-ENSSCOL-P140` page 52 (PAP 2024 et 2025, annexe « Enseignement scolaire », tableau « Coûts entrée-sortie »). `document` et `page` sont requis : une ligne privée de l'un ou l'autre est rejetée à la validation.
 
 `average_loaded_cost` est le **coût global** (coût moyen sur la carrière, et non entrée/sortie), en base **HCAS** (hors CAS Pensions) — seule valeur publiée par catégorie dans le PAP. Le coût « y compris CAS Pensions » n'est pas calculé ici : il relève de #22, qui appliquera `taux_cas_civil`. Une seule catégorie du programme 140 est saisie (celle du calibrage #22) ; les autres sont hors périmètre V0.
 

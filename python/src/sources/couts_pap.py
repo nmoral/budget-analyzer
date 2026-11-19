@@ -8,7 +8,7 @@ from pathlib import Path
 from contract import data_dir
 from ingest import ingest
 
-SOURCE = "PAP 2025 — annexe « Enseignement scolaire » (programme 140)"
+SOURCE = "PAP 2024 et PAP 2025 — annexe « Enseignement scolaire » (programme 140)"
 URL = (
     "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/"
     "Enseignement_scolaire.pdf"

@@ -3,10 +3,19 @@
     {
       "program": "140",
       "employment_category": "enseignant_1er_degre",
+      "average_loaded_cost": "47634",
+      "year": "2024",
+      "document": "PAP2024-ENSSCOL-P140",
+      "page": "53",
+      "url": "https://www.assemblee-nationale.fr/dyn/content/download/705202/file/Enseignement%20scolaire.pdf"
+    },
+    {
+      "program": "140",
+      "employment_category": "enseignant_1er_degre",
       "average_loaded_cost": "46139",
       "year": "2025",
       "document": "PAP2025-ENSSCOL-P140",
-      "page": "49",
+      "page": "52",
       "url": "https://www2.assemblee-nationale.fr/static/17/Annexes-DL/PLF-2025/Enseignement_scolaire.pdf"
     }
   ]
