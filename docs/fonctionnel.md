@@ -647,9 +647,93 @@ câblage), susceptible d'être affinée ultérieurement. L'horizon **cohorte n'e
 concerné** : il ignore la durée du terminal (une fois le terminal atteint, les années
 suivantes sont constantes).
 
-**Hors de ce périmètre** : le **calibrage** contre le coût moyen du PAP (#22), les **vues
-de coût** enfichables au-delà du view-aware du terme retraite (#18) et l'**arrondi
-d'affichage** (#19/#20).
+**Hors de ce périmètre** : les **vues de coût** enfichables au-delà du view-aware du
+terme retraite (#18) et l'**arrondi d'affichage** (#19/#20).
+
+#### Calibrage (#22)
+
+Le coût en régime permanent du **professeur des écoles de classe normale** (profil
+`PE_CN`) est confronté au **coût moyen chargé HCAS** (hors contribution au CAS
+« Pensions ») publié dans le **PAP du programme 140** (annexe « Enseignement scolaire »
+du PLF, tableau « Coûts entrée-sortie », ligne « Enseignants du 1er degré »).
+
+**Ce qui est comparé.** Côté simulateur : le coût annuel moyen d'un agent en régime
+permanent, vue `BUDGETAIRE`, **hors terme retraite** — soit traitement et primes + autres
+cotisations + RAFP (= total − retraite), ce qui correspond au périmètre HCAS. Le calcul
+porte sur un recrutement au **1er janvier 2026**, 1 poste, avec les paramètres en vigueur
+à cette date. Côté PAP : le **coût global** de la ligne (programme 140,
+`enseignant_1er_degre`) d'**année la plus récente** de `data/data/couts_pap.csv`.
+
+**Résultat** (données du dépôt, paramètres au 2026-01-01) :
+
+| Terme | Coût moyen annuel d'un agent |
+|-------|------------------------------|
+| Traitement et primes | 39 699,56 € |
+| Autres cotisations (FPE, 16,07 %) | 6 379,72 € |
+| RAFP | 328,10 € |
+| **Coût comparé (HCAS)** | **46 407,38 €** |
+| *Retraite (CAS civil), exclue de la comparaison* | *26 995,70 €* |
+
+| Référence PAP | Coût global HCAS | Écart du coût calculé |
+|---------------|------------------|-----------------------|
+| PAP 2025 (`PAP2025-ENSSCOL-P140`, p. 52) — **référence du contrôle** | 46 139 € | **+0,58 %** |
+| PAP 2024 (`PAP2024-ENSSCOL-P140`, p. 53) — pour mémoire | 47 634 € | −2,57 % |
+
+L'écart vaut `(calculé − PAP) / PAP`. La référence elle-même varie de **−3,1 %** entre le
+PAP 2024 et le PAP 2025 (47 634 → 46 139 €).
+
+**Seuil : ±5 % (bornes incluses)** sur le coût global. Il est fixé au-delà de la variation
+observée de la référence d'un millésime à l'autre (≈ 3,1 %) : un écart de cet ordre
+relève de la dérive normale de la publication, pas d'un défaut du modèle. Un écart
+au-delà de 5 % est traité comme une anomalie à analyser (paramètre faux, grille
+incomplète, formule cassée) avant toute livraison.
+
+**Causes connues de l'écart** (le modèle et le PAP ne mesurent pas exactement la même
+chose) :
+
+- **Périmètre HCAS** : le coût PAP exclut la contribution au CAS « Pensions », d'où
+  l'exclusion du terme retraite ; l'alignement des autres composantes sur la définition
+  HCAS du PAP n'est qu'approché par les trois termes retenus.
+- **Classe normale seule vs catégorie 1106** : la carrière simulée est la seule grille de
+  classe normale (`PE_classe_normale_2024`, échelons 1 à 11), alors que la catégorie
+  d'emplois 1106 « Enseignants du 1er degré » du PAP inclut la hors classe et la classe
+  exceptionnelle (mieux rémunérées).
+- **Population stationnaire** : le régime permanent pondère chaque échelon par sa durée
+  (terminal à 60 mois, voir ci-dessus), alors que le PAP reflète la pyramide réelle des
+  effectifs.
+- **Paramètres 2026 vs PAP 2025** : le calcul utilise les paramètres en vigueur au
+  2026-01-01 (notamment les taux « autres cotisations » et RAFP, dont la série commence
+  au 2026-01-01), alors que la référence est le PAP 2025 ; ce décalage de millésime est
+  assumé.
+- **Prévision PLF** : le coût PAP est une prévision établie pour le projet de loi de
+  finances, pas une dépense exécutée.
+- **Taux de primes moyen** : les primes sont un taux moyen unique du corps (`p` = 0,21),
+  appliqué à tous les échelons, alors que les primes réelles varient selon l'échelon, le
+  grade et l'affectation.
+
+**Coût d'entrée, à titre indicatif.** Le même tableau du PAP 2025 publie un coût d'entrée
+HCAS de **37 365 €** (p. 52). Le coût année pleine HCAS de l'échelon 1 de `PE_CN` (indice
+majoré 395) au 2026-01-01 vaut **33 004,70 €** (28 234,13 € de traitement et primes +
+4 537,22 € d'autres cotisations + 233,34 € de RAFP, montants arrondis au centime), soit
+**−11,7 %**. Cette comparaison
+n'est ni contrôlée ni seuillée : elle est documentée pour mémoire, sans données ni
+test associés.
+
+**Contrôle automatisé.** Le calibrage est vérifié par le test end-to-end
+`symfony/tests/Infrastructure/Controller/PapCalibrationApiTest.php` : import des vraies
+données (`app:import`), `POST /api/scenarios` (`PE_CN`, 2026-01-01, volume 1), puis
+`GET /api/scenarios/{id}/result?horizons=permanent&views=BUDGETAIRE`. Le test échoue si
+l'écart sort de ±5 % (le message donne calculé, PAP, écart et seuil), ou si aucune ligne
+(140, `enseignant_1er_degre`) n'est présente dans `couts_pap.csv`. Il fait partie de la
+suite PHPUnit (`make qa-symfony`) ; pour le lancer seul :
+
+```sh
+docker compose run --rm symfony vendor/bin/phpunit -c phpunit.dist.xml --filter PapCalibrationApiTest
+```
+
+Hors de ce périmètre : le calibrage d'autres corps (ISG), l'exposition de l'écart dans
+l'API ou la fiche de résultat, la hors classe et la classe exceptionnelle dans la
+carrière, et les coûts d'entrée et de sortie dans les données et le test.
 
 ### Horizon « cohorte » d'un recrutement (série annuelle, avancement d'échelon)
 
