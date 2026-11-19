@@ -72,24 +72,51 @@ final class PapCalibrationApiTest extends WebTestCase
 
     /**
      * #22 C2.1 — données réelles : PE_CN au 2026-01-01, volume 1, régime permanent, vue
-     * BUDGETAIRE hors retraite, à ±5 % (inclusif) du PAP le plus récent (2025 : 46 139).
+     * BUDGETAIRE hors retraite, à ±5 % (inclusif) du PAP le plus récent. Le contrôle ne
+     * fige ni année, ni coût, ni page : le contenu du CSV est vérifié côté Python (C1.1).
      */
     public function testPermanentCostOfPeCnMatchesLatestPapWithinThreshold(): void
     {
-        $permanent = $this->computeRealPermanent();
-        $computed = $this->comparedValue($permanent);
+        $this->runCalibrationControl($this->dataDir());
+    }
 
-        // Valeur comparée = total − retraite (recomposition indépendante).
-        self::assertSame(bcsub($permanent['total'], $permanent['retirement'], 6), $computed);
+    /**
+     * #22 C2.2 — recette A1 : le contrôle réel, lancé sur une copie complète des données
+     * où une ligne 2026 dans le seuil est ajoutée, passe contre cette ligne 2026.
+     */
+    public function testRealControlPassesAgainstANewerPapWithinThreshold(): void
+    {
+        $dir = $this->fullDataCopyWithPapRows(static function (array $rows): array {
+            $rows[] = ['140', 'enseignant_1er_degre', '46500', '2026', 'PAP2026-ENSSCOL-P140', '50', 'https://example.org/pap2026.pdf'];
 
-        $reference = $this->latestPapReference($this->dataDir());
-        self::assertSame(2025, $reference['year']);
-        self::assertSame('46139', $reference['cost']);
-        self::assertSame('52', $reference['page']);
+            return $rows;
+        });
 
-        $this->assertCalibrated($computed, $reference);
+        $reference = $this->runCalibrationControl($dir);
 
-        echo \PHP_EOL . $this->report($computed, $reference) . \PHP_EOL;
+        self::assertSame(2026, $reference['year']);
+        self::assertSame('46500', $reference['cost']);
+    }
+
+    /**
+     * #22 C2.3 — recette A1 : le contrôle réel, lancé sur une copie complète des données
+     * dont la référence la plus récente vaut 30 000, échoue avec le message de calibrage.
+     */
+    public function testRealControlFailsWithCalibrationMessageWhenLatestPapIsOutOfThreshold(): void
+    {
+        $dir = $this->fullDataCopyWithPapRows(static function (array $rows): array {
+            $rows[] = ['140', 'enseignant_1er_degre', '30000', '2026', 'PAP2026-ENSSCOL-P140', '50', 'https://example.org/pap2026.pdf'];
+
+            return $rows;
+        });
+
+        $message = $this->failureMessageOf(fn () => $this->runCalibrationControl($dir));
+
+        self::assertStringContainsString('Calibrage hors seuil', $message);
+        self::assertMatchesRegularExpression('/calculé \d+\.\d{2} €/', $message);
+        self::assertStringContainsString('PAP 2026 30000 €', $message);
+        self::assertMatchesRegularExpression('/écart \+\d+\.\d{2} %/', $message);
+        self::assertStringContainsString('seuil ±5 %', $message);
     }
 
     /** #22 C2.2 — une ligne 2026 ajoutée pour (140, enseignant_1er_degre) devient la référence. */
@@ -167,6 +194,29 @@ final class PapCalibrationApiTest extends WebTestCase
 
         self::assertStringContainsString('140', $message);
         self::assertStringContainsString('enseignant_1er_degre', $message);
+    }
+
+    /**
+     * Contrôle réel : import de `$dataDir`, régime permanent BUDGETAIRE hors retraite de
+     * PE_CN comparé à la ligne PAP d'année la plus récente de `$dataDir`, à ±5 %.
+     *
+     * @return array{year: int, cost: numeric-string, document: string, page: string}
+     */
+    private function runCalibrationControl(string $dataDir): array
+    {
+        $permanent = $this->computeRealPermanent($dataDir);
+        $computed = $this->comparedValue($permanent);
+
+        // Valeur comparée = total − retraite (recomposition indépendante).
+        self::assertSame(bcsub($permanent['total'], $permanent['retirement'], 6), $computed);
+
+        $reference = $this->latestPapReference($dataDir);
+
+        $this->assertCalibrated($computed, $reference);
+
+        echo \PHP_EOL . $this->report($computed, $reference) . \PHP_EOL;
+
+        return $reference;
     }
 
     /**
@@ -278,9 +328,9 @@ final class PapCalibrationApiTest extends WebTestCase
      *
      * @return array{treatmentAndPrimes: numeric-string, retirement: numeric-string, otherContributions: numeric-string, rafp: numeric-string, total: numeric-string}
      */
-    private function computeRealPermanent(): array
+    private function computeRealPermanent(?string $dataDir = null): array
     {
-        $this->import('calibrage-22', $this->dataDir());
+        $this->import('calibrage-22', $dataDir ?? $this->dataDir());
 
         $this->client->request(
             'POST',
@@ -354,6 +404,44 @@ final class PapCalibrationApiTest extends WebTestCase
         fclose($handle);
 
         return $dir;
+    }
+
+    /**
+     * Copie complète du répertoire de données (celle que lit le contrôle réel via
+     * `BUDGET_DATA_DIR`), dont les lignes de `data/couts_pap.csv` sont transformées.
+     *
+     * @param callable(list<list<string>>): list<list<string>> $transform
+     */
+    private function fullDataCopyWithPapRows(callable $transform): string
+    {
+        $dir = sys_get_temp_dir() . '/calibrage-22-full-' . uniqid('', true);
+        $this->tempDirs[] = $dir;
+        $this->copyDir($this->dataDir(), $dir);
+        $rows = $transform($this->papRows($this->dataDir()));
+
+        $handle = fopen($dir . '/data/couts_pap.csv', 'w');
+        self::assertNotFalse($handle);
+        fputcsv($handle, ['program', 'employment_category', 'average_loaded_cost', 'year', 'document', 'page', 'url'], escape: '', eol: "\n");
+        foreach ($rows as $row) {
+            fputcsv($handle, $row, escape: '', eol: "\n");
+        }
+        fclose($handle);
+
+        return $dir;
+    }
+
+    private function copyDir(string $source, string $target): void
+    {
+        mkdir($target, 0o777, true);
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
+            \RecursiveIteratorIterator::SELF_FIRST,
+        );
+        foreach ($iterator as $item) {
+            /** @var \SplFileInfo $item */
+            $destination = $target . substr($item->getPathname(), \strlen($source));
+            $item->isDir() ? mkdir($destination) : copy($item->getPathname(), $destination);
+        }
     }
 
     private function import(string $commit, string $dataDir): void

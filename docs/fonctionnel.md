@@ -677,7 +677,7 @@ porte sur un recrutement au **1er janvier 2026**, 1 poste, avec les paramètres 
 | Référence PAP | Coût global HCAS | Écart du coût calculé |
 |---------------|------------------|-----------------------|
 | PAP 2025 (`PAP2025-ENSSCOL-P140`, p. 52) — **référence du contrôle** | 46 139 € | **+0,58 %** |
-| PAP 2024 (`PAP2024-ENSSCOL-P140`, p. 53) — pour mémoire | 47 634 € | −2,57 % |
+| PAP 2024 (`PAP2024-ENSSCOL-P140`, p. 53) — pour mémoire | 47 634 € | −2,58 % |
 
 L'écart vaut `(calculé − PAP) / PAP`. La référence elle-même varie de **−3,1 %** entre le
 PAP 2024 et le PAP 2025 (47 634 → 46 139 €).
