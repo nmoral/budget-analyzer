@@ -7,6 +7,7 @@ namespace App\Tests\Infrastructure\Controller;
 use App\Tests\Infrastructure\Fixture\ScenarioFixtureTrait;
 use Doctrine\ORM\EntityManagerInterface;
 use PHPUnit\Framework\AssertionFailedError;
+use PHPUnit\Framework\SkippedTest;
 use Psr\Cache\CacheItemPoolInterface;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
@@ -315,12 +316,17 @@ final class PapCalibrationApiTest extends WebTestCase
         return bcadd(bcadd($permanent['treatmentAndPrimes'], $permanent['otherContributions'], 6), $permanent['rafp'], 6);
     }
 
-    /** Message de l'échec d'assertion levé par `$check` ; échoue si `$check` passe. */
+    /**
+     * Message de l'échec d'assertion levé par `$check` ; échoue si `$check` passe ou
+     * se contente de marquer le test ignoré (un skip n'est pas un échec du contrôle).
+     */
     private function failureMessageOf(callable $check): string
     {
         try {
             $check();
         } catch (AssertionFailedError $failure) {
+            self::assertNotInstanceOf(SkippedTest::class, $failure, 'Le contrôle de calibrage doit échouer, pas être ignoré.');
+
             return $failure->getMessage();
         }
 
