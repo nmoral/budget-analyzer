@@ -1161,6 +1161,63 @@ Deptrac reste vert (tout le front est en `App\Infrastructure`). Hors périmètre
 sélection invalide, R1) ; unitaire `Twig/CohortCurveExtensionTest` (C5). La fixture de test
 est étendue via `Fixture/ScenarioFixtureTrait`.
 
+## Calibrage PAP du régime permanent (#22)
+
+Le calibrage du régime permanent de `PE_CN` contre le coût moyen chargé HCAS du PAP
+programme 140 (règles, chiffres, seuil et causes d'écart : sous-section « Calibrage » de
+`docs/fonctionnel.md`) est un **contrôle de test**, sans code applicatif : ni entité, ni
+endpoint, ni service. L'écart n'est exposé ni dans l'API ni dans la fiche (#21/#23).
+
+### Données de référence
+
+`data/data/couts_pap.csv` (généré par `python/src/sources/couts_pap.py` depuis la saisie
+`data/sources/couts_pap.json`, schéma `couts_pap`) porte une ligne par millésime pour (140, `enseignant_1er_degre`). Le fichier
+**n'est pas importé** par `app:import` (aucune entité cible) : le test le **lit
+directement** dans le répertoire de données (`BUDGET_DATA_DIR`, par défaut `/data`), en
+vérifiant l'en-tête `program, employment_category, average_loaded_cost, year, document,
+page, url`.
+
+### Test end-to-end `PapCalibrationApiTest`
+
+`tests/Infrastructure/Controller/PapCalibrationApiTest` (`WebTestCase`, marqué par l'en-tête
+de docblock « Issue #22 — C2 (end-to-end) ») déroule le contrôle réel
+(`runCalibrationControl`) :
+
+1. `app:import` du répertoire de données (`--data-dir`) ;
+2. `POST /api/scenarios` : `PE_CN`, volume 1, recrutement au `2026-01-01` ;
+3. `GET /api/scenarios/{id}/result?horizons=permanent&views=BUDGETAIRE` ;
+4. valeur comparée = `treatmentAndPrimes + otherContributions + rafp`, recoupée avec
+   `total − retirement` ;
+5. référence = ligne (140, `enseignant_1er_degre`) d'**année la plus récente** du CSV (c'est
+   l'année, pas la position, qui la désigne) ;
+6. écart = `(calculé − PAP) / PAP` en `bcmath` (échelle 10), seuil `0.05` **inclusif**.
+
+Hors seuil, l'assertion échoue avec le message « Calibrage hors seuil — … » (calculé, PAP et
+millésime, document et page, écart en %, seuil) ; en succès, la même ligne est affichée
+sur la sortie standard (`echo`, et non `STDERR`, qui perturbait Infection). L'absence de
+ligne (140, `enseignant_1er_degre`) fait **échouer** le test, jamais l'ignorer. La
+correspondance `PE_CN` ↔ (140, `enseignant_1er_degre`) est codée en dur dans le test.
+
+Le contrôle ne fige ni millésime, ni coût, ni page : le contenu du CSV est vérifié côté
+Python (`python/tests/test_couts_pap.py`). Les cas de contrat (nouvelle référence plus
+récente, référence hors seuil, référence absente) travaillent sur des copies temporaires :
+copie du seul `couts_pap.csv` pour la sélection de la référence, copie **complète** du
+répertoire de données (environ 21 Mo, requise par l'import) pour rejouer le contrôle réel.
+Les lignes ajoutées le sont à l'année maximale réelle + 1 (`latestRealPapYear`), pour que les
+tests restent valides quand un nouveau PAP est saisi.
+
+Le test fait partie de `make qa-symfony` (base `budget_test`, Postgres requis) ; seul :
+
+```sh
+docker compose run --rm symfony vendor/bin/phpunit -c phpunit.dist.xml --filter PapCalibrationApiTest
+```
+
+**Saisie d'un nouveau PAP** : ajouter la ligne sourcée (document, page, URL) dans
+`data/sources/couts_pap.json`, régénérer le jeu (`make generate KEY=couts_pap`) et relancer
+`python -m checks` ; si son année est la plus récente, elle devient automatiquement la
+référence du contrôle. Un échec hors ±5 % signale une anomalie à analyser, pas un seuil à
+élargir.
+
 ## Kernel et amorçage
 
 - `App\Kernel` utilise `MicroKernelTrait` ; la configuration est en YAML sous
