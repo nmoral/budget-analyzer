@@ -82,19 +82,21 @@ final class PapCalibrationApiTest extends WebTestCase
 
     /**
      * #22 C2.2 — recette A1 : le contrôle réel, lancé sur une copie complète des données
-     * où une ligne 2026 dans le seuil est ajoutée, passe contre cette ligne 2026.
+     * où une ligne d'année strictement supérieure à toutes celles des vraies données (« ligne
+     * 2026 » de l'exemple) dans le seuil est ajoutée, passe contre cette ligne.
      */
     public function testRealControlPassesAgainstANewerPapWithinThreshold(): void
     {
-        $dir = $this->fullDataCopyWithPapRows(static function (array $rows): array {
-            $rows[] = ['140', 'enseignant_1er_degre', '46500', '2026', 'PAP2026-ENSSCOL-P140', '50', 'https://example.org/pap2026.pdf'];
+        $newerYear = $this->latestRealPapYear() + 1;
+        $dir = $this->fullDataCopyWithPapRows(static function (array $rows) use ($newerYear): array {
+            $rows[] = ['140', 'enseignant_1er_degre', '46500', (string) $newerYear, 'PAP' . $newerYear . '-ENSSCOL-P140', '50', 'https://example.org/pap' . $newerYear . '.pdf'];
 
             return $rows;
         });
 
         $reference = $this->runCalibrationControl($dir);
 
-        self::assertSame(2026, $reference['year']);
+        self::assertSame($newerYear, $reference['year']);
         self::assertSame('46500', $reference['cost']);
     }
 
@@ -104,8 +106,9 @@ final class PapCalibrationApiTest extends WebTestCase
      */
     public function testRealControlFailsWithCalibrationMessageWhenLatestPapIsOutOfThreshold(): void
     {
-        $dir = $this->fullDataCopyWithPapRows(static function (array $rows): array {
-            $rows[] = ['140', 'enseignant_1er_degre', '30000', '2026', 'PAP2026-ENSSCOL-P140', '50', 'https://example.org/pap2026.pdf'];
+        $newerYear = $this->latestRealPapYear() + 1;
+        $dir = $this->fullDataCopyWithPapRows(static function (array $rows) use ($newerYear): array {
+            $rows[] = ['140', 'enseignant_1er_degre', '30000', (string) $newerYear, 'PAP' . $newerYear . '-ENSSCOL-P140', '50', 'https://example.org/pap' . $newerYear . '.pdf'];
 
             return $rows;
         });
@@ -114,26 +117,27 @@ final class PapCalibrationApiTest extends WebTestCase
 
         self::assertStringContainsString('Calibrage hors seuil', $message);
         self::assertMatchesRegularExpression('/calculé \d+\.\d{2} €/', $message);
-        self::assertStringContainsString('PAP 2026 30000 €', $message);
+        self::assertStringContainsString('PAP ' . $newerYear . ' 30000 €', $message);
         self::assertMatchesRegularExpression('/écart \+\d+\.\d{2} %/', $message);
         self::assertStringContainsString('seuil ±5 %', $message);
     }
 
-    /** #22 C2.2 — une ligne 2026 ajoutée pour (140, enseignant_1er_degre) devient la référence. */
+    /** #22 C2.2 — une ligne (140, enseignant_1er_degre) d'année supérieure à toutes devient la référence. */
     public function testReferenceIsTheMostRecentYear(): void
     {
-        $dir = $this->dataDirWithPapRows(static function (array $rows): array {
+        $newerYear = $this->latestRealPapYear() + 1;
+        $dir = $this->dataDirWithPapRows(static function (array $rows) use ($newerYear): array {
             // Placée en tête : c'est l'année, pas la position, qui désigne la référence.
-            array_unshift($rows, ['140', 'enseignant_1er_degre', '46500', '2026', 'PAP2026-ENSSCOL-P140', '50', 'https://example.org/pap2026.pdf']);
+            array_unshift($rows, ['140', 'enseignant_1er_degre', '46500', (string) $newerYear, 'PAP' . $newerYear . '-ENSSCOL-P140', '50', 'https://example.org/pap' . $newerYear . '.pdf']);
 
             return $rows;
         });
 
         $reference = $this->latestPapReference($dir);
 
-        self::assertSame(2026, $reference['year']);
+        self::assertSame($newerYear, $reference['year']);
         self::assertSame('46500', $reference['cost']);
-        self::assertSame('PAP2026-ENSSCOL-P140', $reference['document']);
+        self::assertSame('PAP' . $newerYear . '-ENSSCOL-P140', $reference['document']);
         self::assertSame('50', $reference['page']);
     }
 
@@ -141,14 +145,7 @@ final class PapCalibrationApiTest extends WebTestCase
     public function testCalibrationFailsBeyondThreshold(): void
     {
         $computed = $this->comparedValue($this->computeRealPermanent());
-        // Année maximale de (140, enseignant_1er_degre) dans les vraies données, quel que soit le millésime.
-        $latestYear = null;
-        foreach ($this->papRows($this->dataDir()) as $row) {
-            if ($row[0] === '140' && $row[1] === 'enseignant_1er_degre') {
-                $latestYear = max($latestYear ?? (int) $row[3], (int) $row[3]);
-            }
-        }
-        self::assertNotNull($latestYear);
+        $latestYear = $this->latestRealPapYear();
         $dir = $this->dataDirWithPapRows(
             /**
              * @param list<list<string>> $rows
@@ -275,6 +272,23 @@ final class PapCalibrationApiTest extends WebTestCase
         $percent = bcround(bcmul($ratio, '100', self::SCALE), 2);
 
         return (bccomp($percent, '0', 2) > 0 ? '+' : '') . $percent;
+    }
+
+    /**
+     * Année maximale de (140, enseignant_1er_degre) dans les vraies données, calculée
+     * indépendamment de `latestPapReference` : les tests ne figent aucun millésime.
+     */
+    private function latestRealPapYear(): int
+    {
+        $latestYear = null;
+        foreach ($this->papRows($this->dataDir()) as $row) {
+            if ($row[0] === self::PAP_PROGRAM && $row[1] === self::PAP_CATEGORY) {
+                $latestYear = max($latestYear ?? (int) $row[3], (int) $row[3]);
+            }
+        }
+        self::assertNotNull($latestYear);
+
+        return $latestYear;
     }
 
     /**
