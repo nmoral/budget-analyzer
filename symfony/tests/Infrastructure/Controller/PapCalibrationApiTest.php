@@ -141,30 +141,38 @@ final class PapCalibrationApiTest extends WebTestCase
     public function testCalibrationFailsBeyondThreshold(): void
     {
         $computed = $this->comparedValue($this->computeRealPermanent());
+        // Année maximale de (140, enseignant_1er_degre) dans les vraies données, quel que soit le millésime.
+        $latestYear = null;
+        foreach ($this->papRows($this->dataDir()) as $row) {
+            if ($row[0] === '140' && $row[1] === 'enseignant_1er_degre') {
+                $latestYear = max($latestYear ?? (int) $row[3], (int) $row[3]);
+            }
+        }
+        self::assertNotNull($latestYear);
         $dir = $this->dataDirWithPapRows(
             /**
              * @param list<list<string>> $rows
              *
              * @return list<list<string>>
              */
-            static function (array $rows): array {
-                foreach ($rows as $index => $row) {
-                    if ($row[3] === '2025') {
-                        $rows[$index][2] = '30000';
-                    }
-                }
-
-                return $rows;
+            static function (array $rows) use ($latestYear): array {
+                return array_map(
+                    static fn (array $row): array => $row[0] === '140' && $row[1] === 'enseignant_1er_degre' && (int) $row[3] === $latestYear
+                        ? [$row[0], $row[1], '30000', ...\array_slice($row, 3)]
+                        : $row,
+                    $rows,
+                );
             },
         );
         $reference = $this->latestPapReference($dir);
+        self::assertSame($latestYear, $reference['year']);
         self::assertSame('30000', $reference['cost']);
 
         $message = $this->failureMessageOf(fn () => $this->assertCalibrated($computed, $reference));
 
         $gapPercent = $this->formatPercent(bcdiv(bcsub($computed, '30000', self::SCALE), '30000', self::SCALE));
         self::assertStringContainsString('calculé ' . bcround($computed, 2) . ' €', $message);
-        self::assertStringContainsString('PAP 2025 30000 €', $message);
+        self::assertStringContainsString('PAP ' . $reference['year'] . ' 30000 €', $message);
         self::assertStringContainsString('écart ' . $gapPercent . ' %', $message);
         self::assertStringContainsString('seuil ±5 %', $message);
     }
